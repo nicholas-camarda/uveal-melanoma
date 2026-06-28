@@ -147,6 +147,44 @@ Latest-VA timing uses treatment date to `last_followup` as the available timing 
 
 These are not fixed 1-, 3-, or 5-year visual-acuity landmark measurements.
 
+### Latest-VA Predictor-Adjusted Sensitivity
+
+The reviewer asked whether visual-acuity differences could be adjusted for clinically relevant predictors, including baseline VA, tumor geometry/stage, subretinal fluid, optic-nerve proximity, follow-up duration, and radiation dose/proximity fields when available. The implemented sensitivity model uses latest logMAR VA (`last_vision`) as the outcome and adjusts for baseline logMAR VA rather than adding baseline VA to the change-score outcome.
+
+Full-cohort model:
+
+`last_vision ~ treatment_group + initial_vision + last_vision_followup_months_explicit + initial_tumor_height + initial_tumor_diameter + initial_t_stage_simple + srf + optic_nerve + treatment_year_centered + age_at_diagnosis + sex + location`
+
+Restricted-cohort model:
+
+`last_vision ~ treatment_group + initial_vision + last_vision_followup_months_explicit + initial_tumor_height + initial_tumor_diameter + initial_t_stage_simple + srf + treatment_year_centered + age_at_diagnosis + sex + location`
+
+Variable handling:
+
+| Candidate variable | Used in latest-VA sensitivity? | Reason |
+| --- | --- | --- |
+| `age_at_diagnosis` | Yes, full and restricted | Standard confounder set. |
+| `sex` | Yes, full and restricted | Standard confounder set. |
+| `location` | Yes, full and restricted | Standard confounder set. |
+| `initial_tumor_height` | Yes, full and restricted | Available baseline tumor-size predictor. |
+| `initial_tumor_diameter` | Yes, full and restricted | Available baseline basal-diameter predictor. |
+| `initial_vision` | Yes, full and restricted | Baseline logMAR VA; adjusted in the latest-VA model rather than in the change-score model. |
+| `initial_t_stage_simple` | Yes, full and restricted | Available baseline T-stage grouping with adequate model support. |
+| `initial_overall_stage` | No | Not added with `initial_t_stage_simple`; including both would duplicate tumor-stage information and add model burden. |
+| `optic_nerve` | Yes in full; no in restricted | Full cohort had usable variation. Restricted cohort had insufficient variation. |
+| `srf` | Yes, full and restricted | Available baseline subretinal-fluid field. |
+| `visual_field_defect` | No | Not used as an adjustment covariate; the analysis should not be described as a longitudinal visual-field analysis. |
+| `vision_loss_blurred_vision` | No | Not used as an adjustment covariate; it is a symptom/presentation descriptor rather than the measured baseline VA adjustment. |
+
+Results:
+
+| Cohort | Adjusted GKSRS-vs-PBT MD, logMAR | 95% CI | p-value | Model n |
+| --- | ---: | --- | ---: | ---: |
+| Full | -0.200 | -0.462 to 0.063 | 0.135 | 208 |
+| Restricted | -0.126 | -0.429 to 0.177 | 0.411 | 126 |
+
+Interpretation: the predictor-adjusted latest-VA sensitivity attenuated the visual-acuity association and was not statistically significant in either cohort. It supports cautious visual-acuity wording and does not support a strong claim that GKSRS provides superior functional preservation after adjustment for available baseline predictors and follow-up duration.
+
 ### Tumor-Height Timing
 
 Tumor-height change uses latest available height, not a standardized imaging landmark. Timing differs by treatment group.

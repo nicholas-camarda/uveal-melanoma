@@ -366,6 +366,31 @@ Suggested response wording: "We assessed whether a propensity-score sensitivity 
 
 **Method / implementation:** The Objective 2 VA workflow now derives `last_vision_followup_months` from treatment date to `last_followup`. The primary VA endpoint remains the implemented visual-acuity change score: initial vision minus final or recurrence-pre-treatment vision. Reviewer-response sensitivities then restrict to patients with `last_vision_followup_months >= 12`, `>= 36`, and `>= 60` and rerun the adjusted treatment-effect model for `vision_change ~ treatment_group + age_at_diagnosis + sex + location`.
 
+For the reviewer's separate request to adjust for clinically relevant baseline predictors of visual outcome, the added sensitivity model uses latest logMAR VA (`last_vision`) as the outcome rather than adding baseline VA to the change-score outcome. This directly adjusts for starting VA without putting `initial_vision` on both sides of a change-score equation. The full-cohort model was:
+
+`last_vision ~ treatment_group + initial_vision + last_vision_followup_months_explicit + initial_tumor_height + initial_tumor_diameter + initial_t_stage_simple + srf + optic_nerve + treatment_year_centered + age_at_diagnosis + sex + location`
+
+The restricted-cohort model used the same structure except `optic_nerve` was not included because it had insufficient variation in the restricted cohort:
+
+`last_vision ~ treatment_group + initial_vision + last_vision_followup_months_explicit + initial_tumor_height + initial_tumor_diameter + initial_t_stage_simple + srf + treatment_year_centered + age_at_diagnosis + sex + location`
+
+Requested/available predictor handling:
+
+| Candidate variable | Used in latest-VA sensitivity? | Reason |
+| --- | --- | --- |
+| `age_at_diagnosis` | Yes, full and restricted | Standard confounder set. |
+| `sex` | Yes, full and restricted | Standard confounder set. |
+| `location` | Yes, full and restricted | Standard confounder set. |
+| `initial_tumor_height` | Yes, full and restricted | Available baseline tumor-size predictor. |
+| `initial_tumor_diameter` | Yes, full and restricted | Available baseline basal-diameter predictor. |
+| `initial_vision` | Yes, full and restricted | Baseline logMAR VA; adjusted in the latest-VA model rather than in the change-score model. |
+| `initial_t_stage_simple` | Yes, full and restricted | Available baseline T-stage grouping with adequate model support. |
+| `initial_overall_stage` | No | Not added with `initial_t_stage_simple`; including both would duplicate tumor-stage information and add model burden without answering an additional reviewer-requested VA predictor beyond T stage. |
+| `optic_nerve` | Yes in full; no in restricted | Full cohort had usable variation. Restricted cohort had insufficient variation, so it was excluded there. |
+| `srf` | Yes, full and restricted | Available baseline subretinal-fluid field. |
+| `visual_field_defect` | No | Not used as an adjustment covariate for the VA sensitivity because the reviewer request was for visual-acuity outcome predictors and the response should not imply a longitudinal visual-field analysis. Missing/limited visual-field information remains a limitation. |
+| `vision_loss_blurred_vision` | No | Not used as an adjustment covariate; it is a symptom/presentation descriptor rather than the prespecified baseline VA measure used for adjustment. |
+
 **Result:** Latest-VA follow-up timing is available for 213/260 full-cohort patients and 133/167 restricted-cohort patients. Median latest-VA follow-up was longer for PBT than GKSRS: full cohort 77.5 vs 32.7 months; restricted cohort 78.2 vs 35.3 months. The adjusted minimum-follow-up sensitivity results are:
 
 | Cohort | Minimum latest-VA follow-up cutoff | PBT n | GKSRS n | Adjusted MD for GKSRS vs PBT | 95% CI | p-value |
@@ -379,7 +404,9 @@ Suggested response wording: "We assessed whether a propensity-score sensitivity 
 
 Only the restricted-cohort 12-month cutoff is nominally statistically significant. The 36- and 60-month restricted sensitivities are not, and the full-cohort sensitivities are not. Because these are optional cutoff sensitivities with shrinking sample size, they should not be overstated as definitive visual-acuity evidence.
 
-**Response/manuscript language:** "Visual-acuity change was analyzed using the latest available visual-acuity value, with `last_followup` used as the available date associated with that value. Median latest-VA follow-up was longer after PBT than GKSRS. We therefore repeated the adjusted visual-acuity model among patients with minimum latest-VA follow-up cutoffs of 12, 36, and 60 months. These are minimum-follow-up sensitivity analyses, not fixed 1-, 3-, or 5-year landmark visual-acuity analyses. Standardized longitudinal VA measurements at fixed 1-, 3-, or 5-year landmarks and time-to-clinically-meaningful deterioration, such as loss of at least 3 Snellen lines, would require additional data collection and were not feasible within the revision timeframe."
+The reviewer-predictor latest-VA sensitivity attenuated the apparent visual-acuity association and was not statistically significant. In the full cohort, the adjusted GKSRS-vs-PBT difference was -0.200 logMAR (95% CI -0.462 to 0.063; p=0.135; n=208). In the restricted cohort, the adjusted difference was -0.126 logMAR (95% CI -0.429 to 0.177; p=0.411; n=126). These results do not support a strong claim that GKSRS provides superior visual-acuity preservation after adjustment for available baseline VA, follow-up duration, tumor-size/stage predictors, SRF, treatment year, and the standard confounder set.
+
+**Response/manuscript language:** "Visual-acuity change was analyzed using the latest available visual-acuity value, with `last_followup` used as the available date associated with that value. Median latest-VA follow-up was longer after PBT than GKSRS. We therefore repeated the adjusted visual-acuity model among patients with minimum latest-VA follow-up cutoffs of 12, 36, and 60 months. These are minimum-follow-up sensitivity analyses, not fixed 1-, 3-, or 5-year landmark visual-acuity analyses. Standardized longitudinal VA measurements at fixed 1-, 3-, or 5-year landmarks and time-to-clinically-meaningful deterioration, such as loss of at least 3 Snellen lines, would require additional data collection and were not feasible within the revision timeframe. We also added a latest-VA sensitivity model adjusting for baseline logMAR VA, latest-VA follow-up duration, baseline tumor height, basal diameter, T stage, subretinal fluid, treatment year, and the standard confounders; optic-nerve status was included in the full cohort but not in the restricted cohort because it had insufficient variation. This sensitivity was not statistically significant in either cohort, so visual-acuity findings should be interpreted cautiously rather than as evidence of superior functional preservation."
 
 **Limitation / interpretation:** Minimum-follow-up restrictions answer whether the latest-VA treatment comparison changes after excluding short-follow-up patients; they do not estimate VA at exact 1-, 3-, or 5-year visits. The sensitivity reduces sample size as the cutoff increases, especially in the restricted GKSRS arm, and still cannot adjust for missing dose, foveal/macular/optic-nerve distance, or visual-field variables.
 
