@@ -91,6 +91,48 @@ Reviewer-facing text should therefore label denominators precisely as `source co
 
 ---
 
+### Google Doc Comment Order Guide
+
+Use this section as the one-by-one review path with Tim. It follows the order of the live shared Google Doc comments, not the internal T-NICK numbering. Each row gives the natural answer to the comment and links to the detailed T-NICK section containing methods, results, limitations, and evidence aliases. If the supporting workbook, plot, or packet has been uploaded to OneDrive, it is acceptable to add "see OneDrive" when sharing the answer externally.
+
+| Doc order | Reviewer / location | Comment being answered | Direct answer to use | Details |
+| --- | --- | --- | --- | --- |
+| 1 | Reviewer 1 Major 1 | Visual-field loss, visual-acuity versus broader vision preservation, and proximity to visual structures. | The current curated dataset supports visual-acuity analysis, but not longitudinal visual-field loss or quantitative tumor-to-macula/fovea/optic-nerve distance analyses. The response should clarify that the measured functional endpoint is visual acuity, not broad vision preservation, and should state the absence of longitudinal visual-field/proximity data as a limitation. | [T-NICK-12](#t-nick-12); [T-NICK-14](#t-nick-14) |
+| 2 | Reviewer 1 Major 2a-b | Standardized 1-, 3-, and 5-year VA landmarks and time to clinically meaningful VA deterioration. | These analyses are not feasible from the current curated dataset because they require dated longitudinal VA measurements. We can report latest-VA timing and limitations, but not fixed-landmark VA or time to first 3-line loss without new data abstraction. | [T-NICK-08](#t-nick-08) |
+| 3 | Reviewer 1 Major 2c | Sensitivity restricted to adequate minimum latest-VA follow-up. | Yes. This was not in the original analysis, but it has now been run for 12-, 36-, and 60-month minimum latest-VA follow-up cutoffs in both full and restricted cohorts. These results can be cited from the OneDrive packet. | [T-NICK-08](#t-nick-08) |
+| 4 | Reviewer 1 Major 2d | Adjustment for clinically relevant visual-outcome predictors. | A reviewer-predictor latest-VA sensitivity was added using available baseline VA, follow-up duration, tumor size/stage, SRF, treatment year, and standard covariates. Quantitative macula/fovea/optic-nerve distance and dose variables were not available, so they could not be included. See OneDrive for the sensitivity output. | [T-NICK-08](#t-nick-08); [T-NICK-12](#t-nick-12) |
+| 5 | Reviewer 1 Major 3 PBT | PBT radionuclide, prescription, implant duration, plaque diameter, notched plaques, proximity, and dose details. | The dataset contains some PBT treatment-detail fields, including radionuclide, plaque size, and notched-plaque status, but not quantitative proximity or delivered dose fields suitable for adjustment. The clinical technique prose still needs Tim/Melhus input, while Nick's statistical answer is that missing dose/proximity fields limit adjustment. | [T-NICK-12](#t-nick-12); [Clinical coauthor items](#clinical-coauthor-items) |
+| 6 | Reviewer 1 Major 3 PBT | COMS plaque/notched-plaque sentence. | The available counts support the proposed sentence: 119 standard COMS plaques between 10 and 22 mm were used, including 16 notched plaques, or 13.4%. | [T-NICK-12](#t-nick-12) |
+| 7 | Reviewer 1 Major 3 GKSRS | GK dose/planning, target definition, shots/isocenters, setup, and constraints. | GK planning and dose fields are not in the curated analytic dataset, so Nick cannot adjust models for them. The response can state this as a limitation; detailed GK technique wording remains a clinical coauthor task. | [T-NICK-12](#t-nick-12); [Clinical coauthor items](#clinical-coauthor-items) |
+| 8 | Reviewer 1 Major 3 | Whether VA differences could reflect modality, selection, geometry, prescription, or planning. | Yes, that is a real limitation. The added visual-acuity sensitivity adjusts for available baseline predictors, but the dataset lacks quantitative dose and proximity variables, so the response should avoid causal claims about superior functional preservation. | [T-NICK-08](#t-nick-08); [T-NICK-14](#t-nick-14) |
+| 9 | Reviewer 1 Major 4 | Overstated efficacy/preferred-treatment conclusions. | Agreed. The manuscript should not claim same efficacy, equivalence, noninferiority, or preferred standard treatment. The supported wording is that adjusted observational analyses did not show statistically significant treatment-group differences for the reported endpoints. | [T-NICK-14](#t-nick-14) |
+| 10 | Reviewer 1 Major 5 | Restricted cohort should not be described as simulating randomization; possible propensity-score methods. | Agreed. The restricted cohort can be described as improving clinical comparability, not simulating randomization. Full-cohort propensity-score adjustment is not supportable because of poor overlap; restricted-cohort PS work is exploratory only if used. | [T-NICK-07](#t-nick-07); [T-NICK-14](#t-nick-14) |
+| 11 | Reviewer 1 Major 6 | Local recurrence/metastasis should account for follow-up duration, and median follow-up should be reported by treatment arm. | Yes. Local recurrence and metastatic progression have been rerun as separate adjusted Cox time-to-event analyses, and median follow-up by treatment arm should be reported alongside those survival analyses. In the full cohort, median follow-up was 75.6 months for PBT and 37.2 months for GKSRS; in the restricted cohort, it was 75.2 months for PBT and 38.0 months for GKSRS. Crude event rates should be demoted to descriptive context. | [T-NICK-01](#t-nick-01); [T-NICK-05](#t-nick-05); [T-NICK-09](#t-nick-09) |
+| 12 | Reviewer 1 Major 6 | Late PFS/KM interpretation with few patients at risk. | OS and PFS Cox models were refit after limiting follow-up to the first 60 months. These 60-month sensitivity analyses did not materially change the conclusion, but the full-cohort 60-month OS model should be treated as secondary because of its global PH diagnostic caveat. | [T-NICK-06](#t-nick-06); [T-NICK-02](#t-nick-02) |
+| 13 | Reviewer 1 Major 7 | PFS definition and death handling. | PFS is now defined as time from primary treatment to first local recurrence, metastatic progression, or death from any cause. Death without documented local recurrence or metastatic progression is therefore counted as a PFS event in the regenerated datasets. | [T-NICK-04](#t-nick-04) |
+| 14 | Reviewer 1 Major 8 | Tumor-height reduction timing and clinical relevance. | The timing audit shows latest tumor-height assessment was not standardized and occurred later for PBT than GKSRS. Tumor-height change should therefore be reported as descriptive or secondary, not as a strong comparative treatment-effect endpoint. | [T-NICK-10](#t-nick-10) |
+| 15 | Reviewer 1 Minor 9 | Replace UpToDate/EyeWiki references. | This is a clinical/reference-editing task rather than a Nick statistical analysis item. Nick has no separate statistical output needed unless Tim asks for a methods citation. | [Clinical coauthor items](#clinical-coauthor-items) |
+| 16 | Reviewer 1 Minor 10 | Distinguish visual-acuity loss from broader vision loss. | Agreed. The manuscript should say visual-acuity change or preservation only when referring to the measured endpoint, and should not generalize this to broad vision preservation or visual-field preservation. | [T-NICK-14](#t-nick-14); [T-NICK-12](#t-nick-12) |
+| 17 | Reviewer 1 Minor 11 | Extensive subgroup analyses relative to event counts. | Agreed. Subgroups should be labeled exploratory, with multiplicity and low-event limitations acknowledged. PRAME and T4 subgroup displays have been removed or pruned from reviewer-facing Objective 1 surfaces. | [T-NICK-11](#t-nick-11); [T-NICK-14](#t-nick-14) |
+| 18 | Reviewer 2 | Dose to optic nerve/retina should be compared and adjusted for visual outcomes. | The added latest-VA sensitivity adjusts for available visual-outcome predictors, but optic-disc/macular dose and quantitative proximity fields are not available in the curated analytic dataset. The response should state that dose/proximity could not be modeled without new treatment-plan abstraction. | [T-NICK-08](#t-nick-08); [T-NICK-12](#t-nick-12) |
+| 19 | Reviewer 2 | Remove "simulate randomization." | Agreed. This wording should be removed. The restricted cohort improves comparability but does not replicate randomization, and the response should not imply randomized balance. | [T-NICK-14](#t-nick-14); [T-NICK-07](#t-nick-07) |
+| 20 | Reviewer 2 | Add background for restricted-cohort height/diameter cutoffs. | This is primarily a clinical rationale/manuscript-background item. Statistically, the restricted cohort should be described as a clinically motivated comparability restriction, not a randomized or fully balanced cohort. | [T-NICK-14](#t-nick-14); [Clinical coauthor items](#clinical-coauthor-items) |
+| 21 | Reviewer 2 | Explain logMAR conversion and Snellen-lines change rationale. | The response can say logMAR is the analyzable continuous visual-acuity scale used for modeling, while Snellen-line conversion is used for clinical interpretability. The broader latest-VA timing, follow-up sensitivity, and visual-outcome adjustment results are handled under the visual-acuity item. | [T-NICK-08](#t-nick-08) |
+| 22 | Reviewer 2 | Remove inferential Table 1/baseline p-values. | No Nick-side generated-table change is needed. Tim will remove or format final manuscript Table 1 p-values manually; baseline characteristics should still be interpreted descriptively, not as proof of balance. | [T-NICK-15](#t-nick-15) |
+| 23 | Reviewer 2 | Replace binary recurrence/metastasis logistic regression with Cox-only analyses. | Yes. We reran local recurrence and metastatic progression as adjusted Cox time-to-event analyses and removed binary logistic/Fisher tests as lead inference for these endpoints. | [T-NICK-01](#t-nick-01); [T-NICK-05](#t-nick-05) |
+| 24 | Reviewer 2 | Confirm PH assumption testing. | Yes. PH diagnostics were assessed with scaled Schoenfeld residual tests for the reported full/restricted Objective 1 Cox models. Treatment-term PH tests were acceptable for the reported treatment comparisons, with specified secondary caveats. | [T-NICK-02](#t-nick-02) |
+| 25 | Reviewer 2 | Leave continuous variables continuous. | Yes. The reviewer-response adjusted Cox models use continuous age rather than a dichotomized age cutoff. | [T-NICK-03](#t-nick-03) |
+| 26 | Reviewer 2 | Radiation dose must be incorporated into analyses. | Radiation dose could not be incorporated into the statistical models because comparable GK/PBT dose-planning fields are not present in the curated analytic dataset. The response should explicitly acknowledge this as a limitation and avoid firm causal conclusions. | [T-NICK-12](#t-nick-12); [T-NICK-14](#t-nick-14) |
+| 27 | Reviewer 2 | Limited follow-up, low event counts, and unstable interaction/regression models. | Agreed. This limitation should be acknowledged directly. The response now emphasizes parsimonious adjusted Cox models, demotes unsupported subgroup/interaction claims, and avoids equivalence or causal language. | [T-NICK-11](#t-nick-11); [T-NICK-14](#t-nick-14) |
+| 28 | Reviewer 2 | Follow-up duration and calculation, including eye-exam frequency/data availability. | Follow-up duration summaries by treatment arm are available for the full and restricted cohorts. Frequency of eye exams and endpoint-specific assessment schedules are not fully captured in the curated dataset, so those should be stated as limitations where relevant. | [T-NICK-09](#t-nick-09); [T-NICK-08](#t-nick-08) |
+| 29 | Reviewer 2 | T3/T4 restricted-cohort size-cutoff concern. | The restricted cohort was constructed using the recorded tumor diameter and height cutoffs, so the statistical response can say the size restriction was applied by design. The clinical explanation of T-stage derivation and ultrasound/clinical measurement nuance is Tim/clinical-coauthor owned. | [Clinical coauthor items](#clinical-coauthor-items) |
+| 30 | Reviewer 2 | Replace UpToDate references. | This is a reference-editing task rather than a Nick statistical analysis item. | [Clinical coauthor items](#clinical-coauthor-items) |
+| 31 | Reviewer 2 | Adverse-event grading. | The available data support recorded toxicity-burden analyses, not CTCAE-style graded adverse-event incidence or time-to-toxicity analyses. Visual-acuity change is graded separately, but NVG, retinopathy, and SRD do not have standardized toxicity grades in the checked data. | [T-NICK-13](#t-nick-13) |
+| 32 | Reviewer 2 | Overstrong conclusion that GKSRS has same efficacy as PBT. | Agreed. The supported conclusion is that adjusted observational analyses did not show statistically significant treatment-group differences for the reported endpoints; this does not establish equivalence, noninferiority, or causal superiority. | [T-NICK-14](#t-nick-14) |
+| 33 | Reviewer 2 | Tumor location does not capture optic-nerve proximity. | Correct. The dataset includes categorical optic-nerve status but not a reliable quantitative distance to the optic nerve, macula, or fovea. This should be acknowledged as a limitation, especially because treatment selection differs for tumors abutting the optic nerve. | [T-NICK-12](#t-nick-12) |
+
+---
+
 ## Reviewer Statistics Block Coverage
 
 This maps the reviewer/statistical comment block beginning with the concern about binary outcomes and ending with the instruction to leave continuous variables continuous.
@@ -104,11 +146,13 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 
 ---
 
+<a id="t-nick-01"></a>
+
 ### T-NICK-01: Cox-Only Local Recurrence And Metastatic Progression Reanalysis
 
 > **STATUS:** Complete.
 
-**Direct answer:** Working answer: yes. The recurrence and metastatic-progression comparisons have been rerun as adjusted Cox time-to-event analyses, which is the appropriate response to the reviewer concern that crude event rates ignore unequal follow-up. These models did not show a statistically significant treatment-group difference for local recurrence or metastatic progression.
+**Direct answer:** Yes. The recurrence and metastatic-progression comparisons have been rerun as adjusted Cox time-to-event analyses, which is the appropriate response to the reviewer concern that crude event rates ignore unequal follow-up. These models did not show a statistically significant treatment-group difference for local recurrence or metastatic progression.
 
 **Google Doc context:** Reviewer objected that local recurrence and metastasis were treated as binary outcomes despite unequal follow-up. Tim's comment to Nick, with Angie's agreement, was to rerun these data for Cox regression analyses only.
 
@@ -137,11 +181,13 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 
 ---
 
+<a id="t-nick-02"></a>
+
 ### T-NICK-02: Proportional-Hazards Assumption Confirmation
 
 > **STATUS:** Complete.
 
-**Direct answer:** Working answer: yes. The Cox PH assumption was assessed with scaled Schoenfeld residual tests using `cox.zph()` for the full-cohort and restricted-cohort Cox models shown or cited for Objective 1. Objective 2 full/restricted outputs currently use linear or logistic models for vision/toxicity endpoints, not Cox models, so there are no Objective 2 PH assumptions to report. For Objective 1, the treatment-term PH tests did not show evidence against PH for any shown model. Covariate-level PH diagnostics flagged two secondary caveats: full-cohort 60-month OS global PH concern driven by age at diagnosis (treatment term OK), and restricted-cohort full-follow-up OS `location` covariate marginal PH concern (p=0.0485; treatment term and global PH OK).
+**Direct answer:** Yes. The Cox PH assumption was assessed with scaled Schoenfeld residual tests using `cox.zph()` for the full-cohort and restricted-cohort Cox models shown or cited for Objective 1. Objective 2 full/restricted outputs currently use linear or logistic models for vision/toxicity endpoints, not Cox models, so there are no Objective 2 PH assumptions to report. For Objective 1, the treatment-term PH tests did not show evidence against PH for any shown model. Covariate-level PH diagnostics flagged two secondary caveats: full-cohort 60-month OS global PH concern driven by age at diagnosis (treatment term OK), and restricted-cohort full-follow-up OS `location` covariate marginal PH concern (p=0.0485; treatment term and global PH OK).
 
 **Google Doc context:** Reviewer asked whether proportional-hazards assumptions were checked. Tim asked Nick to confirm/report this.
 
@@ -189,6 +235,8 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 
 ---
 
+<a id="t-nick-03"></a>
+
 ### T-NICK-03: Continuous Variables And Dichotomization
 
 > **STATUS:** Complete.
@@ -212,6 +260,8 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 **Evidence:** `scripts/config/modeling_policy.R`; `tests/testthat/test_peer_review_revision_contract.R`; exact Cox model table aliases listed under T-NICK-01 and T-NICK-06.
 
 ---
+
+<a id="t-nick-04"></a>
 
 ### T-NICK-04: PFS Definition And Death/Progression Components
 
@@ -237,11 +287,13 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 
 ---
 
+<a id="t-nick-05"></a>
+
 ### T-NICK-05: Separate Time-To-Local-Recurrence And Time-To-Metastasis Outputs
 
 > **STATUS:** Complete.
 
-**Direct answer:** Working answer: yes. The generated results include separate adjusted Cox models for time to local recurrence and time to metastatic progression. That is the direct answer to Tim's question and the direct statistical response to the reviewer concern about recurrence/metastasis comparisons needing to account for follow-up duration.
+**Direct answer:** Yes. The generated results include separate adjusted Cox models for time to local recurrence and time to metastatic progression. That is the direct answer to Tim's question and the direct statistical response to the reviewer concern about recurrence/metastasis comparisons needing to account for follow-up duration.
 
 **Google Doc context:** The reviewer specifically criticized crude local-recurrence and metastatic-progression event rates because follow-up differed between treatment groups. Tim's follow-up question was whether we could include Cox models for "time to local recurrence" and "time to metastatic progression."
 
@@ -253,19 +305,21 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 
 **Result:** Yes, the generated results include separate adjusted Cox models for time to local recurrence and time to metastatic progression. In the full cohort, GKSRS versus PBT HR was 1.36 for local recurrence (95% CI 0.669-2.78; p=0.394; Cox model n=254, 31 events) and 1.25 for metastatic progression (95% CI 0.679-2.30; p=0.472; Cox model n=254, 43 events). In the restricted cohort, HR was 1.72 for local recurrence (95% CI 0.674-4.41; p=0.256; Cox model n=164, 18 events) and 1.00 for metastatic progression (95% CI 0.446-2.24; p=0.999; Cox model n=164, 28 events). These results do not show a statistically significant treatment-group difference for either endpoint, but the intervals are wide. Cox model n values reflect sparse-location model exclusions, not source cohort denominators.
 
-**Response/manuscript language:** "We reanalyzed local recurrence and metastatic progression as time-to-event endpoints using adjusted Cox proportional-hazards models, rather than relying on crude event-rate comparisons alone. In these models, no statistically significant treatment-group difference was observed for time to local recurrence or time to metastatic progression."
+**Response/manuscript language:** "We reanalyzed local recurrence and metastatic progression as time-to-event endpoints using adjusted Cox proportional-hazards models, rather than relying on crude event-rate comparisons alone. We also report median follow-up by treatment arm alongside the survival analyses to make the unequal follow-up explicit. In these models, no statistically significant treatment-group difference was observed for time to local recurrence or time to metastatic progression."
 
-**Limitation / interpretation:** This likely answers what the collaborator wants from the reviewer comment: crude recurrence/metastasis rates should be demoted, and the response should lead with follow-up-aware time-to-event models. It does not by itself answer the separate reviewer request to report median follow-up by treatment arm; that remains tracked under T-NICK-09. It also does not make an equivalence claim, and low event counts limit precision. Competing-risk methods or cumulative-incidence estimates could be described as supportive if the manuscript needs absolute risks at specific time points, but the Cox models are the direct answer to the requested "time to local recurrence" and "time to metastatic progression" analyses.
+**Limitation / interpretation:** This likely answers what the collaborator wants from the reviewer comment: crude recurrence/metastasis rates should be demoted, and the response should lead with follow-up-aware time-to-event models while reporting median follow-up by treatment arm alongside those survival analyses. It does not make an equivalence claim, and low event counts limit precision. Competing-risk methods or cumulative-incidence estimates could be described as supportive if the manuscript needs absolute risks at specific time points, but the Cox models are the direct answer to the requested "time to local recurrence" and "time to metastatic progression" analyses.
 
 **Evidence:** Exact Cox model table and PH summary aliases listed under T-NICK-01; `tests/testthat/test_peer_review_revision_contract.R`.
 
 ---
 
+<a id="t-nick-06"></a>
+
 ### T-NICK-06: Five-Year Limited-Follow-Up OS/PFS HR Sensitivity
 
 > **STATUS:** Complete.
 
-**Direct answer:** Working answer: yes. OS and PFS Cox models were refit after limiting follow-up to the first 60 months, while KM curves can still show observed follow-up beyond 5 years. The 60-month analyses did not materially change the statistical conclusion from the full-follow-up Cox models: OS and PFS treatment comparisons remained statistically non-significant.
+**Direct answer:** Yes. OS and PFS Cox models were refit after limiting follow-up to the first 60 months, while KM curves can still show observed follow-up beyond 5 years. The 60-month analyses did not materially change the statistical conclusion from the full-follow-up Cox models: OS and PFS treatment comparisons remained statistically non-significant.
 
 **Google Doc context:** Reviewer raised concern about sparse late follow-up/risk sets. Tim asked Nick to address the statistical concern while keeping conclusions conservative.
 
@@ -293,6 +347,8 @@ This maps the reviewer/statistical comment block beginning with the concern abou
 - `<OUTPUT_DIR>/uveal_restricted/01_Efficacy/d_progression_free_survival/restricted_cohort_progression_free_survival_probability_5yr_capped_proportional_hazards_summary.txt`
 
 ---
+
+<a id="t-nick-07"></a>
 
 ### T-NICK-07: Propensity-Score Feasibility
 
@@ -343,6 +399,8 @@ Suggested response wording: "We assessed whether a propensity-score sensitivity 
 **Evidence:** `<OUTPUT_DIR>/peer_review_revision_audits/full_propensity_score_feasibility.xlsx`; `<OUTPUT_DIR>/peer_review_revision_audits/restricted_propensity_score_feasibility.xlsx`.
 
 ---
+
+<a id="t-nick-08"></a>
 
 ### T-NICK-08: Visual-Acuity Follow-Up And Minimum-Follow-Up Sensitivity
 
@@ -414,11 +472,13 @@ The reviewer-predictor latest-VA sensitivity attenuated the apparent visual-acui
 
 ---
 
+<a id="t-nick-09"></a>
+
 ### T-NICK-09: Follow-Up Duration Summaries
 
 > **STATUS:** Complete.
 
-**Direct answer:** Working answer: yes. Treatment-arm follow-up summaries are available for the full and restricted cohorts, and the full/restricted follow-up audit workbooks have been regenerated and sheet-checked. In both cohorts, PBT patients had longer median follow-up than GKSRS patients, which supports the reviewer concern that crude recurrence/metastasis event rates are hard to interpret without time-to-event methods. This is why recurrence and metastatic progression should be presented with Cox time-to-event models rather than crude binary comparisons.
+**Direct answer:** Yes. Treatment-arm follow-up summaries are available for the full and restricted cohorts, and the full/restricted follow-up audit workbooks have been regenerated and sheet-checked. In both cohorts, PBT patients had longer median follow-up than GKSRS patients, which supports the reviewer concern that crude recurrence/metastasis event rates are hard to interpret without time-to-event methods. This is why recurrence and metastatic progression should be presented with Cox time-to-event models rather than crude binary comparisons.
 
 **Google Doc context:** Reviewer emphasized unequal follow-up and asked for follow-up timing to interpret recurrence, metastasis, visual acuity, and toxicity comparisons. Tim asked Nick to generate response-ready follow-up summaries.
 
@@ -450,13 +510,15 @@ The reviewer-predictor latest-VA sensitivity attenuated the apparent visual-acui
 
 In both cohorts, PBT patients had longer mean and median general follow-up than GKSRS patients. The same pattern holds for latest-VA timing among patients with usable timing fields.
 
-**Response/manuscript language:** "Median and mean follow-up differed by treatment arm. In the full cohort, general follow-up was a median of 75.6 months (mean 83.2; range 3.0-376.3) for PBT and a median of 37.2 months (mean 51.1; range 1.1-246.1) for GKSRS. In the restricted cohort, general follow-up was a median of 75.2 months (mean 81.5; range 3.0-376.3) for PBT and a median of 38.0 months (mean 53.7; range 1.1-205.4) for GKSRS. Because recurrence and metastatic progression are follow-up-dependent endpoints, the revised analysis emphasizes time-to-event Cox models rather than crude event-rate comparisons."
+**Response/manuscript language:** "Median follow-up is reported by treatment arm alongside the survival analyses. In the full cohort, general follow-up was a median of 75.6 months (mean 83.2; range 3.0-376.3) for PBT and a median of 37.2 months (mean 51.1; range 1.1-246.1) for GKSRS. In the restricted cohort, general follow-up was a median of 75.2 months (mean 81.5; range 3.0-376.3) for PBT and a median of 38.0 months (mean 53.7; range 1.1-205.4) for GKSRS. Because recurrence and metastatic progression are follow-up-dependent endpoints, the revised analysis emphasizes time-to-event Cox models rather than crude event-rate comparisons."
 
 **Limitation / interpretation:** General follow-up duration is not the same as dated endpoint-specific assessment frequency. The latest-VA timing summary uses treatment date to `last_followup` as the available timing field for latest visual acuity; standardized 1-, 3-, and 5-year VA landmarks remain a separate visual-acuity feasibility question under T-NICK-08.
 
 **Evidence:** `<OUTPUT_DIR>/peer_review_revision_audits/full_followup_and_data_availability.xlsx` (sheet `followup_by_treatment_arm`); `<OUTPUT_DIR>/peer_review_revision_audits/restricted_followup_and_data_availability.xlsx` (sheet `followup_by_treatment_arm`).
 
 ---
+
+<a id="t-nick-10"></a>
 
 ### T-NICK-10: Tumor-Height Timing
 
@@ -482,6 +544,8 @@ In both cohorts, PBT patients had longer mean and median general follow-up than 
 
 ---
 
+<a id="t-nick-11"></a>
+
 ### T-NICK-11: PRAME And T4 Subgroup Pruning
 
 > **STATUS:** Complete.
@@ -506,11 +570,13 @@ In both cohorts, PBT patients had longer mean and median general follow-up than 
 
 ---
 
+<a id="t-nick-12"></a>
+
 ### T-NICK-12: Dose, Proximity, Optic Nerve, Macula/Fovea, Visual Field, And Treatment-Detail Availability
 
 > **STATUS:** Complete for Nick's statistical limitation; clinical technique prose remains coauthor-owned.
 
-**Direct answer:** For Nick's data/statistical part, the working answer is yes: the curated analytic dataset does not contain quantitative macula/fovea/optic-nerve distance fields or GK/PBT dose-planning fields needed for adjustment. The response can say these factors could not be included in statistical models without new chart or radiation-plan abstraction only after the source-absence audit is verified. Clinical coauthors still need to supply the treatment-technique narrative that is not a dataset question.
+**Direct answer:** For Nick's data/statistical part, yes: the curated analytic dataset does not contain quantitative macula/fovea/optic-nerve distance fields or GK/PBT dose-planning fields needed for adjustment. The response can say these factors could not be included in statistical models without new chart or radiation-plan abstraction only after the source-absence audit is verified. Clinical coauthors still need to supply the treatment-technique narrative that is not a dataset question.
 
 **Google Doc context:** Reviewers requested radiation dose, optic-disc/macular/foveal proximity, visual-field, and treatment-detail information. Tim noted some of this may not be feasible in the response window and asked Nick to verify data availability before wording limitations.
 
@@ -531,6 +597,8 @@ The requested quantitative dosimetry and proximity fields are not present as der
 **Expected evidence after generation/verification:** `<OUTPUT_DIR>/peer_review_revision_audits/full_followup_and_data_availability.xlsx`; `<OUTPUT_DIR>/peer_review_revision_audits/restricted_followup_and_data_availability.xlsx`.
 
 ---
+
+<a id="t-nick-13"></a>
 
 ### T-NICK-13: Adverse-Event Grading And SRD Scope
 
@@ -556,6 +624,8 @@ The requested quantitative dosimetry and proximity fields are not present as der
 
 ---
 
+<a id="t-nick-14"></a>
+
 ### T-NICK-14: Statistical Language Guardrails
 
 > **STATUS:** Tim final wording pass; not a Nick blocker.
@@ -580,6 +650,8 @@ The requested quantitative dosimetry and proximity fields are not present as der
 
 ---
 
+<a id="t-nick-15"></a>
+
 ### T-NICK-15: Table 1 P-Value Handling
 
 > **STATUS:** Complete.
@@ -603,6 +675,8 @@ The requested quantitative dosimetry and proximity fields are not present as der
 **Evidence:** `docs/STATISTICAL_METHODS.md`; generated table outputs are intentionally unchanged for now.
 
 ---
+
+<a id="clinical-coauthor-items"></a>
 
 ## Clinical Coauthor Items Nick Should Track But Not Own Alone
 
