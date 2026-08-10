@@ -146,7 +146,12 @@ create_comprehensive_diagnostics <- function(model_fit, data, outcome_var, predi
     model_diagnostics_tab <- create_model_diagnostics_tab(model_fit, dataset_name, analysis_name, effect_measure, coefs, extreme_diagnostics, filtered_variables)
     data_characteristics_tab <- create_data_characteristics_tab(dataset_name, analysis_name, predictor_vars, confounders, outcome_var, data)
     sparse_level_diagnostics_tab <- create_sparse_level_diagnostics_tab(sparse_level_diagnostics)
-    sample_size_summary_tab <- build_sample_size_summary_tab(filter_stats, dataset_name, analysis_name, modeled_n = nrow(data))
+    sample_size_summary_tab <- build_sample_size_summary_tab(
+        filter_stats,
+        dataset_name,
+        analysis_name,
+        modeled_n = nrow(stats::model.frame(model_fit))
+    )
 
     # === UNIFIED RAW MODEL OUTPUT ===
     raw_model_output_tab <- create_raw_model_output_tab(
