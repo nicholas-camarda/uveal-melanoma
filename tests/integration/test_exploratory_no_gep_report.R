@@ -435,6 +435,7 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
             "Key_Findings_5yr",
             "Risk_Ladder_5yr",
             "No_GEP_Subgroups",
+            "Follow_Up_Context",
             "Model_Performance",
             "Parsimonious_Sensitivity",
             "Surrogate_Model_Coefficients",
@@ -615,4 +616,50 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         as.character(results$risk_ladder$group),
         c("Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2")
     )
+})
+
+test_that("report-native no-GEP figures reconcile to source tables", {
+    actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
+    test_output_dir <- file.path(TEST_OUTPUT_DIR, "exploratory_no_gep_figures")
+    withr::defer(unlink(test_output_dir, recursive = TRUE), teardown_env())
+    results <- run_exploratory_no_gep_report(
+        output_dir = test_output_dir,
+        verify_km_fix = FALSE,
+        data = actual_data
+    )
+
+    expect_true(file.exists(results$output_paths$subgroup_outcomes))
+    expect_true(file.exists(results$output_paths$direct_model_contributions))
+    expect_setequal(results$no_gep_subgroups$no_gep_group, c("GEP Failed/Indeterminate", "GEP Not Tested"))
+    followup_by_group <- results$follow_up_context %>%
+        dplyr::filter(.data$summary_scope == "no_gep_group")
+    expect_true(setequal(followup_by_group$no_gep_group, results$no_gep_subgroups$no_gep_group))
+    subgroup_plot <- create_exploratory_no_gep_subgroup_outcomes_plot(
+        results$no_gep_subgroups,
+        results$follow_up_context,
+        tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_true(setequal(subgroup_plot$plot_data$no_gep_group, followup_by_group$no_gep_group))
+    expect_true(all(subgroup_plot$plot_data$n %in% followup_by_group$n))
+    contribution_rows <- results$predictor_contribution %>%
+        dplyr::filter(
+            .data$section == "model_contribution",
+            .data$model %in% c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+        )
+    expect_true(setequal(
+        unique(contribution_rows$model),
+        c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+    ))
+    contributor_plot <- create_exploratory_no_gep_direct_model_contributions_plot(
+        results$predictor_contribution,
+        tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_true(setequal(as.character(contributor_plot$plot_data$predictor), as.character(contribution_rows$predictor)))
+    expect_false(any(contributor_plot$plot_data$model == "Surrogate Class 2 Probability"))
+    ranks_by_model <- split(contribution_rows$rank, contribution_rows$model)
+    expect_true(all(vapply(ranks_by_model, function(x) {
+        identical(sort(as.integer(x)), seq_len(length(x)))
+    }, logical(1))))
 })

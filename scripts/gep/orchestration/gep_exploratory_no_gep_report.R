@@ -261,29 +261,32 @@ derive_exploratory_no_gep_group_snapshot <- function(data, group_var = "explorat
         dplyr::mutate(expected_n = dplyr::coalesce(.data$expected_n, 0L))
 }
 
-#' Build a Follow-Up Context Block for Exploratory No-GEP Narratives
-#'
-#' Summarizes the no-GEP scoring cohort used by the exploratory baseline-only
-#' models so readers can see the follow-up duration and operational censoring
-#' context before the model-performance sections.
+#' Summarize Follow-Up Context for Exploratory No-GEP Outputs
 #'
 #' @param prepared_data List returned by `prepare_exploratory_no_gep_data()`.
-#' @param dataset_name Optional dataset label for contextual wording.
 #'
-#' @return Character vector of narrative lines.
-build_exploratory_no_gep_followup_block <- function(prepared_data, dataset_name = NULL) {
-    if (is.null(prepared_data)) {
-        return(character())
-    }
-
+#' @return A data frame containing one overall row and one row per no-GEP group.
+summarize_exploratory_no_gep_followup <- function(prepared_data) {
     analysis_data <- if (is.data.frame(prepared_data)) {
         prepared_data
     } else {
         prepared_data$no_gep_scoring %||% prepared_data$full_data
     }
 
-    if (is.null(analysis_data) || !is.data.frame(analysis_data) || nrow(analysis_data) == 0) {
-        return(character())
+    if (is.null(analysis_data) || !is.data.frame(analysis_data) || nrow(analysis_data) == 0L) {
+        return(tibble::tibble(
+            summary_scope = character(),
+            no_gep_group = character(),
+            n = integer(),
+            median_followup_years = numeric(),
+            mean_followup_years = numeric(),
+            max_followup_years = numeric(),
+            reached_5yr_n = integer(),
+            reached_5yr_prop = numeric(),
+            alive = integer(),
+            dead = integer(),
+            lost_to_followup = integer()
+        ))
     }
 
     if (!"follow_up_years" %in% names(analysis_data)) {
@@ -299,47 +302,77 @@ build_exploratory_no_gep_followup_block <- function(prepared_data, dataset_name 
             analysis_data$follow_up_years <- NA_real_
         }
     }
-
     if (!"no_gep_group" %in% names(analysis_data) && "exploratory_gep_group" %in% names(analysis_data)) {
         analysis_data$no_gep_group <- as.character(analysis_data$exploratory_gep_group)
     }
     if (!"no_gep_group" %in% names(analysis_data)) {
         analysis_data$no_gep_group <- NA_character_
     }
-
     analysis_data <- add_objective4_operational_followup_status(analysis_data)
 
-    valid_followup <- !is.na(analysis_data$follow_up_years) & analysis_data$follow_up_years >= 0
-    followup_values <- analysis_data$follow_up_years[valid_followup]
-    total_n <- nrow(analysis_data)
-    followup_ge_5yr_n <- sum(valid_followup & analysis_data$follow_up_years >= 5, na.rm = TRUE)
-    followup_ge_5yr_prop <- if (total_n > 0) followup_ge_5yr_n / total_n else NA_real_
+    summarize_rows <- function(.data, summary_scope, group_value = NA_character_) {
+        followup_values <- .data$follow_up_years
+        valid_followup <- !is.na(followup_values) & followup_values >= 0
+        values <- followup_values[valid_followup]
+        total_n <- nrow(.data)
+        reached_5yr_n <- as.integer(sum(valid_followup & followup_values >= 5, na.rm = TRUE))
+        alive_n <- as.integer(sum(.data$operational_followup_status == "alive", na.rm = TRUE))
+        dead_n <- as.integer(sum(.data$operational_followup_status == "dead", na.rm = TRUE))
+        lost_n <- as.integer(sum(.data$operational_followup_status == "lost_to_followup", na.rm = TRUE))
+        tibble::tibble(
+            summary_scope = summary_scope,
+            no_gep_group = group_value,
+            n = as.integer(total_n),
+            median_followup_years = if (length(values) > 0L) stats::median(values) else NA_real_,
+            mean_followup_years = if (length(values) > 0L) mean(values) else NA_real_,
+            max_followup_years = if (length(values) > 0L) max(values) else NA_real_,
+            reached_5yr_n = reached_5yr_n,
+            reached_5yr_prop = if (total_n > 0L) reached_5yr_n / total_n else NA_real_,
+            alive = alive_n,
+            dead = dead_n,
+            lost_to_followup = lost_n
+        )
+    }
 
-    followup_mean <- if (length(followup_values) > 0) mean(followup_values) else NA_real_
-    followup_median <- if (length(followup_values) > 0) stats::median(followup_values) else NA_real_
-    followup_max <- if (length(followup_values) > 0) max(followup_values) else NA_real_
-
-    operational_counts <- table(analysis_data$operational_followup_status, useNA = "no")
-    operational_alive <- as.integer(if ("alive" %in% names(operational_counts)) operational_counts[["alive"]] else 0L)
-    operational_dead <- as.integer(if ("dead" %in% names(operational_counts)) operational_counts[["dead"]] else 0L)
-    operational_lost <- as.integer(if ("lost_to_followup" %in% names(operational_counts)) operational_counts[["lost_to_followup"]] else 0L)
-
-    group_summary <- analysis_data %>%
+    overall <- summarize_rows(analysis_data, "overall")
+    by_group <- analysis_data %>%
         dplyr::filter(!is.na(.data$no_gep_group)) %>%
-        dplyr::group_by(.data$no_gep_group) %>%
-        dplyr::summarise(
-            n = dplyr::n(),
-            median_followup_years = if (sum(!is.na(.data$follow_up_years) & .data$follow_up_years >= 0) > 0) {
-                stats::median(.data$follow_up_years[!is.na(.data$follow_up_years) & .data$follow_up_years >= 0])
-            } else {
-                NA_real_
-            },
-            alive = sum(.data$operational_followup_status == "alive", na.rm = TRUE),
-            dead = sum(.data$operational_followup_status == "dead", na.rm = TRUE),
-            lost_to_followup = sum(.data$operational_followup_status == "lost_to_followup", na.rm = TRUE),
-            .groups = "drop"
-        ) %>%
+        dplyr::group_split(.data$no_gep_group, .keep = TRUE) %>%
+        purrr::map_dfr(function(group_data) {
+            summarize_rows(group_data, "no_gep_group", as.character(group_data$no_gep_group[[1]]))
+        }) %>%
         dplyr::arrange(factor(.data$no_gep_group, levels = c("GEP Failed/Indeterminate", "GEP Not Tested")))
+
+    dplyr::bind_rows(overall, by_group)
+}
+
+#' Build a Follow-Up Context Block for Exploratory No-GEP Narratives
+#'
+#' Summarizes the no-GEP scoring cohort used by the exploratory baseline-only
+#' models so readers can see the follow-up duration and operational censoring
+#' context before the model-performance sections.
+#'
+#' @param prepared_data List returned by `prepare_exploratory_no_gep_data()`.
+#' @param dataset_name Optional dataset label for contextual wording.
+#'
+#' @return Character vector of narrative lines.
+build_exploratory_no_gep_followup_block <- function(prepared_data, dataset_name = NULL) {
+    followup_context <- summarize_exploratory_no_gep_followup(prepared_data)
+    overall <- followup_context %>% dplyr::filter(.data$summary_scope == "overall")
+    group_summary <- followup_context %>% dplyr::filter(.data$summary_scope == "no_gep_group")
+    if (nrow(overall) == 0L) {
+        return(character())
+    }
+
+    total_n <- overall$n[[1]]
+    followup_ge_5yr_n <- overall$reached_5yr_n[[1]]
+    followup_ge_5yr_prop <- overall$reached_5yr_prop[[1]]
+    followup_mean <- overall$mean_followup_years[[1]]
+    followup_median <- overall$median_followup_years[[1]]
+    followup_max <- overall$max_followup_years[[1]]
+    operational_alive <- overall$alive[[1]]
+    operational_dead <- overall$dead[[1]]
+    operational_lost <- overall$lost_to_followup[[1]]
 
     group_line <- if (nrow(group_summary) > 0) {
         paste(
@@ -3160,6 +3193,7 @@ collect_exploratory_no_gep_analysis <- function(data,
     )
     key_findings_5yr <- create_exploratory_key_findings_table(risk_ladder)
     no_gep_subgroups <- create_exploratory_no_gep_subgroups_table(no_gep_summary)
+    follow_up_context <- summarize_exploratory_no_gep_followup(prepared_data)
     model_performance <- create_exploratory_model_performance_table(
         surrogate_model = surrogate_model,
         mfs_model = direct_mfs_model,
@@ -3201,6 +3235,7 @@ collect_exploratory_no_gep_analysis <- function(data,
         start_here = start_here,
         key_findings_5yr = key_findings_5yr,
         no_gep_subgroups = no_gep_subgroups,
+        follow_up_context = follow_up_context,
         model_performance = model_performance,
         surrogate_model_coefficients = surrogate_coefficients,
         direct_mfs_coefficients = direct_mfs_coefficients,
@@ -3413,6 +3448,123 @@ create_event_rate_bin_plot <- function(summary_data, analysis_name, event_col, p
         ggplot2::theme_minimal(base_size = 14)
 
     ggplot2::ggsave(output_path, plot, width = 10, height = 6, dpi = PLOT_DPI, bg = "white")
+    invisible(output_path)
+}
+
+#' Create no-GEP Subgroup Outcomes Figure
+#'
+#' @param subgroup_table Existing `No_GEP_Subgroups` table.
+#' @param followup_table Existing `Follow_Up_Context` table.
+#' @param output_path File path for the saved PNG.
+#' @param return_plot Logical; when `TRUE`, return plot and source data.
+#'
+#' @return Invisibly returns the saved path, or a plot contract.
+create_exploratory_no_gep_subgroup_outcomes_plot <- function(subgroup_table, followup_table, output_path, return_plot = FALSE) {
+    required_subgroup <- c(
+        "no_gep_group", "n", "observed_5yr_mfs_event_rate",
+        "observed_5yr_mss_event_rate", "median_predicted_5yr_mfs_risk",
+        "median_predicted_60mo_melanoma_death_cumulative_incidence_risk"
+    )
+    missing_subgroup <- setdiff(required_subgroup, names(subgroup_table))
+    if (length(missing_subgroup) > 0L) {
+        stop(sprintf("Subgroup outcomes table is missing: %s", paste(missing_subgroup, collapse = ", ")), call. = FALSE)
+    }
+    followup_by_group <- followup_table %>%
+        dplyr::filter(.data$summary_scope == "no_gep_group") %>%
+        dplyr::select("no_gep_group", "median_followup_years")
+    plot_data <- subgroup_table %>%
+        dplyr::select(
+            "no_gep_group",
+            "n",
+            observed_mfs = "observed_5yr_mfs_event_rate",
+            observed_mss = "observed_5yr_mss_event_rate",
+            predicted_mfs = "median_predicted_5yr_mfs_risk",
+            predicted_mss = "median_predicted_60mo_melanoma_death_cumulative_incidence_risk"
+        ) %>%
+        dplyr::left_join(followup_by_group, by = "no_gep_group") %>%
+        tidyr::pivot_longer(
+            cols = c("observed_mfs", "observed_mss", "predicted_mfs", "predicted_mss"),
+            names_to = "measure",
+            values_to = "risk"
+        ) %>%
+        dplyr::mutate(
+            measure = factor(
+                .data$measure,
+                levels = c("observed_mfs", "predicted_mfs", "observed_mss", "predicted_mss"),
+                labels = c("Observed 5-year MFS", "Predicted 5-year MFS", "Observed 5-year MSS", "Predicted 60-month MSS")
+            ),
+            no_gep_group = factor(.data$no_gep_group, levels = c("GEP Failed/Indeterminate", "GEP Not Tested"))
+        )
+    plot <- ggplot2::ggplot(
+        plot_data,
+        ggplot2::aes(x = .data$no_gep_group, y = .data$risk, fill = .data$measure)
+    ) +
+        ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.78), width = 0.68) +
+        ggplot2::scale_y_continuous(labels = scales::label_percent(accuracy = 1), limits = c(0, 1)) +
+        ggplot2::scale_fill_brewer(palette = "Dark2") +
+        ggplot2::labs(
+            title = "No-GEP Subgroups Show Different Observed and Predicted Risk",
+            subtitle = "Baseline-only model outputs are descriptive; observed rates use the existing endpoint definitions",
+            x = NULL,
+            y = "Risk / event rate",
+            fill = "Measure",
+            caption = "Median follow-up is available in the Follow_Up_Context workbook sheet."
+        ) +
+        ggplot2::theme_minimal(base_size = 14) +
+        ggplot2::theme(legend.position = "bottom")
+    ggplot2::ggsave(output_path, plot, width = 12, height = 7, dpi = PLOT_DPI, bg = "white")
+    if (return_plot) {
+        return(list(plot = plot, plot_data = plot_data, output_path = output_path))
+    }
+    invisible(output_path)
+}
+
+#' Create Direct-Model Predictor Contribution Figure
+#'
+#' @param contribution_table Existing `Predictor_Contribution` table.
+#' @param output_path File path for the saved PNG.
+#' @param return_plot Logical; when `TRUE`, return plot and source data.
+#'
+#' @return Invisibly returns the saved path, or a plot contract.
+create_exploratory_no_gep_direct_model_contributions_plot <- function(contribution_table, output_path, return_plot = FALSE) {
+    direct_models <- c(
+        "Direct 5-Year MFS Risk",
+        "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk"
+    )
+    plot_data <- contribution_table %>%
+        dplyr::filter(
+            .data$section == "model_contribution",
+            .data$model %in% direct_models,
+            is.finite(.data$standardized_abs_coefficient)
+        ) %>%
+        dplyr::mutate(
+            model = factor(.data$model, levels = direct_models),
+            predictor = factor(.data$predictor, levels = rev(unique(.data$predictor)))
+        )
+    if (nrow(plot_data) == 0L) {
+        stop("Direct-model contribution table has no plottable rows.", call. = FALSE)
+    }
+    plot <- ggplot2::ggplot(
+        plot_data,
+        ggplot2::aes(x = .data$predictor, y = .data$standardized_abs_coefficient, fill = .data$direction)
+    ) +
+        ggplot2::geom_col() +
+        ggplot2::coord_flip() +
+        ggplot2::facet_wrap(~model, scales = "free_y") +
+        ggplot2::scale_fill_brewer(palette = "Set2") +
+        ggplot2::labs(
+            title = "Which Baseline Variables Drive the Direct Models?",
+            subtitle = "Absolute standardized penalized coefficients; these are model weights, not significance tests",
+            x = NULL,
+            y = "Absolute standardized coefficient",
+            fill = "Coefficient direction"
+        ) +
+        ggplot2::theme_minimal(base_size = 13) +
+        ggplot2::theme(legend.position = "bottom", strip.text = ggplot2::element_text(face = "bold"))
+    ggplot2::ggsave(output_path, plot, width = 12, height = 9, dpi = PLOT_DPI, bg = "white")
+    if (return_plot) {
+        return(list(plot = plot, plot_data = plot_data, output_path = output_path))
+    }
     invisible(output_path)
 }
 
@@ -4025,6 +4177,7 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
     start_here <- analysis_results$start_here
     key_findings_5yr <- analysis_results$key_findings_5yr
     no_gep_subgroups <- analysis_results$no_gep_subgroups
+    follow_up_context <- analysis_results$follow_up_context
     model_performance <- analysis_results$model_performance
     surrogate_model_coefficients <- analysis_results$surrogate_model_coefficients
     direct_mfs_coefficients <- analysis_results$direct_mfs_coefficients
@@ -4043,6 +4196,7 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
         Key_Findings_5yr = key_findings_5yr,
         Risk_Ladder_5yr = risk_ladder,
         No_GEP_Subgroups = no_gep_subgroups,
+        Follow_Up_Context = follow_up_context,
         Model_Performance = model_performance,
         Parsimonious_Sensitivity = parsimonious_sensitivity,
         Surrogate_Model_Coefficients = surrogate_model_coefficients,
@@ -4088,7 +4242,9 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
         mss_density = file.path(plots_dir, "full_cohort_exploratory_no_gep_mss_risk_density.png"),
         surrogate_bins = file.path(plots_dir, "full_cohort_exploratory_no_gep_surrogate_bin_event_rates.png"),
         mfs_bins = file.path(plots_dir, "full_cohort_exploratory_no_gep_mfs_bin_event_rates.png"),
-        mss_bins = file.path(plots_dir, "full_cohort_exploratory_no_gep_mss_bin_event_rates.png")
+        mss_bins = file.path(plots_dir, "full_cohort_exploratory_no_gep_mss_bin_event_rates.png"),
+        subgroup_outcomes = file.path(plots_dir, "full_cohort_exploratory_no_gep_subgroup_outcomes.png"),
+        direct_model_contributions = file.path(plots_dir, "full_cohort_exploratory_no_gep_direct_model_contributions.png")
     )
 
     create_exploratory_mfs_km_plot(
@@ -4141,6 +4297,15 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
         plot_title = "Observed 60-Month Melanoma-Death Cumulative Incidence by Predicted Cumulative-Incidence-Risk Bin",
         output_path = plot_paths$mss_bins
     )
+    create_exploratory_no_gep_subgroup_outcomes_plot(
+        subgroup_table = no_gep_subgroups,
+        followup_table = follow_up_context,
+        output_path = plot_paths$subgroup_outcomes
+    )
+    create_exploratory_no_gep_direct_model_contributions_plot(
+        contribution_table = predictor_contribution,
+        output_path = plot_paths$direct_model_contributions
+    )
 
     logger::log_info("Exploratory no-GEP risk report completed")
 
@@ -4165,6 +4330,7 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
         start_here = start_here,
         key_findings_5yr = key_findings_5yr,
         no_gep_subgroups = no_gep_subgroups,
+        follow_up_context = follow_up_context,
         model_performance = model_performance,
         surrogate_model_coefficients = surrogate_model_coefficients,
         direct_mfs_coefficients = direct_mfs_coefficients,
