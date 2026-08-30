@@ -162,7 +162,15 @@ build_exploratory_no_gep_export_manifest <- function(objective4_root, prefix) {
         no_gep_workbook = file.path(objective4_root, "d_exploratory_no_gep", paste0(prefix, "exploratory_no_gep_report.xlsx")),
         no_gep_summary = file.path(objective4_root, "d_exploratory_no_gep", paste0(prefix, "exploratory_no_gep_summary.md")),
         no_gep_mfs_km = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mfs_km_corrected.png")),
-        no_gep_mss_cif = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mss_cif_corrected.png"))
+        no_gep_mss_cif = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mss_cif_corrected.png")),
+        no_gep_surrogate_density = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_surrogate_probability_density.png")),
+        no_gep_mfs_density = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mfs_risk_density.png")),
+        no_gep_mss_density = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mss_risk_density.png")),
+        no_gep_surrogate_bins = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_surrogate_bin_event_rates.png")),
+        no_gep_mfs_bins = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mfs_bin_event_rates.png")),
+        no_gep_mss_bins = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_mss_bin_event_rates.png")),
+        no_gep_subgroup_outcomes = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_subgroup_outcomes.png")),
+        no_gep_direct_model_contributions = file.path(objective4_root, "d_exploratory_no_gep", "plots", paste0(prefix, "exploratory_no_gep_direct_model_contributions.png"))
     )
 }
 
