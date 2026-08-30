@@ -1087,12 +1087,12 @@ prepare_exploratory_mss_analysis_data <- function(prepared_data) {
 #' @return A list containing status, p-value, reason, chi-square, and degrees
 #'   of freedom.
 calculate_exploratory_mfs_log_rank <- function(data, time_var, event_var, group_var) {
-    groups <- droplevels(as.factor(data[[group_var]]))
+    groups <- droplevels(preserve_exploratory_factor_levels(data[[group_var]]))
     valid <- !is.na(groups) &
         is.finite(suppressWarnings(as.numeric(data[[time_var]]))) &
         !is.na(data[[event_var]])
     analyzable <- data[valid, , drop = FALSE]
-    groups <- droplevels(as.factor(analyzable[[group_var]]))
+    groups <- droplevels(preserve_exploratory_factor_levels(analyzable[[group_var]]))
     n_groups <- nlevels(groups)
     event_values <- suppressWarnings(as.integer(analyzable[[event_var]]))
 
@@ -1253,7 +1253,7 @@ summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
             is.finite(.data$estimate)
         ) %>%
         dplyr::mutate(strata = as.character(.data$strata))
-    groups <- levels(droplevels(as.factor(data[[group_var]])))
+    groups <- levels(droplevels(preserve_exploratory_factor_levels(data[[group_var]])))
 
     purrr::map_dfr(groups, function(group_name) {
         group_tidy <- tidy %>% dplyr::filter(.data$strata == group_name)
@@ -3373,7 +3373,7 @@ create_exploratory_mss_cif_plot <- function(data, output_path, analysis_fit = NU
         )
     palette <- get_palette_by_variable(
         "biopsy1_gep",
-        levels(droplevels(as.factor(analysis_fit$data$exploratory_gep_group)))
+        levels(droplevels(preserve_exploratory_factor_levels(analysis_fit$data$exploratory_gep_group)))
     )
     max_time <- max(analysis_fit$data$tt_death_months, na.rm = TRUE)
     plot <- build_cif_curve_plot(
