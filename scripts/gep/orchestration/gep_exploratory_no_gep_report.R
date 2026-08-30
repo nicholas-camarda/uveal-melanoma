@@ -1239,7 +1239,11 @@ summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
             time_years = numeric(),
             n_risk = integer(),
             cumulative_incidence = numeric(),
-            mss_probability = numeric()
+            cumulative_incidence_conf_low = numeric(),
+            cumulative_incidence_conf_high = numeric(),
+            mss_probability = numeric(),
+            mss_probability_conf_low = numeric(),
+            mss_probability_conf_high = numeric()
         ))
     }
 
@@ -1256,6 +1260,16 @@ summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
                 dplyr::arrange(.data$time) %>%
                 dplyr::slice_tail(n = 1)
             estimate <- if (nrow(at_time) == 0L) 0 else at_time$estimate[[1]]
+            conf_low <- if (nrow(at_time) == 0L || !"conf.low" %in% names(at_time)) {
+                NA_real_
+            } else {
+                as.numeric(at_time$conf.low[[1]])
+            }
+            conf_high <- if (nrow(at_time) == 0L || !"conf.high" %in% names(at_time)) {
+                NA_real_
+            } else {
+                as.numeric(at_time$conf.high[[1]])
+            }
             n_risk <- if (nrow(at_time) == 0L) sum(data[[group_var]] == group_name) else at_time$n.risk[[1]]
             tibble::tibble(
                 group = group_name,
@@ -1263,6 +1277,10 @@ summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
                 time_years = round(timepoint / 12, 1),
                 n_risk = as.integer(n_risk),
                 cumulative_incidence = as.numeric(estimate),
+                cumulative_incidence_conf_low = conf_low,
+                cumulative_incidence_conf_high = conf_high,
+                mss_probability_conf_low = if (is.finite(conf_high)) 1 - conf_high else NA_real_,
+                mss_probability_conf_high = if (is.finite(conf_low)) 1 - conf_low else NA_real_,
                 mss_probability = 1 - as.numeric(estimate)
             )
         })

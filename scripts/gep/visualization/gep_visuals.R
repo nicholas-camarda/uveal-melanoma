@@ -1394,9 +1394,18 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #' @param return_plot When `TRUE`, returns the assembled plot objects for
 #'   verification or testing instead of only writing files.
 #' @param save_plot When `FALSE`, skips writing the PNG to disk.
+#' @param time_var Character name of the endpoint-specific follow-up-time
+#'   column. Defaults to the historical GEP field.
+#' @param event_var Character name of the endpoint-specific event column.
+#' @param display_group_var Optional precomputed display-group column.
+#' @param display_levels Optional display order for the groups.
+#' @param show_p_value Logical; when `FALSE`, omit the p-value annotation from
+#'   the plot while retaining the fit in the returned contract.
+#' @param surv_fit Optional precomputed `survfit` object to reuse for the plot.
 #'
-#' @return Invisibly returns `NULL` after saving plots, or a list of plot
-#'   objects when `return_plot = TRUE`.
+#' @return Invisibly returns `NULL` after saving plots, or a list containing the
+#'   plot, shared fit, plot data, and p-value-annotation flag when
+#'   `return_plot = TRUE`.
 create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months", event_var = "mets_event", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
     target_levels <- display_levels %||% c("Class 1", "Class 2", "GEP Not Tested")
     if (is.null(display_levels) && isTRUE(include_failed_indeterminate)) {

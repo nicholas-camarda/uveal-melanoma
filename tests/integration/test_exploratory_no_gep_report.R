@@ -480,6 +480,15 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         "cv_auc_stability_interval", "calibration_slope_stability_interval",
         "practical_read"
     ) %in% names(model_performance_sheet)))
+    expect_true(all(c(
+        "cumulative_incidence_conf_low",
+        "cumulative_incidence_conf_high",
+        "mss_probability_conf_low",
+        "mss_probability_conf_high",
+        "gray_test_global_curve_p_value",
+        "gray_test_global_curve_test_status",
+        "gray_test_global_curve_test_reason"
+    ) %in% names(km_mss_sheet)))
 
     summary_text <- paste(readLines(results$output_paths$summary), collapse = "\n")
     expect_match(summary_text, "descriptive only", fixed = TRUE)

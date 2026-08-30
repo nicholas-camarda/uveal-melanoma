@@ -584,6 +584,15 @@ Objective 4 validates imported GEP probabilities directly. It does not train a n
 - Legacy binary/cause-specific MSS metrics can remain in technical sidecars when useful for continuity, but they are not the manuscript-facing MSS evidence.
 - IPCW-weighted recalibration models, grouped calibration statistics, discrimination metrics, and decision-curve analysis all evaluate how well the supplied GEP predictions performed.
 
+#### Exploratory no-GEP curve contracts
+
+The exploratory no-GEP report uses one prepared endpoint dataset and one fitted object for each curve, horizon estimate, and global comparison. This keeps the plotted estimate and workbook estimate on the same risk set and estimator.
+
+- **MFS:** Kaplan–Meier `survfit()` on rows with `mets_free_at_baseline == TRUE`, finite non-negative `tt_mets_months_analysis`, and valid `objective4_mfs_event_type`. The plot uses the canonical censored-KM renderer, including censor marks and a numbers-at-risk table. Its global comparison is a log-rank test.
+- **MSS:** Aalen–Johansen cumulative incidence from `tidycmprsk::cuminc()` with event levels `censored`, `melanoma_death`, and `other_death`. The plot and horizon rows use the same fit; the estimate at a requested horizon is the step-function value at or immediately before that time. Its global comparison is Gray’s test for melanoma death.
+- **Workbook-only p-values:** The MFS sheet uses `log_rank_global_curve_p_value` with its status and reason fields; the MSS sheet uses `gray_test_global_curve_p_value` with its status and reason fields. These fields are global across follow-up, not horizon-specific, and are intentionally not printed on the curve PNGs.
+- **Insufficient support:** If a global comparison cannot be evaluated (for example, fewer than two analyzable groups or insufficient event support), the corresponding p-value is `NA` and the status/reason fields explain why. Figure generation still completes.
+
 For a workbook-first overview written for non-statistical readers, see [Understanding GEP Analysis](INTERPRETATION_GUIDE.md#understanding-gep-analysis) and [GEP Quick Read](INTERPRETATION_GUIDE.md#gep-quick-read).
 
 The canonical repository interpretation is that the Objective 4 MFS 5-year observed value should be read as Kaplan-Meier MFS at 60 months rather than a naive `1 - mfs_event_5yr` count, because the KM estimate remains censoring-aware and aligned with the workbook summaries.
