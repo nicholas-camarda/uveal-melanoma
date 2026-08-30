@@ -1248,7 +1248,10 @@ summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
     }
 
     tidy <- fit$tidy %>%
-        dplyr::filter(.data$outcome == "melanoma_death") %>%
+        dplyr::filter(
+            .data$outcome == "melanoma_death",
+            is.finite(.data$estimate)
+        ) %>%
         dplyr::mutate(strata = as.character(.data$strata))
     groups <- levels(droplevels(as.factor(data[[group_var]])))
 
