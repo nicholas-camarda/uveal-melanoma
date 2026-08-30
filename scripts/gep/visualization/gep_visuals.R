@@ -1397,9 +1397,9 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #'
 #' @return Invisibly returns `NULL` after saving plots, or a list of plot
 #'   objects when `return_plot = TRUE`.
-create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE) {
-    target_levels <- c("Class 1", "Class 2", "GEP Not Tested")
-    if (isTRUE(include_failed_indeterminate)) {
+create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months", event_var = "mets_event", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
+    target_levels <- display_levels %||% c("Class 1", "Class 2", "GEP Not Tested")
+    if (is.null(display_levels) && isTRUE(include_failed_indeterminate)) {
         target_levels <- c(target_levels, "GEP Failed/Indeterminate")
     }
 
@@ -1410,31 +1410,45 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
     }
     logger::log_info(sprintf("Creating %s MFS survival curves", plot_label))
 
-    plot_data <- data %>%
-        dplyr::mutate(
-            gep_km_simple = dplyr::case_when(
-                .data$biopsy1_gep == "GEP Not Tested" ~ "GEP Not Tested",
-                isTRUE(include_failed_indeterminate) & .data$biopsy1_gep == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",
-                .data$gep_class_simple %in% c("Class 1", "Class 2") ~ as.character(.data$gep_class_simple),
-                TRUE ~ NA_character_
+    plot_data <- data
+    group_var <- "gep_km_simple"
+    if (is.null(display_group_var)) {
+        plot_data <- plot_data %>%
+            dplyr::mutate(
+                gep_km_simple = dplyr::case_when(
+                    .data$biopsy1_gep == "GEP Not Tested" ~ "GEP Not Tested",
+                    isTRUE(include_failed_indeterminate) & .data$biopsy1_gep == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",
+                    .data$gep_class_simple %in% c("Class 1", "Class 2") ~ as.character(.data$gep_class_simple),
+                    TRUE ~ NA_character_
+                )
             )
-        ) %>%
+    } else {
+        if (!display_group_var %in% names(plot_data)) {
+            stop(sprintf("MFS display group column is missing: %s", display_group_var), call. = FALSE)
+        }
+        group_var <- display_group_var
+    }
+
+    if (!time_var %in% names(plot_data) || !event_var %in% names(plot_data)) {
+        stop(sprintf("MFS analysis columns are missing: %s, %s", time_var, event_var), call. = FALSE)
+    }
+
+    plot_data <- plot_data %>%
         dplyr::filter(
-            !is.na(.data$gep_km_simple),
-            !is.na(.data$tt_mets_months),
-            !is.na(.data$mets_event),
-            .data$tt_mets_months >= 0
+            !is.na(.data[[group_var]]),
+            !is.na(.data[[time_var]]),
+            !is.na(.data[[event_var]]),
+            is.finite(suppressWarnings(as.numeric(.data[[time_var]]))),
+            suppressWarnings(as.numeric(.data[[time_var]])) >= 0
         ) %>%
         dplyr::mutate(
-            gep_km_simple = factor(
-                .data$gep_km_simple,
-                levels = target_levels
-            )
+            !!group_var := factor(as.character(.data[[group_var]]), levels = target_levels)
         ) %>%
+        dplyr::filter(!is.na(.data[[group_var]])) %>%
         as.data.frame()
 
-    present_levels <- levels(droplevels(plot_data$gep_km_simple))
-    if (nrow(plot_data) == 0 || length(unique(stats::na.omit(plot_data$gep_km_simple))) < 2) {
+    present_levels <- levels(droplevels(plot_data[[group_var]]))
+    if (nrow(plot_data) == 0 || length(unique(stats::na.omit(plot_data[[group_var]]))) < 2) {
         logger::log_warn(sprintf("Insufficient data/groups for %s MFS survival curves", plot_label))
         return(invisible(NULL))
     }
@@ -1442,18 +1456,17 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
     logger::log_info(sprintf(
         "Collapsed MFS KM groups (%s): %s",
         plot_label,
-        paste(
-            capture.output(print(table(plot_data$gep_km_simple, useNA = "no"))),
+            paste(
+            capture.output(print(table(plot_data[[group_var]], useNA = "no"))),
             collapse = " "
         )
     ))
 
-    surv_fit <- survival::survfit(
-        survival::Surv(tt_mets_months, mets_event) ~ gep_km_simple,
-        data = plot_data
-    )
+    surv_formula <- stats::as.formula(sprintf("survival::Surv(%s, %s) ~ %s", time_var, event_var, group_var))
+    surv_fit <- surv_fit %||% survival::survfit(surv_formula, data = plot_data)
+    surv_fit$call$formula <- surv_formula
 
-    raw_max_time <- max(plot_data$tt_mets_months, na.rm = TRUE)
+    raw_max_time <- max(suppressWarnings(as.numeric(plot_data[[time_var]])), na.rm = TRUE)
     max_time <- min(raw_max_time, SURVIVAL_XAXIS_MAX_MONTHS)
     base_by <- if (max_time <= 60) 6 else 12
     x_breaks <- seq(0, ceiling(max_time / base_by) * base_by, by = base_by)
@@ -1465,7 +1478,7 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
         palette = unname(color_palette),
         risk.table = TRUE,
         conf.int = FALSE,
-        pval = TRUE,
+        pval = show_p_value,
         pval.size = 6 * plot_scale,
         title = paste("Kaplan-Meier Survival Curves", "Metastasis-Free Survival Probability", sep = "\n"),
         subtitle = paste(
@@ -1657,6 +1670,8 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
             plot = surv_plot,
             combined_plot = combined_km,
             plot_data = plot_data,
+            fit = surv_fit,
+            p_value_annotation = isTRUE(show_p_value),
             present_levels = present_levels,
             output_path = output_path
         ))

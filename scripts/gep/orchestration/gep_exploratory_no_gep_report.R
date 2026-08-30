@@ -1129,10 +1129,9 @@ fit_exploratory_mfs_analysis <- function(data) {
         ))
     }
 
-    fit <- survival::survfit(
-        stats::as.formula(sprintf("Surv(%s, %s) ~ %s", time_var, event_var, group_var)),
-        data = data
-    )
+    surv_formula <- stats::as.formula(sprintf("survival::Surv(%s, %s) ~ %s", time_var, event_var, group_var))
+    fit <- survival::survfit(surv_formula, data = data)
+    fit$call$formula <- surv_formula
     fit_summary <- summary(fit)
     tidy <- tibble::tibble(
         time = fit_summary$time,
@@ -3238,49 +3237,42 @@ collect_exploratory_no_gep_analysis <- function(data,
 #' @param data Prepared exploratory cohort.
 #' @param output_path File path for the saved PNG.
 #'
-#' @return Invisibly returns the saved plot path.
-create_exploratory_mfs_km_plot <- function(data, output_path) {
-    analysis_data <- data %>%
-        dplyr::filter(
-            .data$mets_free_at_baseline,
-            !is.na(.data$tt_mets_months_analysis),
-            !is.na(.data$objective4_mfs_event_type)
-        )
-    fit <- survival::survfit(
-        survival::Surv(tt_mets_months_analysis, objective4_mfs_event_type) ~ exploratory_gep_group,
-        data = analysis_data
+#' @param return_plot Logical; when `TRUE`, return the shared plot contract.
+#' @param analysis_fit Optional shared MFS fit bundle. When supplied, the
+#'   adapter does not refit the endpoint.
+#'
+#' @return Invisibly returns the saved plot path, or the shared plot contract
+#'   when `return_plot = TRUE`.
+create_exploratory_mfs_km_plot <- function(data, output_path, return_plot = FALSE, analysis_fit = NULL) {
+    analysis_data <- analysis_fit$data %||% prepare_exploratory_mfs_analysis_data(list(full_data = data))
+    fit <- analysis_fit$fit %||% fit_exploratory_mfs_analysis(analysis_data)$fit
+    if (is.null(fit)) {
+        logger::log_warn("Insufficient data/groups for exploratory no-GEP MFS survival curves")
+        return(invisible(NULL))
+    }
+
+    rendered <- create_mfs_collapsed_survival_curves(
+        data = analysis_data,
+        output_dir = dirname(output_path),
+        prefix = "",
+        dataset_name = "Full cohort",
+        km_output_dir = dirname(output_path),
+        subtitle_suffix = "Class 1, Class 2, GEP Failed/Indeterminate, and GEP Not Tested",
+        output_filename = basename(output_path),
+        include_failed_indeterminate = TRUE,
+        time_var = "tt_mets_months_analysis",
+        event_var = "objective4_mfs_event_type",
+        display_group_var = "exploratory_gep_group",
+        display_levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
+        show_p_value = FALSE,
+        surv_fit = fit,
+        return_plot = return_plot,
+        save_plot = TRUE
     )
-    fit_summary <- summary(fit)
 
-    plot_data <- tibble::tibble(
-        group = sub("exploratory_gep_group=", "", fit_summary$strata),
-        time_months = fit_summary$time,
-        survival_probability = fit_summary$surv
-    ) %>%
-        dplyr::bind_rows(
-            tibble::tibble(
-                group = levels(droplevels(data$exploratory_gep_group)),
-                time_months = 0,
-                survival_probability = 1
-            )
-        )
-
-    palette <- get_palette_by_variable("biopsy1_gep", levels(droplevels(data$exploratory_gep_group)))
-    plot <- ggplot2::ggplot(plot_data, ggplot2::aes(x = .data$time_months, y = .data$survival_probability, color = .data$group)) +
-        ggplot2::geom_step(linewidth = 1.1) +
-        ggplot2::scale_color_manual(values = palette) +
-        ggplot2::scale_y_continuous(labels = function(x) sprintf("%.0f", 100 * x), limits = c(0, 1)) +
-        ggplot2::labs(
-            title = "Corrected Exploratory MFS Curves",
-            subtitle = "Full cohort: Class 1, Class 2, GEP Failed/Indeterminate, GEP Not Tested",
-            x = "Time (months)",
-            y = "Metastasis-Free Survival Probability (%)",
-            color = "Group"
-        ) +
-        ggplot2::theme_minimal(base_size = 14) +
-        ggplot2::theme(legend.position = "bottom")
-
-    ggplot2::ggsave(output_path, plot, width = 12, height = 8, dpi = PLOT_DPI, bg = "white")
+    if (return_plot) {
+        return(rendered)
+    }
     invisible(output_path)
 }
 
@@ -4028,6 +4020,8 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
     full_data <- prepared_data$full_data
     data_audit <- analysis_results$data_audit
     baseline_summary <- analysis_results$baseline_comparisons
+    mfs_analysis <- analysis_results$mfs_analysis
+    mss_analysis <- analysis_results$mss_analysis
     km_corrected_mfs <- analysis_results$km_corrected_mfs
     km_corrected_mss <- analysis_results$km_corrected_mss
     surrogate_model <- analysis_results$surrogate_model
@@ -4105,8 +4099,9 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
     )
 
     create_exploratory_mfs_km_plot(
-        full_data %>% dplyr::filter(!is.na(.data$exploratory_gep_group)),
-        plot_paths$mfs_km
+        mfs_analysis$data,
+        plot_paths$mfs_km,
+        analysis_fit = mfs_analysis
     )
     create_exploratory_mss_cif_plot(
         full_data %>% dplyr::filter(!is.na(.data$exploratory_gep_group)),

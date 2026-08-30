@@ -40,6 +40,24 @@ test_that("shared endpoint bundles retain one fit and global comparison result",
     expect_true(all(c("time", "outcome", "strata", "estimate", "n.risk", "n.censor") %in% names(mss$tidy)))
 })
 
+test_that("no-GEP MFS uses shared censor and risk-table machinery", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
+        mets_free_at_baseline = TRUE,
+        tt_mets_months_analysis = c(12, 18, 24, 30),
+        objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
+        tt_mets_months = c(99, 99, 99, 99),
+        mets_event = c(1L, 1L, 1L, 1L)
+    )
+    result <- create_exploratory_mfs_km_plot(fixture, tempfile(fileext = ".png"), return_plot = TRUE)
+
+    expect_true(sum(result$fit$n.censor) > 0)
+    expect_true(!is.null(result$plot$table))
+    expect_true(nrow(result$plot_data) > 0)
+    expect_true(all(result$plot_data$tt_mets_months_analysis <= 30))
+    expect_false(result$p_value_annotation)
+})
+
 test_that("exploratory no-GEP dataset preparation isolates reference and scoring cohorts", {
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
 
