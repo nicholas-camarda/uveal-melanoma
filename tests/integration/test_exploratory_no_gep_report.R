@@ -58,6 +58,39 @@ test_that("no-GEP MFS uses shared censor and risk-table machinery", {
     expect_false(result$p_value_annotation)
 })
 
+test_that("MSS CIF uses Aalen-Johansen coding and a single shared fit", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(rep(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate"), each = 4)),
+        tt_death_months = c(12, 18, 24, 30, 10, 20, 35, 40, 8, 16, 28, 44, 14, 22, 32, 48),
+        objective4_mss_event_type = c(0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L, 0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L)
+    )
+    fitted <- fit_exploratory_mss_cif(fixture)
+    result <- create_exploratory_mss_cif_plot(
+        fixture,
+        tempfile(fileext = ".png"),
+        analysis_fit = fitted,
+        return_plot = TRUE
+    )
+
+    expect_true(inherits(fitted$fit, "tidycuminc"))
+    expect_true(is.finite(fitted$gray_test$p_value))
+    expect_true(all(fitted$data$.mss_outcome %in% c("censored", "melanoma_death", "other_death")))
+    expect_true(all(c("time", "outcome", "strata", "estimate", "n.risk", "n.censor") %in% names(fitted$tidy)))
+    expect_identical(result$fit, fitted$fit)
+    expect_s3_class(result$plot, "ggplot")
+})
+
+test_that("unsupported MSS comparisons are explicit and non-fatal", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 1")),
+        tt_death_months = c(12, 18),
+        objective4_mss_event_type = c(0L, 0L)
+    )
+    fitted <- fit_exploratory_mss_cif(fixture)
+    expect_true(is.na(fitted$gray_test$p_value))
+    expect_true(fitted$gray_test$status %in% c("skipped", "no_event_of_interest", "fit_failed"))
+})
+
 test_that("exploratory no-GEP dataset preparation isolates reference and scoring cohorts", {
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
 
@@ -423,6 +456,8 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     key_findings_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Key_Findings_5yr")
     risk_ladder_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Risk_Ladder_5yr")
     model_performance_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Model_Performance")
+    km_mfs_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MFS")
+    km_mss_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MSS")
 
     expect_false(any(c("section", "item", "detail", "guide_text") %in% names(key_findings_sheet)))
     expect_false(any(c("section", "item", "detail", "guide_text") %in% names(risk_ladder_sheet)))
@@ -506,6 +541,16 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         "weighted_cases", "weighted_controls",
         "failed_indeterminate_n", "not_tested_n", "uncertainty_method"
     ) %in% names(model_performance_sheet)))
+    expect_true(all(c(
+        "log_rank_global_curve_p_value", "log_rank_global_curve_test_status",
+        "log_rank_global_curve_test_reason"
+    ) %in% names(km_mfs_sheet)))
+    expect_true(all(c(
+        "gray_test_global_curve_p_value", "gray_test_global_curve_test_status",
+        "gray_test_global_curve_test_reason"
+    ) %in% names(km_mss_sheet)))
+    expect_equal(unique(km_mfs_sheet$log_rank_global_curve_p_value), results$mfs_global_test$p_value)
+    expect_equal(unique(km_mss_sheet$gray_test_global_curve_p_value), results$mss_global_test$p_value)
     expect_false("model_fallback_reason" %in% names(results$direct_models$mfs$metrics))
     expect_false("model_fallback_reason" %in% names(results$direct_models$mss$metrics))
     expect_false("raw_backtest" %in% names(results$direct_models$mfs))

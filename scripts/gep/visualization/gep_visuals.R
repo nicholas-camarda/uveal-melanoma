@@ -1742,6 +1742,63 @@ create_mfs_four_group_survival_curves <- function(data, output_dir, prefix, data
     )
 }
 
+#' Build a shared cumulative-incidence curve plot
+#'
+#' @param ci_obj A `tidycuminc` competing-risk fit.
+#' @param outcome Outcome level to display.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param xlab X-axis label.
+#' @param ylab Y-axis label.
+#' @param color_title Legend title.
+#' @param palette Named color vector.
+#' @param xlim Numeric x-axis limits.
+#' @param caption Optional initial caption.
+#'
+#' @return A styled `ggplot` cumulative-incidence plot.
+build_cif_curve_plot <- function(ci_obj, outcome, title, subtitle, xlab, ylab, color_title, palette, xlim, caption = NULL) {
+    p <- ggsurvfit::ggcuminc(ci_obj, outcome = outcome)
+    p$layers <- lapply(p$layers, function(layer) {
+        layer$aes_params$na.rm <- TRUE
+        layer$geom_params$na.rm <- TRUE
+        layer$stat_params$na.rm <- TRUE
+        layer
+    })
+    p <- remove_plot_scales(p, aesthetics = c("colour", "color", "x", "y")) +
+        ggplot2::labs(
+            title = title,
+            subtitle = subtitle,
+            x = xlab,
+            y = ylab,
+            color = color_title,
+            caption = caption
+        ) +
+        ggplot2::theme_classic() +
+        ggplot2::theme(
+            plot.background = ggplot2::element_rect(fill = "white"),
+            panel.background = ggplot2::element_rect(fill = "white"),
+            plot.title = ggplot2::element_text(size = 16, face = "bold", lineheight = 1.05),
+            plot.subtitle = ggplot2::element_text(size = 12, color = "darkgray"),
+            plot.caption = ggplot2::element_text(size = 10.5, color = "darkgray", hjust = 0, lineheight = 1.1),
+            legend.position = "bottom",
+            legend.title = ggplot2::element_text(face = "bold", size = 12),
+            legend.text = ggplot2::element_text(size = 11),
+            axis.title = ggplot2::element_text(size = 13.5),
+            axis.text = ggplot2::element_text(size = 11.5),
+            axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5),
+            axis.ticks.x = ggplot2::element_line(color = "black", linewidth = 0.5)
+        ) +
+        ggplot2::scale_color_manual(values = palette) +
+        ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.02))) +
+        ggplot2::scale_y_continuous(
+            expand = ggplot2::expansion(mult = c(0, 0.04)),
+            labels = scales::label_percent(accuracy = 1)
+        ) +
+        ggplot2::coord_cartesian(xlim = xlim, expand = FALSE)
+
+    p
+}
+
 #' Create MSS cumulative incidence curves using ggsurvfit
 #'
 #' Creates cumulative incidence function plots for competing risks analysis using
@@ -1916,58 +1973,32 @@ create_mss_cumulative_incidence_curves <- function(data, timepoint, output_dir, 
         }
     }
 
-    # Use ggsurvfit's ggcuminc function for much simpler CIF plotting
-    # This automatically handles axis formatting and prevents the "48" tick mark issue
-
-    # Create the CIF plot using ggcuminc with tidycmprsk
-    # First create the competing risks object with tidycmprsk::cuminc
+    # Create the CIF fit once for the existing GEP-specific workflow, then use
+    # the shared renderer for the reader-facing curve assembly.
     ci_obj <- tidycmprsk::cuminc(
         formula = as.formula(paste("Surv(", time_var_char, ",", event_type_var_char, ") ~", group_var_char)),
         data = surv_data
     )
-    
-    # Then use ggcuminc to plot it
-    p <- ggcuminc(ci_obj, outcome = "Melanoma Death")
-    p <- remove_plot_scales(p, aesthetics = c("colour", "color", "x", "y"))
-    p <- p + # Focus on melanoma death
-        ggplot2::labs(
-            title = plot_title,
-            subtitle = sprintf(
-                "Competing Risks Analysis: %d patients, %d melanoma deaths",
-                nrow(surv_data),
-                melanoma_death_total
-            ),
-            x = "Time (years)",
-            y = "Cumulative Incidence of Melanoma Death",
-            color = grouping_spec$legend_title,
-            caption = if (simplified_display) {
-                "Display curves use simplified Class 1 vs Class 2 grouping for readability.\nTechnical competing-risk model summaries remain available in the companion workbook."
-            } else {
-                "Fine-Gray subdistribution hazard ratios shown for significant associations\n* p < 0.05 indicates significant difference"
-            }
-        ) +
-        ggplot2::theme_classic() +
-        ggplot2::theme(
-            plot.background = ggplot2::element_rect(fill = "white"),
-            panel.background = ggplot2::element_rect(fill = "white"),
-            plot.title = ggplot2::element_text(size = 16, face = "bold", lineheight = 1.05),
-            plot.subtitle = ggplot2::element_text(size = 12, color = "darkgray"),
-            plot.caption = ggplot2::element_text(size = 10.5, color = "darkgray", hjust = 0, lineheight = 1.1),
-            legend.position = "bottom",
-            legend.title = ggplot2::element_text(face = "bold", size = 12),
-            legend.text = ggplot2::element_text(size = 11),
-            axis.title = ggplot2::element_text(size = 13.5),
-            axis.text = ggplot2::element_text(size = 11.5),
-            axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5),
-            axis.ticks.x = ggplot2::element_line(color = "black", linewidth = 0.5)
-        ) +
-        ggplot2::scale_color_manual(values = get_palette_by_variable(group_var_char, unique(surv_data[[group_var_char]]))) +
-        ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.02))) +
-        ggplot2::scale_y_continuous(
-            expand = ggplot2::expansion(mult = c(0, 0.04)),
-            labels = scales::label_percent(accuracy = 1)
-        ) +
-        ggplot2::coord_cartesian(xlim = c(0, timepoint), expand = FALSE) # Limit to timepoint in years with tighter margins
+    p <- build_cif_curve_plot(
+        ci_obj = ci_obj,
+        outcome = "Melanoma Death",
+        title = plot_title,
+        subtitle = sprintf(
+            "Competing Risks Analysis: %d patients, %d melanoma deaths",
+            nrow(surv_data),
+            melanoma_death_total
+        ),
+        xlab = "Time (years)",
+        ylab = "Cumulative Incidence of Melanoma Death",
+        color_title = grouping_spec$legend_title,
+        palette = get_palette_by_variable(group_var_char, unique(surv_data[[group_var_char]])),
+        xlim = c(0, timepoint),
+        caption = if (simplified_display) {
+            "Display curves use simplified Class 1 vs Class 2 grouping for readability.\nTechnical competing-risk model summaries remain available in the companion workbook."
+        } else {
+            "Fine-Gray subdistribution hazard ratios shown for significant associations\n* p < 0.05 indicates significant difference"
+        }
+    )
 
     caption_lines <- character()
 

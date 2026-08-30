@@ -3032,13 +3032,25 @@ collect_exploratory_no_gep_analysis <- function(data,
         event_var = "objective4_mfs_event_type",
         times = km_times,
         fit = mfs_analysis$fit
-    )
+    ) %>%
+        dplyr::mutate(
+            log_rank_global_curve_p_value = mfs_analysis$global_test$p_value,
+            log_rank_global_curve_test_status = mfs_analysis$global_test$status,
+            log_rank_global_curve_test_reason = mfs_analysis$global_test$reason,
+            estimator = "Kaplan-Meier"
+        )
     km_corrected_mss <- summarize_mss_cif_timepoints(
         mss_analysis$data,
         group_var = "exploratory_gep_group",
         times = km_times,
         fit = mss_analysis$fit
-    )
+    ) %>%
+        dplyr::mutate(
+            gray_test_global_curve_p_value = mss_analysis$gray_test$p_value,
+            gray_test_global_curve_test_status = mss_analysis$gray_test$status,
+            gray_test_global_curve_test_reason = mss_analysis$gray_test$reason,
+            estimator = "Aalen-Johansen cumulative incidence"
+        )
 
     surrogate_model <- fit_exploratory_binary_model(
         prepared_data$definitive_reference,
@@ -3276,74 +3288,55 @@ create_exploratory_mfs_km_plot <- function(data, output_path, return_plot = FALS
     invisible(output_path)
 }
 
-#' Tidy MSS CIF Curves for Plotting
-#'
-#' Converts the project competing-risks fit into a long plotting data frame for
-#' exploratory MSS visualization.
-#'
-#' @param data Prepared exploratory cohort.
-#'
-#' @return A long data frame of cumulative incidence curves.
-tidy_mss_cif_curves <- function(data) {
-    status <- dplyr::case_when(
-        data$melanoma_death_event == 1 ~ 1L,
-        data$competing_death_event == 1 ~ 2L,
-        TRUE ~ 0L
-    )
-
-    cif_fit <- cmprsk::cuminc(
-        ftime = data$tt_death_months,
-        fstatus = status,
-        group = data$exploratory_gep_group,
-        cencode = 0
-    )
-
-    event_names <- names(cif_fit)[grepl(" 1$", names(cif_fit))]
-
-    purrr::map_dfr(event_names, function(event_name) {
-        tibble::tibble(
-            group = sub(" 1$", "", event_name),
-            time_months = cif_fit[[event_name]]$time,
-            cumulative_incidence = cif_fit[[event_name]]$est
-        )
-    }) %>%
-        dplyr::bind_rows(
-            tibble::tibble(
-                group = levels(droplevels(data$exploratory_gep_group)),
-                time_months = 0,
-                cumulative_incidence = 0
-            )
-        )
-}
-
 #' Create a Corrected Exploratory MSS CIF Plot
 #'
-#' Builds a lightweight cumulative-incidence figure for melanoma-specific death
-#' across the four exploratory GEP groups.
+#' Builds a canonical Aalen-Johansen cumulative-incidence figure for
+#' melanoma-specific death across the four exploratory GEP groups.
 #'
-#' @param data Prepared exploratory cohort.
+#' @param data Shared exploratory MSS analysis data.
 #' @param output_path File path for the saved PNG.
+#' @param analysis_fit Optional shared MSS fit bundle.
+#' @param return_plot Logical; when `TRUE`, return the plot contract.
 #'
-#' @return Invisibly returns the saved plot path.
-create_exploratory_mss_cif_plot <- function(data, output_path) {
-    plot_data <- tidy_mss_cif_curves(data)
-    palette <- get_palette_by_variable("biopsy1_gep", levels(droplevels(data$exploratory_gep_group)))
+#' @return Invisibly returns the saved plot path, or the plot contract when
+#'   `return_plot = TRUE`.
+create_exploratory_mss_cif_plot <- function(data, output_path, analysis_fit = NULL, return_plot = FALSE) {
+    analysis_fit <- analysis_fit %||% fit_exploratory_mss_cif(data)
+    fit <- analysis_fit$fit
+    if (is.null(fit)) {
+        logger::log_warn("Insufficient data/groups for exploratory no-GEP MSS cumulative-incidence curves")
+        return(invisible(NULL))
+    }
 
-    plot <- ggplot2::ggplot(plot_data, ggplot2::aes(x = .data$time_months, y = .data$cumulative_incidence, color = .data$group)) +
-        ggplot2::geom_step(linewidth = 1.1) +
-        ggplot2::scale_color_manual(values = palette) +
-        ggplot2::scale_y_continuous(labels = function(x) sprintf("%.0f", 100 * x), limits = c(0, 1)) +
-        ggplot2::labs(
-            title = "Corrected Exploratory MSS CIF Curves",
-            subtitle = "Melanoma-specific death cumulative incidence with competing death retained",
-            x = "Time (months)",
-            y = "Cumulative Incidence of Melanoma-Specific Death (%)",
-            color = "Group"
-        ) +
-        ggplot2::theme_minimal(base_size = 14) +
-        ggplot2::theme(legend.position = "bottom")
+    plot_data <- analysis_fit$tidy %>%
+        dplyr::filter(.data$outcome == "melanoma_death") %>%
+        dplyr::transmute(
+            group = as.character(.data$strata),
+            time_months = .data$time,
+            cumulative_incidence = .data$estimate
+        )
+    palette <- get_palette_by_variable(
+        "biopsy1_gep",
+        levels(droplevels(as.factor(analysis_fit$data$exploratory_gep_group)))
+    )
+    max_time <- max(analysis_fit$data$tt_death_months, na.rm = TRUE)
+    plot <- build_cif_curve_plot(
+        ci_obj = fit,
+        outcome = "melanoma_death",
+        title = "Corrected Exploratory MSS CIF Curves",
+        subtitle = "Melanoma-specific death cumulative incidence with competing death retained",
+        xlab = "Time (months)",
+        ylab = "Cumulative Incidence of Melanoma-Specific Death (%)",
+        color_title = "Group",
+        palette = palette,
+        xlim = c(0, max_time),
+        caption = "Aalen-Johansen cumulative incidence; other death retained as a competing event."
+    )
 
     ggplot2::ggsave(output_path, plot, width = 12, height = 8, dpi = PLOT_DPI, bg = "white")
+    if (return_plot) {
+        return(list(plot = plot, fit = fit, plot_data = plot_data, output_path = output_path))
+    }
     invisible(output_path)
 }
 
@@ -4104,8 +4097,9 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
         analysis_fit = mfs_analysis
     )
     create_exploratory_mss_cif_plot(
-        full_data %>% dplyr::filter(!is.na(.data$exploratory_gep_group)),
-        plot_paths$mss_cif
+        mss_analysis$data,
+        plot_paths$mss_cif,
+        analysis_fit = mss_analysis
     )
     create_probability_density_plot(
         no_gep_predictions,
@@ -4153,6 +4147,10 @@ run_exploratory_no_gep_report <- function(dataset_name = "uveal_melanoma_full_co
     list(
         data_audit = data_audit,
         baseline_comparisons = baseline_summary,
+        mfs_analysis = mfs_analysis,
+        mss_analysis = mss_analysis,
+        mfs_global_test = analysis_results$mfs_global_test,
+        mss_global_test = analysis_results$mss_global_test,
         km_corrected_mfs = km_corrected_mfs,
         km_corrected_mss = km_corrected_mss,
         surrogate_model = surrogate_model,
