@@ -3462,11 +3462,12 @@ create_event_rate_bin_plot <- function(summary_data, analysis_name, event_col, p
         ) +
         ggplot2::scale_y_continuous(labels = function(x) sprintf("%.0f%%", 100 * x), limits = c(0, max(plot_data[[event_col]], na.rm = TRUE) * 1.2 + 0.01)) +
         ggplot2::labs(
-            title = plot_title,
+            title = paste(strwrap(plot_title, width = 55), collapse = "\n"),
             x = x_label,
             y = "Observed event rate"
         ) +
-        ggplot2::theme_minimal(base_size = 14)
+        ggplot2::theme_minimal(base_size = 14) +
+        ggplot2::theme(plot.title = ggplot2::element_text(hjust = 0.5))
 
     ggplot2::ggsave(output_path, plot, width = 10, height = 6, dpi = PLOT_DPI, bg = "white")
     invisible(output_path)
