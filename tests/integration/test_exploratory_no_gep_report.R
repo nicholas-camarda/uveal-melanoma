@@ -559,8 +559,8 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         "gray_test_global_curve_p_value", "gray_test_global_curve_test_status",
         "gray_test_global_curve_test_reason"
     ) %in% names(km_mss_sheet)))
-    expect_equal(unique(km_mfs_sheet$log_rank_global_curve_p_value), results$mfs_global_test$p_value)
-    expect_equal(unique(km_mss_sheet$gray_test_global_curve_p_value), results$mss_global_test$p_value)
+    expect_equal(unique(km_mfs_sheet$log_rank_global_curve_p_value), results$mfs_analysis$global_test$p_value)
+    expect_equal(unique(km_mss_sheet$gray_test_global_curve_p_value), results$mss_analysis$gray_test$p_value)
     expect_false("model_fallback_reason" %in% names(results$direct_models$mfs$metrics))
     expect_false("model_fallback_reason" %in% names(results$direct_models$mss$metrics))
     expect_false("raw_backtest" %in% names(results$direct_models$mfs))
@@ -649,8 +649,45 @@ test_that("report-native no-GEP figures reconcile to source tables", {
         tempfile(fileext = ".png"),
         return_plot = TRUE
     )
-    expect_true(setequal(subgroup_plot$plot_data$no_gep_group, followup_by_group$no_gep_group))
-    expect_true(all(subgroup_plot$plot_data$n %in% followup_by_group$n))
+    actual_subgroup_source <- subgroup_plot$plot_data %>%
+        dplyr::mutate(
+            no_gep_group = as.character(.data$no_gep_group),
+            measure = as.character(.data$measure)
+        ) %>%
+        dplyr::select("no_gep_group", "n", "median_followup_years", "measure", "risk") %>%
+        tidyr::pivot_wider(names_from = "measure", values_from = "risk") %>%
+        dplyr::rename(
+            observed_5yr_mfs_event_rate = "Observed 5-year MFS",
+            predicted_5yr_mfs_risk = "Predicted 5-year MFS",
+            observed_5yr_mss_event_rate = "Observed 5-year MSS",
+            predicted_60mo_mss_risk = "Predicted 60-month MSS"
+        ) %>%
+        dplyr::select(
+            "no_gep_group", "n", "median_followup_years",
+            "observed_5yr_mfs_event_rate", "predicted_5yr_mfs_risk",
+            "observed_5yr_mss_event_rate", "predicted_60mo_mss_risk"
+        ) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expected_subgroup_source <- results$no_gep_subgroups %>%
+        dplyr::transmute(
+            no_gep_group = as.character(.data$no_gep_group),
+            n = .data$n,
+            observed_5yr_mfs_event_rate = .data$observed_5yr_mfs_event_rate,
+            predicted_5yr_mfs_risk = .data$median_predicted_5yr_mfs_risk,
+            observed_5yr_mss_event_rate = .data$observed_5yr_mss_event_rate,
+            predicted_60mo_mss_risk = .data$median_predicted_60mo_melanoma_death_cumulative_incidence_risk
+        ) %>%
+        dplyr::left_join(
+            followup_by_group %>% dplyr::select("no_gep_group", "median_followup_years"),
+            by = "no_gep_group"
+        ) %>%
+        dplyr::select(
+            "no_gep_group", "n", "median_followup_years",
+            "observed_5yr_mfs_event_rate", "predicted_5yr_mfs_risk",
+            "observed_5yr_mss_event_rate", "predicted_60mo_mss_risk"
+        ) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expect_equal(actual_subgroup_source, expected_subgroup_source, tolerance = 1e-12)
     contribution_rows <- results$predictor_contribution %>%
         dplyr::filter(
             .data$section == "model_contribution",
@@ -665,7 +702,21 @@ test_that("report-native no-GEP figures reconcile to source tables", {
         tempfile(fileext = ".png"),
         return_plot = TRUE
     )
-    expect_true(setequal(as.character(contributor_plot$plot_data$predictor), as.character(contribution_rows$predictor)))
+    actual_contributor_source <- contributor_plot$plot_data %>%
+        dplyr::mutate(
+            model = as.character(.data$model),
+            predictor = as.character(.data$predictor)
+        ) %>%
+        dplyr::select("model", "predictor", "standardized_abs_coefficient", "direction", "rank") %>%
+        dplyr::arrange(.data$model, .data$rank, .data$predictor)
+    expected_contributor_source <- contribution_rows %>%
+        dplyr::mutate(
+            model = as.character(.data$model),
+            predictor = as.character(.data$predictor)
+        ) %>%
+        dplyr::select("model", "predictor", "standardized_abs_coefficient", "direction", "rank") %>%
+        dplyr::arrange(.data$model, .data$rank, .data$predictor)
+    expect_equal(actual_contributor_source, expected_contributor_source, tolerance = 1e-12)
     expect_false(any(contributor_plot$plot_data$model == "Surrogate Class 2 Probability"))
     ranks_by_model <- split(contribution_rows$rank, contribution_rows$model)
     expect_true(all(vapply(ranks_by_model, function(x) {
