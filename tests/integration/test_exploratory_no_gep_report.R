@@ -4,9 +4,10 @@ library(dplyr)
 test_that("shared endpoint datasets use corrected fields and eligibility", {
     prepared <- list(full_data = tibble::tibble(
         exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
-        mets_free_at_baseline = c(TRUE, TRUE, FALSE, TRUE),
-        tt_mets_months_analysis = c(12, 18, 24, 30),
-        objective4_mfs_event_type = c(0L, 1L, 1L, 1L),
+        mets_free_at_baseline = c(TRUE, TRUE, TRUE, FALSE),
+        tt_mets_months_analysis = c(12, 18, 72, 120),
+        mets_event_analysis = c(0L, 1L, 1L, 1L),
+        objective4_mfs_event_type = c(0L, 1L, 0L, 0L),
         tt_mets_months = c(99, 99, 99, 99),
         mets_event = c(1L, 1L, 0L, 0L),
         tt_death_months = c(12, 18, 24, 30),
@@ -15,8 +16,9 @@ test_that("shared endpoint datasets use corrected fields and eligibility", {
     mfs <- prepare_exploratory_mfs_analysis_data(prepared)
     mss <- prepare_exploratory_mss_analysis_data(prepared)
 
-    expect_equal(mfs$tt_mets_months_analysis, c(12, 18, 30))
-    expect_equal(mfs$objective4_mfs_event_type, c(0L, 1L, 1L))
+    expect_equal(mfs$tt_mets_months_analysis, c(12, 18, 72))
+    expect_equal(mfs$mets_event_analysis, c(0L, 1L, 1L))
+    expect_false("objective4_mfs_event_type" %in% names(mfs))
     expect_true(all(mfs$mets_free_at_baseline))
     expect_true(all(mss$objective4_mss_event_type %in% c(0L, 1L, 2L)))
     expect_equal(mfs$tt_mets_months, c(99, 99, 99))
@@ -45,6 +47,7 @@ test_that("no-GEP MFS uses shared censor and risk-table machinery", {
         exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
         mets_free_at_baseline = TRUE,
         tt_mets_months_analysis = c(12, 18, 24, 30),
+        mets_event_analysis = c(0L, 1L, 0L, 1L),
         objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
         tt_mets_months = c(99, 99, 99, 99),
         mets_event = c(1L, 1L, 1L, 1L)

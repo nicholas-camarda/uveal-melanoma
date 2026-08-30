@@ -186,6 +186,7 @@ get_exploratory_no_gep_required_columns <- function() {
         "mets_event",
         "tt_mets_months_analysis",
         "mets_free_at_baseline",
+        "mets_event_analysis",
         "event_type_mfs_5yr",
         "tt_death_months",
         "melanoma_death_event",
@@ -1025,7 +1026,7 @@ prepare_exploratory_mfs_analysis_data <- function(prepared_data) {
     prepared_data$full_data %>%
         dplyr::mutate(
             .mfs_time = suppressWarnings(as.numeric(.data$tt_mets_months_analysis)),
-            .mfs_event = suppressWarnings(as.integer(.data$objective4_mfs_event_type))
+            .mfs_event = suppressWarnings(as.integer(.data$mets_event_analysis))
         ) %>%
         dplyr::filter(
             !is.na(.data$exploratory_gep_group),
@@ -1038,10 +1039,10 @@ prepare_exploratory_mfs_analysis_data <- function(prepared_data) {
         ) %>%
         dplyr::mutate(
             tt_mets_months_analysis = .data$.mfs_time,
-            objective4_mfs_event_type = .data$.mfs_event,
+            mets_event_analysis = .data$.mfs_event,
             exploratory_gep_group = droplevels(.data$exploratory_gep_group)
         ) %>%
-        dplyr::select(-dplyr::all_of(c(".mfs_time", ".mfs_event")))
+        dplyr::select(-dplyr::all_of(c(".mfs_time", ".mfs_event", "objective4_mfs_event_type")))
 }
 
 #' Prepare the Shared Exploratory MSS Analysis Dataset
@@ -1152,7 +1153,7 @@ calculate_exploratory_mss_gray_test <- function(fit) {
 fit_exploratory_mfs_analysis <- function(data) {
     group_var <- "exploratory_gep_group"
     time_var <- "tt_mets_months_analysis"
-    event_var <- "objective4_mfs_event_type"
+    event_var <- "mets_event_analysis"
     if (nrow(data) == 0L) {
         return(list(
             data = data,
@@ -3083,7 +3084,7 @@ collect_exploratory_no_gep_analysis <- function(data,
         mfs_analysis$data,
         group_var = "exploratory_gep_group",
         time_var = "tt_mets_months_analysis",
-        event_var = "objective4_mfs_event_type",
+        event_var = "mets_event_analysis",
         times = km_times,
         fit = mfs_analysis$fit
     ) %>%
@@ -3327,7 +3328,7 @@ create_exploratory_mfs_km_plot <- function(data, output_path, return_plot = FALS
         output_filename = basename(output_path),
         include_failed_indeterminate = TRUE,
         time_var = "tt_mets_months_analysis",
-        event_var = "objective4_mfs_event_type",
+        event_var = "mets_event_analysis",
         display_group_var = "exploratory_gep_group",
         display_levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
         show_p_value = FALSE,
