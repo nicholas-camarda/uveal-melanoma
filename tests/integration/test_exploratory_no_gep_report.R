@@ -61,6 +61,111 @@ test_that("no-GEP MFS uses shared censor and risk-table machinery", {
     expect_false(result$p_value_annotation)
 })
 
+test_that("standard GEP KM uses the shared incident-MFS representation", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored", "class2_event"),
+        biopsy1_gep = c(
+            "Class 1 PRAME Negative",
+            "Class 1 PRAME Positive",
+            "Class 1 PRAME Negative",
+            "Class 2 PRAME Negative"
+        ),
+        gep_class_simple = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        exploratory_gep_group = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
+        mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
+        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        tt_mets_months = c(0, 12, 90, 18),
+        mets_event = c(1L, 0L, 0L, 1L)
+    )
+
+    result <- create_mfs_collapsed_survival_curves(
+        data = fixture,
+        output_dir = tempfile(),
+        prefix = "",
+        subtitle_suffix = "test",
+        output_filename = "unused.png",
+        return_plot = TRUE,
+        save_plot = FALSE
+    )
+
+    expect_false("baseline" %in% result$plot_data$id)
+    expect_true("late" %in% result$plot_data$id)
+    expect_equal(
+        result$plot_data$tt_mets_months_analysis[result$plot_data$id == "late"],
+        72
+    )
+    expect_equal(
+        result$plot_data$mets_event_analysis[result$plot_data$id == "late"],
+        1L
+    )
+    expect_true(any(result$fit$time >= 72 & result$fit$n.event == 1))
+})
+
+test_that("standard GEP and no-GEP KM preparation retain the same incident-MFS rows", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored", "class2_event"),
+        biopsy1_gep = c(
+            "Class 1 PRAME Negative",
+            "Class 1 PRAME Positive",
+            "Class 1 PRAME Negative",
+            "Class 2 PRAME Negative"
+        ),
+        gep_class_simple = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        exploratory_gep_group = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
+        mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
+        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        tt_mets_months = c(0, 12, 90, 18),
+        mets_event = c(1L, 0L, 0L, 1L)
+    )
+
+    standard <- prepare_incident_mfs_km_data(fixture)
+    no_gep <- prepare_exploratory_mfs_analysis_data(list(full_data = fixture))
+
+    expect_setequal(standard$id, no_gep$id)
+    expect_false("baseline" %in% standard$id)
+    expect_true("late" %in% standard$id)
+    expect_equal(
+        standard %>% dplyr::arrange(.data$id) %>% dplyr::select(id, tt_mets_months_analysis, mets_event_analysis),
+        no_gep %>% dplyr::arrange(.data$id) %>% dplyr::select(id, tt_mets_months_analysis, mets_event_analysis),
+        ignore_attr = TRUE
+    )
+})
+
+test_that("poster GEP KM preparation excludes baseline metastasis and keeps late events", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored"),
+        gep_class_simple = factor(c("Class 1", "Class 2", "Class 1"), levels = c("Class 1", "Class 2")),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90),
+        mets_event_analysis = c(NA_integer_, 1L, 0L),
+        tt_mets_months = c(0, 12, 90),
+        mets_event = c(1L, 0L, 0L)
+    )
+
+    prepared <- prepare_mfs_simple_binary_poster_km_data(fixture)
+
+    expect_false("baseline" %in% prepared$id)
+    expect_true("late" %in% prepared$id)
+    expect_equal(prepared$tt_mets_months_analysis[prepared$id == "late"], 72)
+    expect_equal(prepared$mets_event_analysis[prepared$id == "late"], 1L)
+})
+
 test_that("MSS CIF uses Aalen-Johansen coding and a single shared fit", {
     fixture <- tibble::tibble(
         exploratory_gep_group = factor(rep(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate"), each = 4)),
@@ -140,7 +245,7 @@ test_that("exploratory no-GEP KM verification checks displayed counts and cohort
     expect_equal(verification$expected_n, prepared$group_snapshot$expected_n)
     expect_true(all(verification$status == "matched"))
     expect_equal(as.character(stats::na.omit(verification$simple_km_display_order)), c("Class 1", "Class 2", "GEP Not Tested"))
-    expect_equal(as.integer(stats::na.omit(verification$simple_km_displayed_n)), c(58L, 27L, 162L))
+    expect_equal(as.integer(stats::na.omit(verification$simple_km_displayed_n)), c(58L, 27L, 161L))
 
     modified_data <- actual_data
     class1_idx <- which(as.character(modified_data$exploratory_gep_group) == "Class 1")[1]
@@ -281,6 +386,7 @@ test_that("exploratory horizon summaries use censoring-aware event estimates", {
         no_gep_group = c("GEP Failed/Indeterminate", "GEP Failed/Indeterminate", "GEP Failed/Indeterminate"),
         tt_mets_months = c(48, 24, 24),
         tt_mets_months_analysis = c(48, 24, 24),
+        mets_event_analysis = c(1L, 0L, 0L),
         mets_event = c(1, 0, 0),
         mets_free_at_baseline = TRUE,
         objective4_mfs_event_type = c(1L, 0L, 0L),
@@ -313,6 +419,7 @@ test_that("exploratory pooled summaries tolerate bins with no melanoma failures"
         predicted_mss_5yr_risk = c(0.05, 0.4, 0.1, 0.3),
         tt_mets_months = c(24, 48, 36, 60),
         tt_mets_months_analysis = c(24, 48, 36, 60),
+        mets_event_analysis = c(0L, 1L, 0L, 1L),
         mets_event = c(0, 1, 0, 1),
         mets_free_at_baseline = TRUE,
         objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
@@ -350,6 +457,7 @@ test_that("exploratory pooled summaries omit unbinned predictions", {
         predicted_mss_5yr_risk = c(0.05, 0.4, 0.3),
         tt_mets_months = c(24, 48, NA_real_),
         tt_mets_months_analysis = c(24, 48, NA_real_),
+        mets_event_analysis = c(0L, 1L, NA_integer_),
         mets_event = c(0, 1, NA_integer_),
         mets_free_at_baseline = c(TRUE, TRUE, FALSE),
         objective4_mfs_event_type = c(0L, 1L, NA_integer_),

@@ -3,11 +3,11 @@
 #' Filters an analytic cohort to rows usable for the poster-oriented Class 1
 #' versus Class 2 metastasis-free survival Kaplan-Meier panel.
 #'
-#' @param data Data frame containing `gep_class_simple`, `tt_mets_months`, and
-#'   `mets_event`.
+#' @param data Data frame containing `gep_class_simple` and the canonical
+#'   incident-MFS analysis fields.
 #' @return Data frame with factor-ordered Class 1 and Class 2 rows.
 prepare_mfs_simple_binary_poster_km_data <- function(data) {
-    required_cols <- c("gep_class_simple", "tt_mets_months", "mets_event")
+    required_cols <- c("gep_class_simple")
     missing_cols <- setdiff(required_cols, names(data))
     if (length(missing_cols) > 0) {
         stop(
@@ -16,13 +16,10 @@ prepare_mfs_simple_binary_poster_km_data <- function(data) {
         )
     }
 
-    data %>%
+    prepare_incident_mfs_km_data(data) %>%
         dplyr::filter(
             !is.na(.data$gep_class_simple),
-            .data$gep_class_simple %in% c("Class 1", "Class 2"),
-            !is.na(.data$tt_mets_months),
-            !is.na(.data$mets_event),
-            .data$tt_mets_months >= 0
+            .data$gep_class_simple %in% c("Class 1", "Class 2")
         ) %>%
         dplyr::mutate(
             gep_class_simple = factor(
@@ -65,8 +62,8 @@ build_mfs_simple_binary_poster_risk_table <- function(data, time_breaks) {
         dplyr::mutate(
             n_risk = sum(
                 data$gep_class_simple == .data$gep_class_simple &
-                    !is.na(data$tt_mets_months) &
-                    data$tt_mets_months >= .data$time
+                !is.na(data$tt_mets_months_analysis) &
+                data$tt_mets_months_analysis >= .data$time
             )
         ) %>%
         dplyr::ungroup()
@@ -126,8 +123,11 @@ build_mfs_simple_binary_poster_km_panel <- function(data,
 
     class_levels <- c("Class 1", "Class 2")
     time_breaks <- seq(0, x_max_months, by = time_break_months)
-    fit <- survival::survfit(survival::Surv(tt_mets_months, mets_event) ~ gep_class_simple, data = plot_data)
-    fit$call$formula <- survival::Surv(tt_mets_months, mets_event) ~ gep_class_simple
+    fit <- survival::survfit(
+        survival::Surv(tt_mets_months_analysis, mets_event_analysis) ~ gep_class_simple,
+        data = plot_data
+    )
+    fit$call$formula <- survival::Surv(tt_mets_months_analysis, mets_event_analysis) ~ gep_class_simple
     class_palette <- get_gep_class_palette(class_levels)
 
     surv_plot <- survminer::ggsurvplot(

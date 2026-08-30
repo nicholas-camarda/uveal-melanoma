@@ -580,6 +580,7 @@ Objective 4 validates imported GEP probabilities directly. It does not train a n
 
 **Role of the downstream methods:**
 - Kaplan-Meier summaries in MFS estimate observed metastasis risk from follow-up data; they are not the source of the GEP prediction.
+- All Objective 4 MFS KM paths (standard GEP, no-GEP, and poster panels) use the shared incident risk set defined by `mets_free_at_baseline`, `tt_mets_months_analysis`, and `mets_event_analysis`; raw metastasis fields remain source/audit data.
 - Primary MSS summaries use cumulative-incidence methods to estimate observed melanoma-specific death risk when non-melanoma death is handled explicitly as a competing event.
 - Legacy binary/cause-specific MSS metrics can remain in technical sidecars when useful for continuity, but they are not the manuscript-facing MSS evidence.
 - IPCW-weighted recalibration models, grouped calibration statistics, discrimination metrics, and decision-curve analysis all evaluate how well the supplied GEP predictions performed.

@@ -313,8 +313,12 @@ test_that("four-group collapsed MFS KM retains both no-GEP strata as separate ro
     on.exit(unlink(test_output_dir, recursive = TRUE), add = TRUE)
 
     test_data <- tibble::tibble(
+        id = seq_len(8),
         tt_mets_months = c(12, 24, 18, 36, 6, 30, 9, 42),
         mets_event = c(0, 1, 0, 1, 1, 0, 1, 0),
+        mets_free_at_baseline = TRUE,
+        tt_mets_months_analysis = c(12, 24, 18, 36, 6, 30, 9, 42),
+        mets_event_analysis = c(0, 1, 0, 1, 1, 0, 1, 0),
         biopsy1_gep = c(
             "Class 1 PRAME Negative",
             "Class 1 PRAME Positive",

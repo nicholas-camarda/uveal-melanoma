@@ -1024,25 +1024,10 @@ prepare_exploratory_mfs_analysis_data <- function(prepared_data) {
     }
 
     prepared_data$full_data %>%
-        dplyr::mutate(
-            .mfs_time = suppressWarnings(as.numeric(.data$tt_mets_months_analysis)),
-            .mfs_event = suppressWarnings(as.integer(.data$mets_event_analysis))
-        ) %>%
-        dplyr::filter(
-            !is.na(.data$exploratory_gep_group),
-            !is.na(.data$mets_free_at_baseline),
-            .data$mets_free_at_baseline,
-            is.finite(.data$.mfs_time),
-            .data$.mfs_time >= 0,
-            !is.na(.data$.mfs_event),
-            .data$.mfs_event %in% c(0L, 1L)
-        ) %>%
-        dplyr::mutate(
-            tt_mets_months_analysis = .data$.mfs_time,
-            mets_event_analysis = .data$.mfs_event,
-            exploratory_gep_group = droplevels(.data$exploratory_gep_group)
-        ) %>%
-        dplyr::select(-dplyr::all_of(c(".mfs_time", ".mfs_event", "objective4_mfs_event_type")))
+        prepare_incident_mfs_km_data() %>%
+        dplyr::filter(!is.na(.data$exploratory_gep_group)) %>%
+        dplyr::mutate(exploratory_gep_group = droplevels(.data$exploratory_gep_group)) %>%
+        dplyr::select(-dplyr::any_of("objective4_mfs_event_type"))
 }
 
 #' Prepare the Shared Exploratory MSS Analysis Dataset
@@ -1305,13 +1290,13 @@ summarize_exploratory_horizon_groups <- function(data,
                     dplyr::filter(
                         .data$mets_free_at_baseline,
                         !is.na(.data$tt_mets_months_analysis),
-                        !is.na(.data$objective4_mfs_event_type)
+                        !is.na(.data$mets_event_analysis)
                     )
                 estimate_mfs_km_at_horizon(
                     data = .x,
                     timepoint_months = horizon_months,
                     time_var = "tt_mets_months_analysis",
-                    event_var = "objective4_mfs_event_type"
+                    event_var = "mets_event_analysis"
                 )
             } else {
                 estimate_mss_cif_at_horizon(

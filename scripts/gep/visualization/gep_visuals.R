@@ -1171,6 +1171,8 @@ create_single_outcome_performance_plot <- function(results, outcome_type, output
 create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = NULL, group_var = "biopsy1_gep", model_group_var = group_var, dataset_name = "GEP Validation", output_dirs = NULL) {
     logger::log_info("Creating MFS survival curves by GEP class using existing survival analysis infrastructure")
 
+    incident_data <- prepare_incident_mfs_km_data(data)
+
     gep_prame_display_order <- c(
         "Class 1 PRAME Negative",
         "Class 1 PRAME Positive",
@@ -1203,9 +1205,9 @@ create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = N
     km_result <- tryCatch(
         {
             analyze_time_to_event_outcomes(
-                data = data,
-                time_var = "tt_mets_months",
-                event_var = "mets_event",
+                data = incident_data,
+                time_var = "tt_mets_months_analysis",
+                event_var = "mets_event_analysis",
                 group_var = group_var,
                 model_group_var = model_group_var,
                 confounders = confounders,
@@ -1272,13 +1274,10 @@ create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = N
 create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix, dataset_name = "GEP Validation", confounders = NULL, output_dirs = NULL) {
     logger::log_info("Creating binary simple-GEP MFS survival analysis using the standard survival workflow")
 
-    plot_data <- data %>%
+    plot_data <- prepare_incident_mfs_km_data(data) %>%
         dplyr::filter(
             !is.na(.data$gep_class_simple),
-            .data$gep_class_simple %in% c("Class 1", "Class 2"),
-            !is.na(.data$tt_mets_months),
-            !is.na(.data$mets_event),
-            .data$tt_mets_months >= 0
+            .data$gep_class_simple %in% c("Class 1", "Class 2")
         ) %>%
         dplyr::mutate(
             gep_class_simple = factor(
@@ -1297,7 +1296,7 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
         dplyr::group_by(.data$gep_class_simple) %>%
         dplyr::summarise(
             n = dplyr::n(),
-            metastasis_events = sum(.data$mets_event == 1, na.rm = TRUE),
+            metastasis_events = sum(.data$mets_event_analysis == 1, na.rm = TRUE),
             .groups = "drop"
         )
     logger::log_info(sprintf(
@@ -1335,8 +1334,8 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
         {
             analyze_time_to_event_outcomes(
                 data = plot_data,
-                time_var = "tt_mets_months",
-                event_var = "mets_event",
+                time_var = "tt_mets_months_analysis",
+                event_var = "mets_event_analysis",
                 group_var = "gep_class_simple",
                 model_group_var = "gep_class_simple",
                 confounders = confounders,
@@ -1395,7 +1394,7 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #'   verification or testing instead of only writing files.
 #' @param save_plot When `FALSE`, skips writing the PNG to disk.
 #' @param time_var Character name of the endpoint-specific follow-up-time
-#'   column. Defaults to the historical GEP field.
+#'   column. Defaults to the centralized incident-MFS analysis field.
 #' @param event_var Character name of the endpoint-specific event column.
 #' @param display_group_var Optional precomputed display-group column.
 #' @param display_levels Optional display order for the groups.
@@ -1406,7 +1405,7 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #' @return Invisibly returns `NULL` after saving plots, or a list containing the
 #'   plot, shared fit, plot data, and p-value-annotation flag when
 #'   `return_plot = TRUE`.
-create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months", event_var = "mets_event", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
+create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months_analysis", event_var = "mets_event_analysis", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
     target_levels <- display_levels %||% c("Class 1", "Class 2", "GEP Not Tested")
     if (is.null(display_levels) && isTRUE(include_failed_indeterminate)) {
         target_levels <- c(target_levels, "GEP Failed/Indeterminate")
@@ -1419,7 +1418,13 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
     }
     logger::log_info(sprintf("Creating %s MFS survival curves", plot_label))
 
-    plot_data <- data
+    plot_data <- prepare_incident_mfs_km_data(data)
+    if (!identical(time_var, "tt_mets_months_analysis") || !identical(event_var, "mets_event_analysis")) {
+        stop(
+            "Collapsed Objective 4 MFS KM requires tt_mets_months_analysis and mets_event_analysis.",
+            call. = FALSE
+        )
+    }
     group_var <- "gep_km_simple"
     if (is.null(display_group_var)) {
         plot_data <- plot_data %>%
