@@ -1,6 +1,45 @@
 # Tests for exploratory no-GEP reporting
 library(dplyr)
 
+test_that("shared endpoint datasets use corrected fields and eligibility", {
+    prepared <- list(full_data = tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
+        mets_free_at_baseline = c(TRUE, TRUE, FALSE, TRUE),
+        tt_mets_months_analysis = c(12, 18, 24, 30),
+        objective4_mfs_event_type = c(0L, 1L, 1L, 1L),
+        tt_mets_months = c(99, 99, 99, 99),
+        mets_event = c(1L, 1L, 0L, 0L),
+        tt_death_months = c(12, 18, 24, 30),
+        objective4_mss_event_type = c(0L, 1L, 2L, 1L)
+    ))
+    mfs <- prepare_exploratory_mfs_analysis_data(prepared)
+    mss <- prepare_exploratory_mss_analysis_data(prepared)
+
+    expect_equal(mfs$tt_mets_months_analysis, c(12, 18, 30))
+    expect_equal(mfs$objective4_mfs_event_type, c(0L, 1L, 1L))
+    expect_true(all(mfs$mets_free_at_baseline))
+    expect_true(all(mss$objective4_mss_event_type %in% c(0L, 1L, 2L)))
+    expect_equal(mfs$tt_mets_months, c(99, 99, 99))
+    expect_equal(mfs$mets_event, c(1L, 1L, 0L))
+})
+
+test_that("shared endpoint bundles retain one fit and global comparison result", {
+    actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
+    prepared <- prepare_exploratory_no_gep_data(actual_data)
+    mfs_data <- prepare_exploratory_mfs_analysis_data(prepared)
+    mss_data <- prepare_exploratory_mss_analysis_data(prepared)
+    mfs <- fit_exploratory_mfs_analysis(mfs_data)
+    mss <- fit_exploratory_mss_cif(mss_data)
+
+    expect_s3_class(mfs$fit, "survfit")
+    expect_equal(nrow(mfs$data), nrow(mfs_data))
+    expect_true(is.finite(mfs$global_test$p_value))
+    expect_s3_class(mss$fit, "tidycuminc")
+    expect_equal(nrow(mss$data), nrow(mss_data))
+    expect_true(is.finite(mss$gray_test$p_value))
+    expect_true(all(c("time", "outcome", "strata", "estimate", "n.risk", "n.censor") %in% names(mss$tidy)))
+})
+
 test_that("exploratory no-GEP dataset preparation isolates reference and scoring cohorts", {
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
 

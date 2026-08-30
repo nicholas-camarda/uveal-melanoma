@@ -959,8 +959,8 @@ summarize_exploratory_baseline_comparisons <- function(prepared_data) {
 #' @param times Numeric vector of time horizons in months.
 #'
 #' @return A tidy data frame of group-by-time survival estimates.
-summarize_km_timepoints <- function(data, group_var, time_var, event_var, times) {
-    fit <- survival::survfit(
+summarize_km_timepoints <- function(data, group_var, time_var, event_var, times, fit = NULL) {
+    fit <- fit %||% survival::survfit(
         stats::as.formula(sprintf("Surv(%s, %s) ~ %s", time_var, event_var, group_var)),
         data = data
     )
@@ -976,6 +976,216 @@ summarize_km_timepoints <- function(data, group_var, time_var, event_var, times)
     )
 }
 
+#' Prepare the Shared Exploratory MFS Analysis Dataset
+#'
+#' Applies the incident-MFS eligibility rule and keeps the corrected analysis
+#' time and event fields used by the Objective 4 production workflow.
+#'
+#' @param prepared_data Output from `prepare_exploratory_no_gep_data()`.
+#'
+#' @return A filtered data frame for all exploratory MFS summaries and plots.
+prepare_exploratory_mfs_analysis_data <- function(prepared_data) {
+    if (is.null(prepared_data$full_data) || !is.data.frame(prepared_data$full_data)) {
+        stop("prepare_exploratory_mfs_analysis_data() requires prepared_data$full_data.", call. = FALSE)
+    }
+
+    prepared_data$full_data %>%
+        dplyr::mutate(
+            .mfs_time = suppressWarnings(as.numeric(.data$tt_mets_months_analysis)),
+            .mfs_event = suppressWarnings(as.integer(.data$objective4_mfs_event_type))
+        ) %>%
+        dplyr::filter(
+            !is.na(.data$exploratory_gep_group),
+            !is.na(.data$mets_free_at_baseline),
+            .data$mets_free_at_baseline,
+            is.finite(.data$.mfs_time),
+            .data$.mfs_time >= 0,
+            !is.na(.data$.mfs_event),
+            .data$.mfs_event %in% c(0L, 1L)
+        ) %>%
+        dplyr::mutate(
+            tt_mets_months_analysis = .data$.mfs_time,
+            objective4_mfs_event_type = .data$.mfs_event,
+            exploratory_gep_group = droplevels(.data$exploratory_gep_group)
+        ) %>%
+        dplyr::select(-dplyr::all_of(c(".mfs_time", ".mfs_event")))
+}
+
+#' Prepare the Shared Exploratory MSS Analysis Dataset
+#'
+#' Keeps complete non-negative follow-up and validated competing-risk event
+#' coding for all exploratory MSS summaries and plots.
+#'
+#' @param prepared_data Output from `prepare_exploratory_no_gep_data()`.
+#'
+#' @return A filtered data frame for all exploratory MSS summaries and plots.
+prepare_exploratory_mss_analysis_data <- function(prepared_data) {
+    if (is.null(prepared_data$full_data) || !is.data.frame(prepared_data$full_data)) {
+        stop("prepare_exploratory_mss_analysis_data() requires prepared_data$full_data.", call. = FALSE)
+    }
+
+    prepared_data$full_data %>%
+        dplyr::mutate(
+            .mss_time = suppressWarnings(as.numeric(.data$tt_death_months)),
+            .mss_event = suppressWarnings(as.integer(.data$objective4_mss_event_type))
+        ) %>%
+        dplyr::filter(
+            !is.na(.data$exploratory_gep_group),
+            is.finite(.data$.mss_time),
+            .data$.mss_time >= 0,
+            !is.na(.data$.mss_event),
+            .data$.mss_event %in% c(0L, 1L, 2L)
+        ) %>%
+        dplyr::mutate(
+            tt_death_months = .data$.mss_time,
+            objective4_mss_event_type = .data$.mss_event,
+            exploratory_gep_group = droplevels(.data$exploratory_gep_group)
+        ) %>%
+        dplyr::select(-dplyr::all_of(c(".mss_time", ".mss_event")))
+}
+
+#' Calculate a Global Exploratory MFS Log-Rank Test
+#'
+#' @param data Shared MFS analysis data.
+#' @param time_var Follow-up time column.
+#' @param event_var Binary event column.
+#' @param group_var Grouping column.
+#'
+#' @return A list containing status, p-value, reason, chi-square, and degrees
+#'   of freedom.
+calculate_exploratory_mfs_log_rank <- function(data, time_var, event_var, group_var) {
+    groups <- droplevels(as.factor(data[[group_var]]))
+    valid <- !is.na(groups) &
+        is.finite(suppressWarnings(as.numeric(data[[time_var]]))) &
+        !is.na(data[[event_var]])
+    analyzable <- data[valid, , drop = FALSE]
+    groups <- droplevels(as.factor(analyzable[[group_var]]))
+    n_groups <- nlevels(groups)
+    event_values <- suppressWarnings(as.integer(analyzable[[event_var]]))
+
+    if (nrow(analyzable) == 0L) {
+        return(list(status = "skipped", p_value = NA_real_, reason = "no_analyzable_rows", chisq = NA_real_, df = NA_integer_))
+    }
+    if (n_groups < 2L) {
+        return(list(status = "skipped", p_value = NA_real_, reason = "fewer_than_two_groups", chisq = NA_real_, df = NA_integer_))
+    }
+    if (!any(event_values == 1L, na.rm = TRUE)) {
+        return(list(status = "skipped", p_value = NA_real_, reason = "no_mfs_events", chisq = NA_real_, df = n_groups - 1L))
+    }
+
+    fit <- survival::survdiff(
+        stats::as.formula(sprintf("Surv(%s, %s) ~ %s", time_var, event_var, group_var)),
+        data = analyzable
+    )
+    chisq <- unname(fit$chisq)
+    df <- n_groups - 1L
+    list(
+        status = "ok",
+        p_value = stats::pchisq(chisq, df = df, lower.tail = FALSE),
+        reason = NA_character_,
+        chisq = chisq,
+        df = df
+    )
+}
+
+#' Calculate a Global Exploratory MSS Gray Test from a Shared Fit
+#'
+#' @param fit Shared `tidycuminc` fit.
+#'
+#' @return A list containing status, p-value, and reason.
+calculate_exploratory_mss_gray_test <- function(fit) {
+    if (is.null(fit) || !inherits(fit, "tidycuminc")) {
+        return(list(status = "skipped", p_value = NA_real_, reason = "no_cif_fit"))
+    }
+
+    tests <- fit$cmprsk$Tests
+    n_groups <- length(unique(as.character(fit$tidy$strata)))
+    if (n_groups < 2L) {
+        return(list(status = "skipped", p_value = NA_real_, reason = "fewer_than_two_groups"))
+    }
+    if (is.null(tests) || nrow(tests) < 1L || !is.finite(tests[1, "pv"])) {
+        return(list(status = "no_event_of_interest", p_value = NA_real_, reason = "no_melanoma_death_support"))
+    }
+
+    list(status = "ok", p_value = as.numeric(tests[1, "pv"]), reason = NA_character_)
+}
+
+#' Fit the Shared Exploratory MFS Endpoint Bundle
+#'
+#' @param data Shared MFS analysis data.
+#'
+#' @return A list containing the data, one `survfit`, its tidy summary, and the
+#'   global log-rank result.
+fit_exploratory_mfs_analysis <- function(data) {
+    group_var <- "exploratory_gep_group"
+    time_var <- "tt_mets_months_analysis"
+    event_var <- "objective4_mfs_event_type"
+    if (nrow(data) == 0L) {
+        return(list(
+            data = data,
+            fit = NULL,
+            tidy = tibble::tibble(),
+            global_test = calculate_exploratory_mfs_log_rank(data, time_var, event_var, group_var)
+        ))
+    }
+
+    fit <- survival::survfit(
+        stats::as.formula(sprintf("Surv(%s, %s) ~ %s", time_var, event_var, group_var)),
+        data = data
+    )
+    fit_summary <- summary(fit)
+    tidy <- tibble::tibble(
+        time = fit_summary$time,
+        strata = sub(sprintf("^%s=", group_var), "", fit_summary$strata),
+        estimate = fit_summary$surv,
+        n_risk = fit_summary$n.risk,
+        n_event = fit_summary$n.event,
+        n_censor = fit_summary$n.censor
+    )
+    list(
+        data = data,
+        fit = fit,
+        tidy = tidy,
+        global_test = calculate_exploratory_mfs_log_rank(data, time_var, event_var, group_var)
+    )
+}
+
+#' Fit the Shared Exploratory MSS CIF Endpoint Bundle
+#'
+#' @param data Shared MSS analysis data.
+#'
+#' @return A list containing the data, one `tidycuminc`, its tidy summary, and
+#'   the global Gray-test result.
+fit_exploratory_mss_cif <- function(data) {
+    outcome <- factor(
+        dplyr::case_when(
+            data$objective4_mss_event_type == 0L ~ "censored",
+            data$objective4_mss_event_type == 1L ~ "melanoma_death",
+            data$objective4_mss_event_type == 2L ~ "other_death",
+            TRUE ~ NA_character_
+        ),
+        levels = c("censored", "melanoma_death", "other_death")
+    )
+    fit_data <- data %>% dplyr::mutate(.mss_outcome = outcome)
+    fit <- if (nrow(fit_data) > 0L && nlevels(droplevels(fit_data$exploratory_gep_group)) >= 1L) {
+        tryCatch(
+            tidycmprsk::cuminc(
+                stats::as.formula("Surv(tt_death_months, .mss_outcome) ~ exploratory_gep_group"),
+                data = fit_data
+            ),
+            error = function(e) NULL
+        )
+    } else {
+        NULL
+    }
+    tidy <- if (!is.null(fit)) fit$tidy else tibble::tibble()
+    gray_test <- calculate_exploratory_mss_gray_test(fit)
+    if (is.null(fit) && nrow(fit_data) > 0L) {
+        gray_test <- list(status = "fit_failed", p_value = NA_real_, reason = "cif_fit_failed")
+    }
+    list(data = fit_data, fit = fit, tidy = tidy, gray_test = gray_test)
+}
+
 #' Summarize MSS Cumulative Incidence at Fixed Timepoints
 #'
 #' Computes group-level melanoma-specific death cumulative incidence estimates at
@@ -986,31 +1196,44 @@ summarize_km_timepoints <- function(data, group_var, time_var, event_var, times)
 #' @param times Numeric vector of time horizons in months.
 #'
 #' @return A tidy data frame of CIF summaries.
-summarize_mss_cif_timepoints <- function(data, group_var, times) {
-    status <- dplyr::case_when(
-        data$melanoma_death_event == 1 ~ 1L,
-        data$competing_death_event == 1 ~ 2L,
-        TRUE ~ 0L
-    )
+summarize_mss_cif_timepoints <- function(data, group_var, times, fit = NULL) {
+    if (is.null(fit)) {
+        fit <- fit_exploratory_mss_cif(data)$fit
+    }
+    if (is.null(fit)) {
+        return(tibble::tibble(
+            group = character(),
+            time_months = numeric(),
+            time_years = numeric(),
+            n_risk = integer(),
+            cumulative_incidence = numeric(),
+            mss_probability = numeric()
+        ))
+    }
 
-    cif_fit <- cmprsk::cuminc(
-        ftime = data$tt_death_months,
-        fstatus = status,
-        group = data[[group_var]],
-        cencode = 0
-    )
+    tidy <- fit$tidy %>%
+        dplyr::filter(.data$outcome == "melanoma_death") %>%
+        dplyr::mutate(strata = as.character(.data$strata))
+    groups <- levels(droplevels(as.factor(data[[group_var]])))
 
-    cif_summary <- cmprsk::timepoints(cif_fit, times = times)
-    event_rows <- grep(" 1$", rownames(cif_summary$est), value = TRUE)
-
-    purrr::map_dfr(event_rows, function(row_name) {
-        tibble::tibble(
-            group = sub(" 1$", "", row_name),
-            time_months = times,
-            time_years = round(times / 12, 1),
-            cumulative_incidence = as.numeric(cif_summary$est[row_name, ]),
-            mss_probability = 1 - as.numeric(cif_summary$est[row_name, ])
-        )
+    purrr::map_dfr(groups, function(group_name) {
+        group_tidy <- tidy %>% dplyr::filter(.data$strata == group_name)
+        purrr::map_dfr(times, function(timepoint) {
+            at_time <- group_tidy %>%
+                dplyr::filter(.data$time <= timepoint) %>%
+                dplyr::arrange(.data$time) %>%
+                dplyr::slice_tail(n = 1)
+            estimate <- if (nrow(at_time) == 0L) 0 else at_time$estimate[[1]]
+            n_risk <- if (nrow(at_time) == 0L) sum(data[[group_var]] == group_name) else at_time$n.risk[[1]]
+            tibble::tibble(
+                group = group_name,
+                time_months = timepoint,
+                time_years = round(timepoint / 12, 1),
+                n_risk = as.integer(n_risk),
+                cumulative_incidence = as.numeric(estimate),
+                mss_probability = 1 - as.numeric(estimate)
+            )
+        })
     })
 }
 
@@ -2797,24 +3020,25 @@ collect_exploratory_no_gep_analysis <- function(data,
     baseline_summary <- summarize_exploratory_baseline_comparisons(prepared_data)
     overlap_diagnostics <- calculate_exploratory_overlap_diagnostics(prepared_data)
 
+    mfs_analysis_data <- prepare_exploratory_mfs_analysis_data(prepared_data)
+    mss_analysis_data <- prepare_exploratory_mss_analysis_data(prepared_data)
+    mfs_analysis <- fit_exploratory_mfs_analysis(mfs_analysis_data)
+    mss_analysis <- fit_exploratory_mss_cif(mss_analysis_data)
+
     km_times <- c(60, 84, 120)
     km_corrected_mfs <- summarize_km_timepoints(
-        full_data %>%
-            dplyr::filter(
-                !is.na(.data$exploratory_gep_group),
-                .data$mets_free_at_baseline,
-                !is.na(.data$tt_mets_months_analysis),
-                !is.na(.data$objective4_mfs_event_type)
-            ),
+        mfs_analysis$data,
         group_var = "exploratory_gep_group",
         time_var = "tt_mets_months_analysis",
         event_var = "objective4_mfs_event_type",
-        times = km_times
+        times = km_times,
+        fit = mfs_analysis$fit
     )
     km_corrected_mss <- summarize_mss_cif_timepoints(
-        full_data %>% dplyr::filter(!is.na(.data$exploratory_gep_group)),
+        mss_analysis$data,
         group_var = "exploratory_gep_group",
-        times = km_times
+        times = km_times,
+        fit = mss_analysis$fit
     )
 
     surrogate_model <- fit_exploratory_binary_model(
@@ -2948,6 +3172,10 @@ collect_exploratory_no_gep_analysis <- function(data,
         km_verification = km_verification,
         data_audit = data_audit,
         baseline_comparisons = baseline_summary,
+        mfs_analysis = mfs_analysis,
+        mss_analysis = mss_analysis,
+        mfs_global_test = mfs_analysis$global_test,
+        mss_global_test = mss_analysis$gray_test,
         km_corrected_mfs = km_corrected_mfs,
         km_corrected_mss = km_corrected_mss,
         surrogate_model = surrogate_model,
