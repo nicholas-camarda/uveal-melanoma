@@ -171,7 +171,6 @@ flowchart LR
 - `scripts`
 - `study_doc_generators.R`
 - `subgroup`
-- `subgroup_binary.R`
 - `subgroup_data_prep.R`
 - `subgroup_formatting.R`
 - `subgroup_height.R`

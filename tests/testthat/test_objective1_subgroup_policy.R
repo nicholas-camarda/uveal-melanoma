@@ -65,6 +65,21 @@ test_that("subgroup preparation rejects unsupported treatment labels", {
     )
 })
 
+test_that("Objective 1 loads only the canonical subgroup and forest helpers", {
+    expect_false(file.exists(
+        here::here("scripts", "subgroup", "subgroup_binary.R")
+    ))
+    load_all_lines <- readLines(here::here("scripts", "load_all.R"), warn = FALSE)
+    expect_false(any(grepl("subgroup_binary\\.R", load_all_lines)))
+    expect_false(exists("analyze_treatment_effect_subgroups_binary", inherits = TRUE))
+    expect_false(exists("apply_forest_plot_formatting", inherits = TRUE))
+    expect_false(exists("get_forest_plot_diagnostics", inherits = TRUE))
+    expect_false(exists("write_diagnostics_excel", inherits = TRUE))
+    expect_true(is.function(style_forest_interaction_status_cells))
+    expect_true(is.function(compute_forest_plot_height))
+    expect_true(is.function(combine_forest_plot_panels))
+})
+
 test_that("the configured 63-year age split renders as ordinary forest-plot levels", {
     plot_data <- create_forest_plot_data(
         subgroup_results = list(

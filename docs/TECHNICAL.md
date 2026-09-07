@@ -259,7 +259,6 @@ scripts/
 │   ├── utils/
 │   └── visualization/
 ├── subgroup/                       # Subgroup data prep, modeling, formatting
-│   ├── subgroup_binary.R
 │   ├── subgroup_data_prep.R
 │   ├── subgroup_formatting.R
 │   ├── subgroup_height.R
@@ -487,6 +486,8 @@ Effect-summary workbooks follow model-family-specific inference conventions and 
 Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the outcome and includes treatment group, `initial_vision`, explicit latest-VA follow-up duration, viable reviewer-requested baseline predictors, and the shared confounder set. Full-cohort output modeled 208 patients; restricted-cohort output modeled 126 patients. In the restricted cohort, `optic_nerve` is excluded from this sensitivity because it has no variation. The `reviewer_predictor_availability` sheet in `vision_followup_sensitivity.xlsx` documents requested macular/foveal proximity, baseline retinal-detachment, and dose fields that are not available as structured baseline/dosimetry predictors.
 
 **Objective 2 output convention:** adjusted analyses now always live inside their own side-effect subfolder. When an adjusted model is skipped because of insufficient events, no usable variation, or fit failure, the pipeline writes a `_SKIPPED.html` explanation file plus the diagnostics workbook instead of leaving the folder without an adjusted-analysis artifact.
+
+**Objective 2 source and derived-field roles:** The merged adverse-event display reads normalized source Y/N fields (`retinopathy`, `nvg`, and `srd`) from Objective 0-prepared cohort data. The Objective 2 statistical analyses read the corresponding Objective 0-derived 0/1 burden fields (`retinopathy_burden_event`, `nvg_burden_event`, and `srd_burden_event`). Objective 0 normalizes the source fields, derives the burden fields directly from them, and validates that each source/derived pair matches for included analytic rows. The merged display is not a separate estimator and does not redefine the Objective 2 endpoints.
 
 **Objective 2d scope:** SRD outputs keep all recorded SRD causes, including mass-induced SRD when present.
 
