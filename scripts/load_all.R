@@ -155,7 +155,6 @@ source(here("scripts", "analysis", "rmst_visualization.R"))
 # Source modular subgroup analysis files
 source(here("scripts", "subgroup", "subgroup_data_prep.R"))
 source(here("scripts", "subgroup", "subgroup_survival.R"))
-source(here("scripts", "subgroup", "subgroup_binary.R"))
 source(here("scripts", "subgroup", "subgroup_height.R"))
 source(here("scripts", "subgroup", "subgroup_formatting.R"))
 

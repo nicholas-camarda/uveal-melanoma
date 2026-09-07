@@ -259,7 +259,6 @@ scripts/
 │   ├── utils/
 │   └── visualization/
 ├── subgroup/                       # Subgroup data prep, modeling, formatting
-│   ├── subgroup_binary.R
 │   ├── subgroup_data_prep.R
 │   ├── subgroup_formatting.R
 │   ├── subgroup_height.R
