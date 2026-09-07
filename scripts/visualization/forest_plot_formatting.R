@@ -124,40 +124,6 @@ style_forest_interaction_status_cells <- function(fp, plot_data, status_column =
     fp
 }
 
-#' Apply post-processing formatting for better appearance
-#'
-#' @param fp A forestploter object
-#' @param plot_data List with formatted data for forestploter
-#' @return A formatted forestploter object
-apply_forest_plot_formatting <- function(fp, plot_data) {
-    # Find rows that should be bold (variable headers)
-    bold_rows <- which(plot_data$is_summary & plot_data$font_face == "bold")
-
-    # Skip the first row (main header) for variable-specific formatting
-    variable_header_rows <- bold_rows[-1]
-
-    # Apply bold formatting to variable headers
-    for (row_idx in variable_header_rows) {
-        fp <- edit_plot(fp,
-            row = row_idx,
-            col = 1, # First column (subgroup names)
-            gp = gpar(fontface = "bold")
-        )
-    }
-
-    # Apply italic formatting to "No data available" rows
-    italic_rows <- which(plot_data$font_face == "italic")
-    for (row_idx in italic_rows) {
-        fp <- edit_plot(fp,
-            row = row_idx,
-            col = 1, # First column (subgroup names)
-            gp = gpar(fontface = "italic", col = "grey50")
-        )
-    }
-
-    return(fp)
-}
-
 #' Helper: compute symmetric clip range around 1 on log scale with
 #' intelligent trimming so extreme outliers do not blow-out the axis.
 #'
@@ -248,25 +214,6 @@ symmetric_linear_clip <- function(lower_vals, upper_vals,
     if (!is.finite(span) || span <= 0) span <- 1
 
     c(-span, span)
-}
-
-#' Retrieve diagnostics from a forestploter object created by this script
-#'
-#' @param fp A forestploter object
-#' @return Data frame with diagnostics information
-get_forest_plot_diagnostics <- function(fp) {
-    attr(fp, "diagnostics")
-}
-
-#' Write diagnostics list to an Excel workbook with one sheet per plot
-#'
-#' @param diagnostics_list Named list where each element is a data.frame of diagnostics
-#' @param file_path Full path of the .xlsx to create
-write_diagnostics_excel <- function(diagnostics_list, file_path) {
-    if (length(diagnostics_list) == 0) {
-        return(invisible(NULL))
-    }
-    write_readable_xlsx(diagnostics_list, file_path)
 }
 
 #' Compute dynamic height for a single forest plot grob
