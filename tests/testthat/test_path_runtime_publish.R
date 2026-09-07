@@ -90,7 +90,12 @@ test_that("Objective 4 no-GEP exporter exposes every review-facing artifact", {
             "no_gep_mfs_bins",
             "no_gep_mss_bins",
             "no_gep_subgroup_outcomes",
-            "no_gep_direct_model_contributions"
+            "no_gep_availability",
+            "no_gep_model_auc_summary",
+            "no_gep_mfs_risk_ladder",
+            "no_gep_mss_risk_ladder",
+            "no_gep_direct_mfs_contributions",
+            "no_gep_direct_mss_contributions"
         )
     )
 })

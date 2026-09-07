@@ -567,6 +567,8 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     start_here_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Start_Here")
     key_findings_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Key_Findings_5yr")
     risk_ladder_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Risk_Ladder_5yr")
+    no_gep_subgroups_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "No_GEP_Subgroups")
+    follow_up_context_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Follow_Up_Context")
     model_performance_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Model_Performance")
     km_mfs_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MFS")
     km_mss_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MSS")
@@ -587,6 +589,29 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_true(all(c("section", "label", "value") %in% names(start_here_sheet)))
     expect_true(all(c("group", "n", "observed_5yr_mfs_event_rate", "median_predicted_5yr_mfs_risk") %in% names(risk_ladder_sheet)))
     expect_true(all(c(
+        "full_cohort_n", "model_evaluable_n", "incident_mfs_eligible_n", "mss_eligible_n"
+    ) %in% names(no_gep_subgroups_sheet)))
+    expect_false("n" %in% names(no_gep_subgroups_sheet))
+    expect_true(all(c(
+        "population_scope", "full_cohort_n", "model_evaluable_n",
+        "incident_mfs_eligible_n", "mfs_events_by_60mo_n",
+        "mfs_censored_before_60mo_n", "mss_eligible_n",
+        "melanoma_deaths_by_60mo_n", "competing_deaths_by_60mo_n",
+        "mss_censored_before_60mo_n"
+    ) %in% names(follow_up_context_sheet)))
+    follow_up_by_group <- follow_up_context_sheet %>%
+        dplyr::filter(.data$population_scope == "no_gep_group") %>%
+        dplyr::arrange(.data$no_gep_group)
+    expect_equal(follow_up_by_group$full_cohort_n, c(13L, 162L))
+    expect_equal(follow_up_by_group$model_evaluable_n, c(12L, 152L))
+    expect_equal(follow_up_by_group$incident_mfs_eligible_n, c(13L, 161L))
+    expect_equal(follow_up_by_group$mfs_events_by_60mo_n, c(2L, 17L))
+    expect_equal(follow_up_by_group$mfs_censored_before_60mo_n, c(10L, 67L))
+    expect_equal(follow_up_by_group$mss_eligible_n, c(13L, 162L))
+    expect_equal(follow_up_by_group$melanoma_deaths_by_60mo_n, c(1L, 11L))
+    expect_equal(follow_up_by_group$competing_deaths_by_60mo_n, c(0L, 17L))
+    expect_equal(follow_up_by_group$mss_censored_before_60mo_n, c(10L, 55L))
+    expect_true(all(c(
         "model", "model_method", "reported_risk_scale", "cv_auc",
         "cv_auc_stability_interval", "calibration_slope_stability_interval",
         "practical_read"
@@ -603,10 +628,15 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
 
     summary_text <- paste(readLines(results$output_paths$summary), collapse = "\n")
     expect_match(summary_text, "descriptive only", fixed = TRUE)
-    expect_match(summary_text, "homogeneous intermediate-risk group", fixed = TRUE)
+    expect_match(summary_text, "wide intervals limit that comparison", fixed = TRUE)
     expect_match(summary_text, "## Follow-Up Context", fixed = TRUE)
-    expect_match(summary_text, "no-GEP scoring cohort", fixed = TRUE)
+    expect_match(summary_text, "all patients without usable GEP", fixed = TRUE)
     expect_match(summary_text, "## Key Findings at 5 Years", fixed = TRUE)
+    expect_match(summary_text, "## How to Read Predicted-Risk Thirds", fixed = TRUE)
+    expect_match(summary_text, "fitted risk from the final model", fixed = TRUE)
+    expect_match(summary_text, "not raw event proportions", fixed = TRUE)
+    expect_match(summary_text, "## Five-Year Endpoint Follow-Up", fixed = TRUE)
+    expect_match(summary_text, "censored before 60 months", fixed = TRUE)
     expect_match(summary_text, "95% repeated-partition stability interval", fixed = TRUE)
     expect_match(summary_text, "censoring weights are estimated in each outer training fold", fixed = TRUE)
     expect_match(summary_text, "60-month melanoma-death cumulative-incidence risk", fixed = TRUE)
@@ -627,8 +657,8 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_false(grepl("melanoma-specific model", reader_facing_model_text, fixed = TRUE))
     expect_match(summary_text, "## Parsimonious Sensitivity Check", fixed = TRUE)
     expect_match(summary_text, "## Retained Baseline Predictors", fixed = TRUE)
-    expect_match(summary_text, "Std. coef.", fixed = TRUE)
-    expect_match(summary_text, "ranked highly in the penalized model", fixed = TRUE)
+    expect_match(summary_text, "original-scale coefficients", fixed = TRUE)
+    expect_match(summary_text, "in-sample, not out-of-fold", fixed = TRUE)
     expect_match(summary_text, "P\\(Class 2-like \\| baseline features\\)")
     expect_match(summary_text, "Cilio-Choroidal", fixed = TRUE)
     expect_match(summary_text, "0-1 probability scale", fixed = TRUE)
@@ -722,7 +752,7 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_false("predicted_mss_5yr_risk" %in% names(results$no_gep_predictions))
     expect_true(all(c("Group", "Interpretation_Note") %in% names(results$unified_no_gep_overview)))
     expect_true(all(c(
-        "Model", "Model_Method", "Reported_Risk_Scale", "Top_Predictor_1",
+        "Model", "Model_Method", "Reported_Risk_Scale", "Largest_Coefficient_1",
         "Use_Case", "CV_AUC_Stability_Lower", "CV_AUC_Stability_Upper"
     ) %in% names(results$unified_no_gep_model_comparison)))
     expect_true(all(c("No_GEP_Group", "Analysis", "Bin") %in% names(results$unified_no_gep_risk_strata)))
@@ -749,56 +779,200 @@ test_that("report-native no-GEP figures reconcile to source tables", {
     )
 
     expect_true(file.exists(results$output_paths$subgroup_outcomes))
-    expect_true(file.exists(results$output_paths$direct_model_contributions))
-    expect_setequal(results$no_gep_subgroups$no_gep_group, c("GEP Failed/Indeterminate", "GEP Not Tested"))
-    followup_by_group <- results$follow_up_context %>%
-        dplyr::filter(.data$summary_scope == "no_gep_group")
-    expect_true(setequal(followup_by_group$no_gep_group, results$no_gep_subgroups$no_gep_group))
+    expect_true(file.exists(results$output_paths$mfs_bins))
+    expect_true(file.exists(results$output_paths$mss_bins))
+    expect_true(file.exists(results$output_paths$gep_availability))
+    expect_true(file.exists(results$output_paths$model_auc_summary))
+    expect_true(file.exists(results$output_paths$mfs_risk_ladder))
+    expect_true(file.exists(results$output_paths$mss_risk_ladder))
+    expect_true(file.exists(results$output_paths$direct_mfs_contributions))
+    expect_true(file.exists(results$output_paths$direct_mss_contributions))
+
     subgroup_plot <- create_exploratory_no_gep_subgroup_outcomes_plot(
-        results$no_gep_subgroups,
-        results$follow_up_context,
+        full_data = prepare_exploratory_no_gep_data(actual_data)$full_data,
+        risk_ladder = results$risk_ladder,
         tempfile(fileext = ".png"),
         return_plot = TRUE
     )
-    actual_subgroup_source <- subgroup_plot$plot_data %>%
-        dplyr::mutate(
-            no_gep_group = as.character(.data$no_gep_group),
-            measure = as.character(.data$measure)
-        ) %>%
-        dplyr::select("no_gep_group", "n", "median_followup_years", "measure", "risk") %>%
-        tidyr::pivot_wider(names_from = "measure", values_from = "risk") %>%
-        dplyr::rename(
-            observed_5yr_mfs_event_rate = "Observed 5-year MFS",
-            predicted_5yr_mfs_risk = "Predicted 5-year MFS",
-            observed_5yr_mss_event_rate = "Observed 5-year MSS",
-            predicted_60mo_mss_risk = "Predicted 60-month MSS"
-        ) %>%
-        dplyr::select(
-            "no_gep_group", "n", "median_followup_years",
-            "observed_5yr_mfs_event_rate", "predicted_5yr_mfs_risk",
-            "observed_5yr_mss_event_rate", "predicted_60mo_mss_risk"
+    subgroup_profile <- subgroup_plot$profile_data %>%
+        dplyr::mutate(no_gep_group = as.character(.data$no_gep_group)) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expected_counts <- actual_data %>%
+        dplyr::filter(.data$exploratory_gep_group %in% c("GEP Not Tested", "GEP Failed/Indeterminate")) %>%
+        dplyr::mutate(no_gep_group = as.character(.data$exploratory_gep_group)) %>%
+        dplyr::group_by(.data$no_gep_group) %>%
+        dplyr::summarise(
+            cohort_n = dplyr::n(),
+            incident_mfs_eligible_n = sum(
+                .data$mets_free_at_baseline &
+                    !is.na(.data$tt_mets_months_analysis) &
+                    !is.na(.data$mets_event_analysis),
+                na.rm = TRUE
+            ),
+            mss_eligible_n = sum(!is.na(.data$tt_death_months)),
+            .groups = "drop"
         ) %>%
         dplyr::arrange(.data$no_gep_group)
-    expected_subgroup_source <- results$no_gep_subgroups %>%
+    expect_equal(
+        subgroup_profile %>%
+            dplyr::select("no_gep_group", "cohort_n", "incident_mfs_eligible_n", "mss_eligible_n"),
+        expected_counts
+    )
+    expected_outcomes <- results$risk_ladder %>%
+        dplyr::filter(.data$group %in% c("GEP Not Tested", "GEP Failed/Indeterminate")) %>%
         dplyr::transmute(
-            no_gep_group = as.character(.data$no_gep_group),
-            n = .data$n,
+            no_gep_group = as.character(.data$group),
             observed_5yr_mfs_event_rate = .data$observed_5yr_mfs_event_rate,
-            predicted_5yr_mfs_risk = .data$median_predicted_5yr_mfs_risk,
-            observed_5yr_mss_event_rate = .data$observed_5yr_mss_event_rate,
-            predicted_60mo_mss_risk = .data$median_predicted_60mo_melanoma_death_cumulative_incidence_risk
-        ) %>%
-        dplyr::left_join(
-            followup_by_group %>% dplyr::select("no_gep_group", "median_followup_years"),
-            by = "no_gep_group"
-        ) %>%
-        dplyr::select(
-            "no_gep_group", "n", "median_followup_years",
-            "observed_5yr_mfs_event_rate", "predicted_5yr_mfs_risk",
-            "observed_5yr_mss_event_rate", "predicted_60mo_mss_risk"
+            observed_5yr_mss_event_rate = .data$observed_5yr_mss_event_rate
         ) %>%
         dplyr::arrange(.data$no_gep_group)
-    expect_equal(actual_subgroup_source, expected_subgroup_source, tolerance = 1e-12)
+    expect_equal(
+        subgroup_profile %>%
+            dplyr::select(
+                "no_gep_group",
+                "observed_5yr_mfs_event_rate",
+                "observed_5yr_mss_event_rate"
+            ),
+        expected_outcomes,
+        tolerance = 1e-12
+    )
+    expect_lt(
+        subgroup_profile$cohort_n[subgroup_profile$no_gep_group == "GEP Failed/Indeterminate"],
+        subgroup_profile$cohort_n[subgroup_profile$no_gep_group == "GEP Not Tested"]
+    )
+    expect_setequal(
+        subgroup_plot$plot_data$metric_key,
+        c(
+            "age", "tumor_diameter", "tumor_height", "advanced_t_stage",
+            "follow_up", "mfs_risk", "melanoma_death_risk"
+        )
+    )
+
+    direct_plot_specs <- list(
+        list(
+            analysis = "Direct_MFS_5yr_Risk",
+            event_col = "observed_mfs_5yr_event_rate",
+            y_label = "5-year metastasis risk (1 - Kaplan-Meier)"
+        ),
+        list(
+            analysis = "Direct_60mo_Melanoma_Death_Cumulative_Incidence_Risk",
+            event_col = "observed_mss_5yr_event_rate",
+            y_label = "Melanoma-death cumulative incidence at 60 months"
+        )
+    )
+    for (plot_spec in direct_plot_specs) {
+        event_count_col <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") {
+            "mfs_raw_events_by_horizon"
+        } else {
+            "mss_raw_events_by_horizon"
+        }
+        direct_plot <- create_event_rate_bin_plot(
+            summary_data = results$sensitivity_summary,
+            analysis_name = plot_spec$analysis,
+            event_col = plot_spec$event_col,
+            plot_title = "Test title",
+            y_label = plot_spec$y_label,
+            event_count_col = event_count_col,
+            event_label = if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "metastasis" else "melanoma death",
+            estimate_label = if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "5-year risk" else "60-month risk",
+            caption = "Predicted-risk thirds are descriptive groups, not validated clinical cut points.",
+            highlight_higher = TRUE,
+            output_path = tempfile(fileext = ".png"),
+            return_plot = TRUE
+        )
+        expected_direct_source <- results$sensitivity_summary %>%
+            dplyr::filter(.data$analysis == plot_spec$analysis, !is.na(.data$bin)) %>%
+            dplyr::transmute(
+                risk_third = dplyr::recode(as.character(.data$bin), Low = "Lower", Intermediate = "Middle", High = "Higher"),
+                n = .data$n,
+                observed_events = .data[[event_count_col]],
+                observed_event_rate = .data[[plot_spec$event_col]]
+            ) %>%
+            dplyr::arrange(match(.data$risk_third, c("Lower", "Middle", "Higher")))
+        actual_direct_source <- direct_plot$plot_data %>%
+            dplyr::transmute(
+                risk_third = as.character(.data$risk_third),
+                n = .data$n,
+                observed_events = .data$observed_events,
+                observed_event_rate = .data$observed_event_rate
+            ) %>%
+            dplyr::arrange(match(.data$risk_third, c("Lower", "Middle", "Higher")))
+        expect_equal(actual_direct_source, expected_direct_source, tolerance = 1e-12)
+        expect_equal(as.character(direct_plot$plot_data$risk_third), c("Lower", "Middle", "Higher"))
+        expected_event_pattern <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") {
+            "metastasis|metastases"
+        } else {
+            "melanoma death|melanoma deaths"
+        }
+        expected_estimate_label <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "5-year risk" else "60-month risk"
+        expect_true(all(grepl(
+            sprintf("^%s [0-9.]+%%\\n[0-9]+ (%s) / [0-9]+ patients$", expected_estimate_label, expected_event_pattern),
+            direct_plot$plot_data$display_label
+        )))
+    }
+
+    availability_plot <- create_exploratory_gep_availability_plot(
+        risk_ladder = results$risk_ladder,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(sum(availability_plot$plot_data$n), nrow(actual_data))
+    expect_equal(
+        availability_plot$plot_data$n[availability_plot$plot_data$availability == "No usable GEP"],
+        175L
+    )
+
+    auc_plot <- create_exploratory_model_auc_summary_plot(
+        model_performance = results$model_performance,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(round(auc_plot$plot_data$cv_auc, 3), c(0.563, 0.656, 0.603))
+    expect_true(all(auc_plot$plot_data$stability_lower <= auc_plot$plot_data$cv_auc))
+    expect_true(all(auc_plot$plot_data$stability_upper >= auc_plot$plot_data$cv_auc))
+
+    mfs_ladder_plot <- create_exploratory_fixed_horizon_risk_ladder_plot(
+        risk_ladder = results$risk_ladder,
+        horizon_summary = results$km_corrected_mfs,
+        outcome = "mfs",
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    mss_ladder_plot <- create_exploratory_fixed_horizon_risk_ladder_plot(
+        risk_ladder = results$risk_ladder,
+        horizon_summary = results$km_corrected_mss,
+        outcome = "mss",
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(as.character(mfs_ladder_plot$plot_data$group), c(
+        "Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2"
+    ))
+    expect_equal(as.character(mss_ladder_plot$plot_data$group), c(
+        "Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2"
+    ))
+    expect_true(all(with(
+        mfs_ladder_plot$plot_data,
+        (is.na(conf_low) & is.na(conf_high)) | (conf_low <= estimate & conf_high >= estimate)
+    )))
+    expect_true(all(with(
+        mss_ladder_plot$plot_data,
+        (is.na(conf_low) & is.na(conf_high)) | (conf_low <= estimate & conf_high >= estimate)
+    )))
+    mss_ladder_panel <- ggplot2::ggplot_build(mss_ladder_plot$plot)$layout$panel_params[[1]]
+    expect_lt(mss_ladder_panel$x.range[[1]], 0)
+    expect_lt(mss_ladder_panel$y.range[[1]], 1)
+    expect_gt(mss_ladder_panel$y.range[[2]], 4)
+
+    mss_cif_plot <- create_exploratory_mss_cif_plot(
+        data = results$mss_analysis$data,
+        analysis_fit = results$mss_analysis,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    mss_cif_panel <- ggplot2::ggplot_build(mss_cif_plot$plot)$layout$panel_params[[1]]
+    expect_lt(mss_cif_panel$y.range[[1]], 0)
+
     contribution_rows <- results$predictor_contribution %>%
         dplyr::filter(
             .data$section == "model_contribution",
@@ -808,27 +982,32 @@ test_that("report-native no-GEP figures reconcile to source tables", {
         unique(contribution_rows$model),
         c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
     ))
-    contributor_plot <- create_exploratory_no_gep_direct_model_contributions_plot(
-        results$predictor_contribution,
-        tempfile(fileext = ".png"),
-        return_plot = TRUE
-    )
-    actual_contributor_source <- contributor_plot$plot_data %>%
-        dplyr::mutate(
-            model = as.character(.data$model),
-            predictor = as.character(.data$predictor)
-        ) %>%
-        dplyr::select("model", "predictor", "standardized_abs_coefficient", "direction", "rank") %>%
-        dplyr::arrange(.data$model, .data$rank, .data$predictor)
-    expected_contributor_source <- contribution_rows %>%
-        dplyr::mutate(
-            model = as.character(.data$model),
-            predictor = as.character(.data$predictor)
-        ) %>%
-        dplyr::select("model", "predictor", "standardized_abs_coefficient", "direction", "rank") %>%
-        dplyr::arrange(.data$model, .data$rank, .data$predictor)
-    expect_equal(actual_contributor_source, expected_contributor_source, tolerance = 1e-12)
-    expect_false(any(contributor_plot$plot_data$model == "Surrogate Class 2 Probability"))
+    for (model_name in unique(contribution_rows$model)) {
+        contributor_plot <- create_exploratory_no_gep_direct_model_contributions_plot(
+            contribution_table = results$predictor_contribution,
+            model_name = model_name,
+            output_path = tempfile(fileext = ".png"),
+            return_plot = TRUE
+        )
+        actual_contributor_source <- contributor_plot$plot_data %>%
+            dplyr::mutate(
+                model = as.character(.data$model),
+                predictor = as.character(.data$predictor)
+            ) %>%
+            dplyr::select("model", "predictor", "coefficient", "direction", "rank") %>%
+            dplyr::arrange(.data$model, .data$rank, .data$predictor)
+        expected_contributor_source <- contribution_rows %>%
+            dplyr::filter(.data$model == model_name) %>%
+            dplyr::mutate(
+                model = as.character(.data$model),
+                predictor = as.character(.data$predictor)
+            ) %>%
+            dplyr::select("model", "predictor", "coefficient", "direction", "rank") %>%
+            dplyr::arrange(.data$model, .data$rank, .data$predictor)
+        expect_equal(actual_contributor_source, expected_contributor_source, tolerance = 1e-12)
+        expect_false(any(contributor_plot$plot_data$model == "Surrogate Class 2 Probability"))
+        expect_false(any(grepl("_", contributor_plot$plot_data$display_label, fixed = TRUE)))
+    }
     ranks_by_model <- split(contribution_rows$rank, contribution_rows$model)
     expect_true(all(vapply(ranks_by_model, function(x) {
         identical(sort(as.integer(x)), seq_len(length(x)))

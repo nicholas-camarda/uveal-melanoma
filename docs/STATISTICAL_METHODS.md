@@ -1188,7 +1188,9 @@ To quantify internal-validation stability without introducing a larger baseline 
 
 In addition, the workflow fits a pre-specified parsimonious direct-model sensitivity analysis using `age_at_diagnosis`, `initial_tumor_diameter`, `location`, and `initial_t_stage_simple` when those variables survive screening. These parsimonious models are used only to check whether the no-GEP subgroup ordering is robust to a lower-complexity baseline specification.
 
-The coefficient tables in this report are ridge-shrunken design-matrix coefficients at `lambda.min`. They are included for directionality and relative contribution ranking, not p-value-based inference.
+The coefficient tables report ridge-shrunken log-odds coefficients at `lambda.min` on the original design-matrix scale. Although glmnet standardizes predictors internally, its extracted coefficients are returned in their original units. Magnitudes depend on units and factor coding and must not be interpreted as standardized variable importance or p-value-based inference. The predictor summary retains the largest absolute term per predictor; the coefficient tabs retain all terms and factor reference levels.
+
+The no-GEP risk thirds group final-model fitted predictions, not held-out predictions. Their observed censoring-aware group rates are descriptive, in-sample summaries and can show optimistic separation. Internal-validation claims rely on the separately reported out-of-fold performance, not the risk-third plots.
 
 For clarity, the surrogate model is not trying to reconstruct the molecular assay itself. It uses patients with known definitive GEP labels as a definitive-GEP reference set, learns what the observed baseline clinicopathologic patterns of the Class 1 and Class 2 groups look like in this cohort, and then outputs for each no-GEP patient the probability that their baseline profile more closely resembles the observed Class 2 pattern than the observed Class 1 pattern. This is best interpreted as a clinical resemblance score anchored to the known definitive-GEP patients.
 

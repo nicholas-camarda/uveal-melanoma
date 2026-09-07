@@ -21,16 +21,22 @@ test_that("Exploratory no-GEP follow-up block summarizes follow-up and operation
                 "2025-01-30",
                 "2024-04-01"
             )),
-            death_event = c(0, 0, 1, 0, 0, 1, 0, 0)
+            death_event = c(0, 0, 1, 0, 0, 1, 0, 0),
+            mets_free_at_baseline = TRUE,
+            tt_mets_months_analysis = 12 * .data$follow_up_years,
+            mets_event_analysis = 0L,
+            tt_death_months = 12 * .data$follow_up_years,
+            objective4_mss_event_type = 0L
         )
 
     block <- build_exploratory_no_gep_followup_block(
-        prepared_data = list(no_gep_scoring = test_data),
+        prepared_data = list(full_data = test_data, no_gep_scoring = test_data),
         dataset_name = "uveal_melanoma_full_cohort"
     )
 
     expect_true(any(grepl("## Follow-Up Context", block, fixed = TRUE)))
-    expect_true(any(grepl("no-GEP scoring cohort", block, fixed = TRUE)))
+    expect_true(any(grepl("all patients without usable GEP", block, fixed = TRUE)))
+    expect_true(any(grepl("model-evaluable and endpoint-eligible denominators", block, fixed = TRUE)))
     expect_true(any(grepl("reached at least 5 years", block, fixed = TRUE)))
     expect_true(any(grepl("Operational view:", block, fixed = TRUE)))
     expect_true(any(grepl("By no-GEP group:", block, fixed = TRUE)))

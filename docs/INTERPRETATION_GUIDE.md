@@ -668,8 +668,8 @@ Use this reading order:
   - By complement, `1 - surrogate_class2_probability` is the implied `Class 1-like` probability within that surrogate only.
   - Neither number is the probability of the patient's true molecular assay result.
 2. Read `Predictor_Contribution`.
-  - This tab shows which retained baseline predictors are doing the most work in the exploratory models.
-  - Larger absolute ridge coefficients mean stronger contribution to the model's risk ordering, not stronger statistical proof.
+  - This tab reports the largest absolute original-scale term coefficient for each retained predictor, with its sign and reference category.
+  - Coefficient magnitudes depend on units and factor coding. Their ordering is not standardized variable importance or statistical proof; the coefficient tabs retain all fitted terms.
 3. Check `Risk_Ladder_5yr`.
   - This sheet compares definitive `Class 1`, `GEP Not Tested`, `GEP Failed/Indeterminate`, and definitive `Class 2` on the same 5-year descriptive scale.
   - Use it to support statements about whether the no-GEP groups sit between the definitive GEP groups overall.

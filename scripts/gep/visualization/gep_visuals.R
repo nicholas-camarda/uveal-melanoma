@@ -1771,6 +1771,9 @@ create_mfs_four_group_survival_curves <- function(data, output_dir, prefix, data
 #'
 #' @return A styled `ggplot` cumulative-incidence plot.
 build_cif_curve_plot <- function(ci_obj, outcome, title, subtitle, xlab, ylab, color_title, palette, xlim, caption = NULL) {
+    # CIFs are bounded at zero. A small view-only margin keeps a true zero
+    # curve visible without changing estimates, limits, or tick labels.
+    y_baseline_padding <- 0.02
     p <- ggsurvfit::ggcuminc(ci_obj, outcome = outcome)
     p$layers <- lapply(p$layers, function(layer) {
         layer$aes_params$na.rm <- TRUE
@@ -1808,7 +1811,10 @@ build_cif_curve_plot <- function(ci_obj, outcome, title, subtitle, xlab, ylab, c
             expand = ggplot2::expansion(mult = c(0, 0.04)),
             labels = scales::label_percent(accuracy = 1)
         ) +
-        ggplot2::coord_cartesian(xlim = xlim, expand = FALSE)
+        ggplot2::coord_cartesian(
+            xlim = xlim,
+            ylim = c(-y_baseline_padding, 1)
+        )
 
     p
 }
