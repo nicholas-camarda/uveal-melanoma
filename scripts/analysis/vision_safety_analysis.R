@@ -1745,12 +1745,6 @@ analyze_radiation_complications <- function(data, sequela_type, confounders = NU
             .before = treatment_group
         )
 
-    # Determine output directory
-    output_dir <- switch(sequela_type,
-        "retinopathy" = output_dirs$obj2_retinopathy,
-        "nvg" = output_dirs$obj2_nvg,
-        "srd" = output_dirs$obj2_srd
-    )
     route_prefix <- switch(sequela_type,
         "retinopathy" = "obj2_retinopathy",
         "nvg" = "obj2_nvg",
