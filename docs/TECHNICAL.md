@@ -499,7 +499,7 @@ Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the 
 
 **Purpose:** Evaluate effectiveness of second-line radiation treatments for patients who experience local recurrence after initial therapy
 
-**Implementation:** `analyze_pfs2()` in `scripts/workflow/objective_3_repeat_radiation.R`
+**Implementation:** `analyze_pfs2()` is implemented in `scripts/analysis/survival_outcomes.R` and called by `scripts/workflow/objective_3_repeat_radiation.R`
 
 **Outputs:** Cohort support (`01_cohort_support/`: treatment summary, skip explanations), survival modeling artifacts when fit (`02_km_curves/`, `03_cox_models/`, `04_rmst_analysis/`, `05_summary_tables/`), PH diagnostics (`06_ph_diagnostics/`)
 

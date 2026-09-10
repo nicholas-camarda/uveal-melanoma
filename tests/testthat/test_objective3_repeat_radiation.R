@@ -10,6 +10,18 @@
 # Load the project environment with ALL of the variables and functions
 # You do not need to load libraries separately
 
+test_that("PFS-2 insufficient-event skips reuse the shared skip-output writer", {
+  function_text <- paste(deparse(analyze_pfs2), collapse = "\n")
+  function_lines <- strsplit(function_text, "\n", fixed = TRUE)[[1]]
+  skip_writer_calls <- grep(
+    "pfs2_skip_diagnostics[[:space:]]*<-[[:space:]]*write_pfs2_skip_outputs",
+    function_lines,
+    value = TRUE
+  )
+
+  expect_length(skip_writer_calls, 2L)
+})
+
 test_that("Objective 3 pipeline returns the current PFS-2 analysis contract", {
   pipeline_run <- get_objective3_pipeline()
   results <- pipeline_run$results

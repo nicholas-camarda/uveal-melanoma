@@ -2711,12 +2711,7 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
             MINIMUM_SURVIVAL_EVENTS
         )
 
-        pfs2_skip_diagnostics <- build_survival_skip_diagnostics(
-            data = pfs2_data,
-            event_var = "pfs2_event",
-            variables = unique(c("recurrence1_treatment_clean", confounders)),
-            analysis_name = "pfs2_analysis",
-            dataset_name = dataset_name %||% "unspecified_dataset",
+        pfs2_skip_diagnostics <- write_pfs2_skip_outputs(
             reason = sprintf(
                 "PFS-2 survival analysis was skipped because only %d events were observed; at least %d are required.",
                 total_events,
@@ -2734,39 +2729,10 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
                     total_events,
                     MINIMUM_SURVIVAL_EVENTS
                 ),
-                "This is expected for cohorts with limited recurrence data and does not indicate a pipeline error.",
-                pfs2_interpretation_guardrails$notes
+                "This is expected for cohorts with limited recurrence data and does not indicate a pipeline error."
             ),
-            filter_stats = exclusion_result$filter_stats,
-            sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
-            modeled_n = nrow(pfs2_data),
-            status = "skipped",
-            time_var = "tt_pfs2_months"
+            explanation_text = explanation_text
         )
-        pfs2_skip_diagnostics$compatibility_text <- explanation_text
-
-        # Save explanation and skip artifacts to typed PFS-2 subfolders
-        if (!is.null(output_dirs)) {
-            cohort_support_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cohort_support")
-            cox_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cox")
-            if (!is.null(cohort_support_dir)) {
-                ensure_output_dir(cohort_support_dir)
-                explanation_file <- file.path(cohort_support_dir, paste0(prefix, "pfs2_analysis_skipped_explanation.txt"))
-                writeLines(explanation_text, explanation_file)
-                logger::log_info(sprintf("Explanation saved to: %s", explanation_file))
-            }
-            if (!is.null(cox_dir)) {
-                ensure_output_dir(cox_dir)
-                save_skipped_model_outputs(
-                    analysis_name = "pfs2_analysis",
-                    dataset_name = dataset_name %||% "unspecified_dataset",
-                    output_dir = cox_dir,
-                    prefix = prefix,
-                    reason = pfs2_skip_diagnostics$reason,
-                    diagnostics = pfs2_skip_diagnostics
-                )
-            }
-        }
 
         pfs2_survival <- list(
             fit = NULL,
