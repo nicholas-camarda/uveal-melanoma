@@ -87,14 +87,10 @@ analyze_gep_mfs_validation <- function(data,
     display_analysis_data <- analysis_data
     logger::log_info(formatted(sprintf("Analysis dataset: %d patients with valid GEP and MFS data", nrow(analysis_data)), indent = 1))
 
-    # Create an expanded dataset for KM curves and PH diagnostics that retains "GEP Not Tested"
-    km_ph_data <- data %>%
-        filter(
-            !is.na(biopsy1_gep),
-            !is.na(tt_mets_months),
-            !is.na(mets_event),
-            tt_mets_months >= 0
-        )
+    # Create an expanded dataset for KM curves and PH diagnostics that retains
+    # "GEP Not Tested" while applying the centralized incident-MFS definition.
+    km_ph_data <- prepare_incident_mfs_km_data(data) %>%
+        filter(!is.na(biopsy1_gep))
     km_ph_display_data <- km_ph_data %>%
         mutate(biopsy1_gep_model = km_ph_data$biopsy1_gep)
     logger::log_info(formatted(sprintf(
@@ -106,7 +102,7 @@ analyze_gep_mfs_validation <- function(data,
             group_by(biopsy1_gep) %>%
             summarise(
                 n = n(),
-                events = sum(mets_event == 1, na.rm = TRUE),
+                events = sum(mets_event_analysis == 1, na.rm = TRUE),
                 .groups = "drop"
             )
         for (i in seq_len(nrow(km_summary))) {
@@ -234,10 +230,10 @@ analyze_gep_mfs_validation <- function(data,
         {
             # Diagnostics before KM: ensure non-NA time/event by class
             if (!is.null(display_analysis_data)) {
-                nn_time <- sum(!is.na(display_analysis_data$tt_mets_months))
-                nn_event <- sum(!is.na(display_analysis_data$mets_event))
+                nn_time <- sum(!is.na(display_analysis_data$tt_mets_months_analysis))
+                nn_event <- sum(!is.na(display_analysis_data$mets_event_analysis))
                 logger::log_info(formatted(sprintf(
-                    "MFS diagnostics: non-NA tt_mets_months=%d, non-NA mets_event=%d",
+                    "MFS diagnostics: non-NA tt_mets_months_analysis=%d, non-NA mets_event_analysis=%d",
                     nn_time, nn_event
                 ), indent = 1))
                 if (!is.null(display_analysis_data$biopsy1_gep)) {
@@ -245,9 +241,9 @@ analyze_gep_mfs_validation <- function(data,
                         dplyr::group_by(biopsy1_gep) %>%
                         dplyr::summarise(
                             n = dplyr::n(),
-                            nn_time = sum(!is.na(tt_mets_months)),
-                            nn_event = sum(!is.na(mets_event)),
-                            events = sum(mets_event == 1, na.rm = TRUE),
+                            nn_time = sum(!is.na(tt_mets_months_analysis)),
+                            nn_event = sum(!is.na(mets_event_analysis)),
+                            events = sum(mets_event_analysis == 1, na.rm = TRUE),
                             .groups = "drop"
                         )
                     logger::log_info(formatted(sprintf("MFS diagnostics by class:\n%s", capture.output(print(by_class)) %>% paste(collapse = "\n")), indent = 1))
@@ -289,7 +285,7 @@ analyze_gep_mfs_validation <- function(data,
                 ph_model_result <- if (ph_group_count >= 2) {
                     tryCatch(
                         {
-                            mfs_cox_formula <- as.formula("Surv(tt_mets_months, mets_event) ~ biopsy1_gep")
+                            mfs_cox_formula <- as.formula("Surv(tt_mets_months_analysis, mets_event_analysis) ~ biopsy1_gep")
                             list(
                                 cox_model = survival::coxph(mfs_cox_formula, data = km_ph_data),
                                 reason = NULL
@@ -322,8 +318,8 @@ analyze_gep_mfs_validation <- function(data,
                     file_prefix = paste0(prefix, "mfs_"),
                     dataset_name = dataset_name,
                     data = km_ph_data,
-                    time_var = "tt_mets_months",
-                    event_var = "mets_event",
+                    time_var = "tt_mets_months_analysis",
+                    event_var = "mets_event_analysis",
                     variables = "biopsy1_gep",
                     reason = ph_model_result$reason
                 )

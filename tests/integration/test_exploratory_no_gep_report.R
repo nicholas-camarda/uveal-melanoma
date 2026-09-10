@@ -1,6 +1,204 @@
 # Tests for exploratory no-GEP reporting
 library(dplyr)
 
+test_that("shared endpoint datasets use corrected fields and eligibility", {
+    prepared <- list(full_data = tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
+        mets_free_at_baseline = c(TRUE, TRUE, TRUE, FALSE),
+        tt_mets_months_analysis = c(12, 18, 72, 120),
+        mets_event_analysis = c(0L, 1L, 1L, 1L),
+        objective4_mfs_event_type = c(0L, 1L, 0L, 0L),
+        tt_mets_months = c(99, 99, 99, 99),
+        mets_event = c(1L, 1L, 0L, 0L),
+        tt_death_months = c(12, 18, 24, 30),
+        objective4_mss_event_type = c(0L, 1L, 2L, 1L)
+    ))
+    mfs <- prepare_exploratory_mfs_analysis_data(prepared)
+    mss <- prepare_exploratory_mss_analysis_data(prepared)
+
+    expect_equal(mfs$tt_mets_months_analysis, c(12, 18, 72))
+    expect_equal(mfs$mets_event_analysis, c(0L, 1L, 1L))
+    expect_false("objective4_mfs_event_type" %in% names(mfs))
+    expect_true(all(mfs$mets_free_at_baseline))
+    expect_true(all(mss$objective4_mss_event_type %in% c(0L, 1L, 2L)))
+    expect_equal(mfs$tt_mets_months, c(99, 99, 99))
+    expect_equal(mfs$mets_event, c(1L, 1L, 0L))
+})
+
+test_that("shared endpoint bundles retain one fit and global comparison result", {
+    actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
+    prepared <- prepare_exploratory_no_gep_data(actual_data)
+    mfs_data <- prepare_exploratory_mfs_analysis_data(prepared)
+    mss_data <- prepare_exploratory_mss_analysis_data(prepared)
+    mfs <- fit_exploratory_mfs_analysis(mfs_data)
+    mss <- fit_exploratory_mss_cif(mss_data)
+
+    expect_s3_class(mfs$fit, "survfit")
+    expect_equal(nrow(mfs$data), nrow(mfs_data))
+    expect_true(is.finite(mfs$global_test$p_value))
+    expect_s3_class(mss$fit, "tidycuminc")
+    expect_equal(nrow(mss$data), nrow(mss_data))
+    expect_true(is.finite(mss$gray_test$p_value))
+    expect_true(all(c("time", "outcome", "strata", "estimate", "n.risk", "n.censor") %in% names(mss$tidy)))
+})
+
+test_that("no-GEP MFS uses shared censor and risk-table machinery", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")),
+        mets_free_at_baseline = TRUE,
+        tt_mets_months_analysis = c(12, 18, 24, 30),
+        mets_event_analysis = c(0L, 1L, 0L, 1L),
+        objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
+        tt_mets_months = c(99, 99, 99, 99),
+        mets_event = c(1L, 1L, 1L, 1L)
+    )
+    result <- create_exploratory_mfs_km_plot(fixture, tempfile(fileext = ".png"), return_plot = TRUE)
+
+    expect_true(sum(result$fit$n.censor) > 0)
+    expect_true(!is.null(result$plot$table))
+    expect_true(nrow(result$plot_data) > 0)
+    expect_true(all(result$plot_data$tt_mets_months_analysis <= 30))
+    expect_false(result$p_value_annotation)
+})
+
+test_that("standard GEP KM uses the shared incident-MFS representation", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored", "class2_event"),
+        biopsy1_gep = c(
+            "Class 1 PRAME Negative",
+            "Class 1 PRAME Positive",
+            "Class 1 PRAME Negative",
+            "Class 2 PRAME Negative"
+        ),
+        gep_class_simple = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        exploratory_gep_group = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
+        mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
+        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        tt_mets_months = c(0, 12, 90, 18),
+        mets_event = c(1L, 0L, 0L, 1L)
+    )
+
+    result <- create_mfs_collapsed_survival_curves(
+        data = fixture,
+        output_dir = tempfile(),
+        prefix = "",
+        subtitle_suffix = "test",
+        output_filename = "unused.png",
+        return_plot = TRUE,
+        save_plot = FALSE
+    )
+
+    expect_false("baseline" %in% result$plot_data$id)
+    expect_true("late" %in% result$plot_data$id)
+    expect_equal(
+        result$plot_data$tt_mets_months_analysis[result$plot_data$id == "late"],
+        72
+    )
+    expect_equal(
+        result$plot_data$mets_event_analysis[result$plot_data$id == "late"],
+        1L
+    )
+    expect_true(any(result$fit$time >= 72 & result$fit$n.event == 1))
+})
+
+test_that("standard GEP and no-GEP KM preparation retain the same incident-MFS rows", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored", "class2_event"),
+        biopsy1_gep = c(
+            "Class 1 PRAME Negative",
+            "Class 1 PRAME Positive",
+            "Class 1 PRAME Negative",
+            "Class 2 PRAME Negative"
+        ),
+        gep_class_simple = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        exploratory_gep_group = factor(
+            c("Class 1", "Class 1", "Class 1", "Class 2"),
+            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+        ),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
+        mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
+        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        tt_mets_months = c(0, 12, 90, 18),
+        mets_event = c(1L, 0L, 0L, 1L)
+    )
+
+    standard <- prepare_incident_mfs_km_data(fixture)
+    no_gep <- prepare_exploratory_mfs_analysis_data(list(full_data = fixture))
+
+    expect_setequal(standard$id, no_gep$id)
+    expect_false("baseline" %in% standard$id)
+    expect_true("late" %in% standard$id)
+    expect_equal(
+        standard %>% dplyr::arrange(.data$id) %>% dplyr::select(id, tt_mets_months_analysis, mets_event_analysis),
+        no_gep %>% dplyr::arrange(.data$id) %>% dplyr::select(id, tt_mets_months_analysis, mets_event_analysis),
+        ignore_attr = TRUE
+    )
+})
+
+test_that("poster GEP KM preparation excludes baseline metastasis and keeps late events", {
+    fixture <- tibble::tibble(
+        id = c("baseline", "late", "censored"),
+        gep_class_simple = factor(c("Class 1", "Class 2", "Class 1"), levels = c("Class 1", "Class 2")),
+        mets_free_at_baseline = c(FALSE, TRUE, TRUE),
+        tt_mets_months_analysis = c(NA_real_, 72, 90),
+        mets_event_analysis = c(NA_integer_, 1L, 0L),
+        tt_mets_months = c(0, 12, 90),
+        mets_event = c(1L, 0L, 0L)
+    )
+
+    prepared <- prepare_mfs_simple_binary_poster_km_data(fixture)
+
+    expect_false("baseline" %in% prepared$id)
+    expect_true("late" %in% prepared$id)
+    expect_equal(prepared$tt_mets_months_analysis[prepared$id == "late"], 72)
+    expect_equal(prepared$mets_event_analysis[prepared$id == "late"], 1L)
+})
+
+test_that("MSS CIF uses Aalen-Johansen coding and a single shared fit", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(rep(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate"), each = 4)),
+        tt_death_months = c(12, 18, 24, 30, 10, 20, 35, 40, 8, 16, 28, 44, 14, 22, 32, 48),
+        objective4_mss_event_type = c(0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L, 0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L)
+    )
+    fitted <- fit_exploratory_mss_cif(fixture)
+    result <- create_exploratory_mss_cif_plot(
+        fixture,
+        tempfile(fileext = ".png"),
+        analysis_fit = fitted,
+        return_plot = TRUE
+    )
+
+    expect_true(inherits(fitted$fit, "tidycuminc"))
+    expect_true(is.finite(fitted$gray_test$p_value))
+    expect_true(all(fitted$data$.mss_outcome %in% c("censored", "melanoma_death", "other_death")))
+    expect_true(all(c("time", "outcome", "strata", "estimate", "n.risk", "n.censor") %in% names(fitted$tidy)))
+    expect_identical(result$fit, fitted$fit)
+    expect_s3_class(result$plot, "ggplot")
+})
+
+test_that("unsupported MSS comparisons are explicit and non-fatal", {
+    fixture <- tibble::tibble(
+        exploratory_gep_group = factor(c("Class 1", "Class 1")),
+        tt_death_months = c(12, 18),
+        objective4_mss_event_type = c(0L, 0L)
+    )
+    fitted <- fit_exploratory_mss_cif(fixture)
+    expect_true(is.na(fitted$gray_test$p_value))
+    expect_true(fitted$gray_test$status %in% c("skipped", "no_event_of_interest", "fit_failed"))
+})
+
 test_that("exploratory no-GEP dataset preparation isolates reference and scoring cohorts", {
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
 
@@ -47,7 +245,7 @@ test_that("exploratory no-GEP KM verification checks displayed counts and cohort
     expect_equal(verification$expected_n, prepared$group_snapshot$expected_n)
     expect_true(all(verification$status == "matched"))
     expect_equal(as.character(stats::na.omit(verification$simple_km_display_order)), c("Class 1", "Class 2", "GEP Not Tested"))
-    expect_equal(as.integer(stats::na.omit(verification$simple_km_displayed_n)), c(58L, 27L, 162L))
+    expect_equal(as.integer(stats::na.omit(verification$simple_km_displayed_n)), c(58L, 27L, 161L))
 
     modified_data <- actual_data
     class1_idx <- which(as.character(modified_data$exploratory_gep_group) == "Class 1")[1]
@@ -188,6 +386,7 @@ test_that("exploratory horizon summaries use censoring-aware event estimates", {
         no_gep_group = c("GEP Failed/Indeterminate", "GEP Failed/Indeterminate", "GEP Failed/Indeterminate"),
         tt_mets_months = c(48, 24, 24),
         tt_mets_months_analysis = c(48, 24, 24),
+        mets_event_analysis = c(1L, 0L, 0L),
         mets_event = c(1, 0, 0),
         mets_free_at_baseline = TRUE,
         objective4_mfs_event_type = c(1L, 0L, 0L),
@@ -220,6 +419,7 @@ test_that("exploratory pooled summaries tolerate bins with no melanoma failures"
         predicted_mss_5yr_risk = c(0.05, 0.4, 0.1, 0.3),
         tt_mets_months = c(24, 48, 36, 60),
         tt_mets_months_analysis = c(24, 48, 36, 60),
+        mets_event_analysis = c(0L, 1L, 0L, 1L),
         mets_event = c(0, 1, 0, 1),
         mets_free_at_baseline = TRUE,
         objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
@@ -257,6 +457,7 @@ test_that("exploratory pooled summaries omit unbinned predictions", {
         predicted_mss_5yr_risk = c(0.05, 0.4, 0.3),
         tt_mets_months = c(24, 48, NA_real_),
         tt_mets_months_analysis = c(24, 48, NA_real_),
+        mets_event_analysis = c(0L, 1L, NA_integer_),
         mets_event = c(0, 1, NA_integer_),
         mets_free_at_baseline = c(TRUE, TRUE, FALSE),
         objective4_mfs_event_type = c(0L, 1L, NA_integer_),
@@ -345,6 +546,7 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
             "Key_Findings_5yr",
             "Risk_Ladder_5yr",
             "No_GEP_Subgroups",
+            "Follow_Up_Context",
             "Model_Performance",
             "Parsimonious_Sensitivity",
             "Surrogate_Model_Coefficients",
@@ -365,7 +567,11 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     start_here_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Start_Here")
     key_findings_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Key_Findings_5yr")
     risk_ladder_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Risk_Ladder_5yr")
+    no_gep_subgroups_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "No_GEP_Subgroups")
+    follow_up_context_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Follow_Up_Context")
     model_performance_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "Model_Performance")
+    km_mfs_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MFS")
+    km_mss_sheet <- openxlsx::read.xlsx(results$output_paths$workbook, sheet = "KM_Corrected_MSS")
 
     expect_false(any(c("section", "item", "detail", "guide_text") %in% names(key_findings_sheet)))
     expect_false(any(c("section", "item", "detail", "guide_text") %in% names(risk_ladder_sheet)))
@@ -383,17 +589,54 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_true(all(c("section", "label", "value") %in% names(start_here_sheet)))
     expect_true(all(c("group", "n", "observed_5yr_mfs_event_rate", "median_predicted_5yr_mfs_risk") %in% names(risk_ladder_sheet)))
     expect_true(all(c(
+        "full_cohort_n", "model_evaluable_n", "incident_mfs_eligible_n", "mss_eligible_n"
+    ) %in% names(no_gep_subgroups_sheet)))
+    expect_false("n" %in% names(no_gep_subgroups_sheet))
+    expect_true(all(c(
+        "population_scope", "full_cohort_n", "model_evaluable_n",
+        "incident_mfs_eligible_n", "mfs_events_by_60mo_n",
+        "mfs_censored_before_60mo_n", "mss_eligible_n",
+        "melanoma_deaths_by_60mo_n", "competing_deaths_by_60mo_n",
+        "mss_censored_before_60mo_n"
+    ) %in% names(follow_up_context_sheet)))
+    follow_up_by_group <- follow_up_context_sheet %>%
+        dplyr::filter(.data$population_scope == "no_gep_group") %>%
+        dplyr::arrange(.data$no_gep_group)
+    expect_equal(follow_up_by_group$full_cohort_n, c(13L, 162L))
+    expect_equal(follow_up_by_group$model_evaluable_n, c(12L, 152L))
+    expect_equal(follow_up_by_group$incident_mfs_eligible_n, c(13L, 161L))
+    expect_equal(follow_up_by_group$mfs_events_by_60mo_n, c(2L, 17L))
+    expect_equal(follow_up_by_group$mfs_censored_before_60mo_n, c(10L, 67L))
+    expect_equal(follow_up_by_group$mss_eligible_n, c(13L, 162L))
+    expect_equal(follow_up_by_group$melanoma_deaths_by_60mo_n, c(1L, 11L))
+    expect_equal(follow_up_by_group$competing_deaths_by_60mo_n, c(0L, 17L))
+    expect_equal(follow_up_by_group$mss_censored_before_60mo_n, c(10L, 55L))
+    expect_true(all(c(
         "model", "model_method", "reported_risk_scale", "cv_auc",
         "cv_auc_stability_interval", "calibration_slope_stability_interval",
         "practical_read"
     ) %in% names(model_performance_sheet)))
+    expect_true(all(c(
+        "cumulative_incidence_conf_low",
+        "cumulative_incidence_conf_high",
+        "mss_probability_conf_low",
+        "mss_probability_conf_high",
+        "gray_test_global_curve_p_value",
+        "gray_test_global_curve_test_status",
+        "gray_test_global_curve_test_reason"
+    ) %in% names(km_mss_sheet)))
 
     summary_text <- paste(readLines(results$output_paths$summary), collapse = "\n")
     expect_match(summary_text, "descriptive only", fixed = TRUE)
-    expect_match(summary_text, "homogeneous intermediate-risk group", fixed = TRUE)
+    expect_match(summary_text, "wide intervals limit that comparison", fixed = TRUE)
     expect_match(summary_text, "## Follow-Up Context", fixed = TRUE)
-    expect_match(summary_text, "no-GEP scoring cohort", fixed = TRUE)
+    expect_match(summary_text, "all patients without usable GEP", fixed = TRUE)
     expect_match(summary_text, "## Key Findings at 5 Years", fixed = TRUE)
+    expect_match(summary_text, "## How to Read Predicted-Risk Thirds", fixed = TRUE)
+    expect_match(summary_text, "fitted risk from the final model", fixed = TRUE)
+    expect_match(summary_text, "not raw event proportions", fixed = TRUE)
+    expect_match(summary_text, "## Five-Year Endpoint Follow-Up", fixed = TRUE)
+    expect_match(summary_text, "censored before 60 months", fixed = TRUE)
     expect_match(summary_text, "95% repeated-partition stability interval", fixed = TRUE)
     expect_match(summary_text, "censoring weights are estimated in each outer training fold", fixed = TRUE)
     expect_match(summary_text, "60-month melanoma-death cumulative-incidence risk", fixed = TRUE)
@@ -414,8 +657,8 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_false(grepl("melanoma-specific model", reader_facing_model_text, fixed = TRUE))
     expect_match(summary_text, "## Parsimonious Sensitivity Check", fixed = TRUE)
     expect_match(summary_text, "## Retained Baseline Predictors", fixed = TRUE)
-    expect_match(summary_text, "Std. coef.", fixed = TRUE)
-    expect_match(summary_text, "ranked highly in the penalized model", fixed = TRUE)
+    expect_match(summary_text, "original-scale coefficients", fixed = TRUE)
+    expect_match(summary_text, "in-sample, not out-of-fold", fixed = TRUE)
     expect_match(summary_text, "P\\(Class 2-like \\| baseline features\\)")
     expect_match(summary_text, "Cilio-Choroidal", fixed = TRUE)
     expect_match(summary_text, "0-1 probability scale", fixed = TRUE)
@@ -449,6 +692,16 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         "weighted_cases", "weighted_controls",
         "failed_indeterminate_n", "not_tested_n", "uncertainty_method"
     ) %in% names(model_performance_sheet)))
+    expect_true(all(c(
+        "log_rank_global_curve_p_value", "log_rank_global_curve_test_status",
+        "log_rank_global_curve_test_reason"
+    ) %in% names(km_mfs_sheet)))
+    expect_true(all(c(
+        "gray_test_global_curve_p_value", "gray_test_global_curve_test_status",
+        "gray_test_global_curve_test_reason"
+    ) %in% names(km_mss_sheet)))
+    expect_equal(unique(km_mfs_sheet$log_rank_global_curve_p_value), results$mfs_analysis$global_test$p_value)
+    expect_equal(unique(km_mss_sheet$gray_test_global_curve_p_value), results$mss_analysis$gray_test$p_value)
     expect_false("model_fallback_reason" %in% names(results$direct_models$mfs$metrics))
     expect_false("model_fallback_reason" %in% names(results$direct_models$mss$metrics))
     expect_false("raw_backtest" %in% names(results$direct_models$mfs))
@@ -499,7 +752,7 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
     expect_false("predicted_mss_5yr_risk" %in% names(results$no_gep_predictions))
     expect_true(all(c("Group", "Interpretation_Note") %in% names(results$unified_no_gep_overview)))
     expect_true(all(c(
-        "Model", "Model_Method", "Reported_Risk_Scale", "Top_Predictor_1",
+        "Model", "Model_Method", "Reported_Risk_Scale", "Largest_Coefficient_1",
         "Use_Case", "CV_AUC_Stability_Lower", "CV_AUC_Stability_Upper"
     ) %in% names(results$unified_no_gep_model_comparison)))
     expect_true(all(c("No_GEP_Group", "Analysis", "Bin") %in% names(results$unified_no_gep_risk_strata)))
@@ -513,4 +766,250 @@ test_that("exploratory no-GEP report writes workbook, summary, and plots", {
         as.character(results$risk_ladder$group),
         c("Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2")
     )
+})
+
+test_that("report-native no-GEP figures reconcile to source tables", {
+    actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
+    test_output_dir <- file.path(TEST_OUTPUT_DIR, "exploratory_no_gep_figures")
+    withr::defer(unlink(test_output_dir, recursive = TRUE), teardown_env())
+    results <- run_exploratory_no_gep_report(
+        output_dir = test_output_dir,
+        verify_km_fix = FALSE,
+        data = actual_data
+    )
+
+    expect_true(file.exists(results$output_paths$subgroup_outcomes))
+    expect_true(file.exists(results$output_paths$mfs_bins))
+    expect_true(file.exists(results$output_paths$mss_bins))
+    expect_true(file.exists(results$output_paths$gep_availability))
+    expect_true(file.exists(results$output_paths$model_auc_summary))
+    expect_true(file.exists(results$output_paths$mfs_risk_ladder))
+    expect_true(file.exists(results$output_paths$mss_risk_ladder))
+    expect_true(file.exists(results$output_paths$direct_mfs_contributions))
+    expect_true(file.exists(results$output_paths$direct_mss_contributions))
+
+    subgroup_plot <- create_exploratory_no_gep_subgroup_outcomes_plot(
+        full_data = prepare_exploratory_no_gep_data(actual_data)$full_data,
+        risk_ladder = results$risk_ladder,
+        tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    subgroup_profile <- subgroup_plot$profile_data %>%
+        dplyr::mutate(no_gep_group = as.character(.data$no_gep_group)) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expected_counts <- actual_data %>%
+        dplyr::filter(.data$exploratory_gep_group %in% c("GEP Not Tested", "GEP Failed/Indeterminate")) %>%
+        dplyr::mutate(no_gep_group = as.character(.data$exploratory_gep_group)) %>%
+        dplyr::group_by(.data$no_gep_group) %>%
+        dplyr::summarise(
+            cohort_n = dplyr::n(),
+            incident_mfs_eligible_n = sum(
+                .data$mets_free_at_baseline &
+                    !is.na(.data$tt_mets_months_analysis) &
+                    !is.na(.data$mets_event_analysis),
+                na.rm = TRUE
+            ),
+            mss_eligible_n = sum(!is.na(.data$tt_death_months)),
+            .groups = "drop"
+        ) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expect_equal(
+        subgroup_profile %>%
+            dplyr::select("no_gep_group", "cohort_n", "incident_mfs_eligible_n", "mss_eligible_n"),
+        expected_counts
+    )
+    expected_outcomes <- results$risk_ladder %>%
+        dplyr::filter(.data$group %in% c("GEP Not Tested", "GEP Failed/Indeterminate")) %>%
+        dplyr::transmute(
+            no_gep_group = as.character(.data$group),
+            observed_5yr_mfs_event_rate = .data$observed_5yr_mfs_event_rate,
+            observed_5yr_mss_event_rate = .data$observed_5yr_mss_event_rate
+        ) %>%
+        dplyr::arrange(.data$no_gep_group)
+    expect_equal(
+        subgroup_profile %>%
+            dplyr::select(
+                "no_gep_group",
+                "observed_5yr_mfs_event_rate",
+                "observed_5yr_mss_event_rate"
+            ),
+        expected_outcomes,
+        tolerance = 1e-12
+    )
+    expect_lt(
+        subgroup_profile$cohort_n[subgroup_profile$no_gep_group == "GEP Failed/Indeterminate"],
+        subgroup_profile$cohort_n[subgroup_profile$no_gep_group == "GEP Not Tested"]
+    )
+    expect_setequal(
+        subgroup_plot$plot_data$metric_key,
+        c(
+            "age", "tumor_diameter", "tumor_height", "advanced_t_stage",
+            "follow_up", "mfs_risk", "melanoma_death_risk"
+        )
+    )
+
+    direct_plot_specs <- list(
+        list(
+            analysis = "Direct_MFS_5yr_Risk",
+            event_col = "observed_mfs_5yr_event_rate",
+            y_label = "5-year metastasis risk (1 - Kaplan-Meier)"
+        ),
+        list(
+            analysis = "Direct_60mo_Melanoma_Death_Cumulative_Incidence_Risk",
+            event_col = "observed_mss_5yr_event_rate",
+            y_label = "Melanoma-death cumulative incidence at 60 months"
+        )
+    )
+    for (plot_spec in direct_plot_specs) {
+        event_count_col <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") {
+            "mfs_raw_events_by_horizon"
+        } else {
+            "mss_raw_events_by_horizon"
+        }
+        direct_plot <- create_event_rate_bin_plot(
+            summary_data = results$sensitivity_summary,
+            analysis_name = plot_spec$analysis,
+            event_col = plot_spec$event_col,
+            plot_title = "Test title",
+            y_label = plot_spec$y_label,
+            event_count_col = event_count_col,
+            event_label = if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "metastasis" else "melanoma death",
+            estimate_label = if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "5-year risk" else "60-month risk",
+            caption = "Predicted-risk thirds are descriptive groups, not validated clinical cut points.",
+            highlight_higher = TRUE,
+            output_path = tempfile(fileext = ".png"),
+            return_plot = TRUE
+        )
+        expected_direct_source <- results$sensitivity_summary %>%
+            dplyr::filter(.data$analysis == plot_spec$analysis, !is.na(.data$bin)) %>%
+            dplyr::transmute(
+                risk_third = dplyr::recode(as.character(.data$bin), Low = "Lower", Intermediate = "Middle", High = "Higher"),
+                n = .data$n,
+                observed_events = .data[[event_count_col]],
+                observed_event_rate = .data[[plot_spec$event_col]]
+            ) %>%
+            dplyr::arrange(match(.data$risk_third, c("Lower", "Middle", "Higher")))
+        actual_direct_source <- direct_plot$plot_data %>%
+            dplyr::transmute(
+                risk_third = as.character(.data$risk_third),
+                n = .data$n,
+                observed_events = .data$observed_events,
+                observed_event_rate = .data$observed_event_rate
+            ) %>%
+            dplyr::arrange(match(.data$risk_third, c("Lower", "Middle", "Higher")))
+        expect_equal(actual_direct_source, expected_direct_source, tolerance = 1e-12)
+        expect_equal(as.character(direct_plot$plot_data$risk_third), c("Lower", "Middle", "Higher"))
+        expected_event_pattern <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") {
+            "metastasis|metastases"
+        } else {
+            "melanoma death|melanoma deaths"
+        }
+        expected_estimate_label <- if (plot_spec$analysis == "Direct_MFS_5yr_Risk") "5-year risk" else "60-month risk"
+        expect_true(all(grepl(
+            sprintf("^%s [0-9.]+%%\\n[0-9]+ (%s) / [0-9]+ patients$", expected_estimate_label, expected_event_pattern),
+            direct_plot$plot_data$display_label
+        )))
+    }
+
+    availability_plot <- create_exploratory_gep_availability_plot(
+        risk_ladder = results$risk_ladder,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(sum(availability_plot$plot_data$n), nrow(actual_data))
+    expect_equal(
+        availability_plot$plot_data$n[availability_plot$plot_data$availability == "No usable GEP"],
+        175L
+    )
+
+    auc_plot <- create_exploratory_model_auc_summary_plot(
+        model_performance = results$model_performance,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(round(auc_plot$plot_data$cv_auc, 3), c(0.563, 0.656, 0.603))
+    expect_true(all(auc_plot$plot_data$stability_lower <= auc_plot$plot_data$cv_auc))
+    expect_true(all(auc_plot$plot_data$stability_upper >= auc_plot$plot_data$cv_auc))
+
+    mfs_ladder_plot <- create_exploratory_fixed_horizon_risk_ladder_plot(
+        risk_ladder = results$risk_ladder,
+        horizon_summary = results$km_corrected_mfs,
+        outcome = "mfs",
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    mss_ladder_plot <- create_exploratory_fixed_horizon_risk_ladder_plot(
+        risk_ladder = results$risk_ladder,
+        horizon_summary = results$km_corrected_mss,
+        outcome = "mss",
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    expect_equal(as.character(mfs_ladder_plot$plot_data$group), c(
+        "Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2"
+    ))
+    expect_equal(as.character(mss_ladder_plot$plot_data$group), c(
+        "Class 1", "GEP Not Tested", "GEP Failed/Indeterminate", "Class 2"
+    ))
+    expect_true(all(with(
+        mfs_ladder_plot$plot_data,
+        (is.na(conf_low) & is.na(conf_high)) | (conf_low <= estimate & conf_high >= estimate)
+    )))
+    expect_true(all(with(
+        mss_ladder_plot$plot_data,
+        (is.na(conf_low) & is.na(conf_high)) | (conf_low <= estimate & conf_high >= estimate)
+    )))
+    mss_ladder_panel <- ggplot2::ggplot_build(mss_ladder_plot$plot)$layout$panel_params[[1]]
+    expect_lt(mss_ladder_panel$x.range[[1]], 0)
+    expect_lt(mss_ladder_panel$y.range[[1]], 1)
+    expect_gt(mss_ladder_panel$y.range[[2]], 4)
+
+    mss_cif_plot <- create_exploratory_mss_cif_plot(
+        data = results$mss_analysis$data,
+        analysis_fit = results$mss_analysis,
+        output_path = tempfile(fileext = ".png"),
+        return_plot = TRUE
+    )
+    mss_cif_panel <- ggplot2::ggplot_build(mss_cif_plot$plot)$layout$panel_params[[1]]
+    expect_lt(mss_cif_panel$y.range[[1]], 0)
+
+    contribution_rows <- results$predictor_contribution %>%
+        dplyr::filter(
+            .data$section == "model_contribution",
+            .data$model %in% c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+        )
+    expect_true(setequal(
+        unique(contribution_rows$model),
+        c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+    ))
+    for (model_name in unique(contribution_rows$model)) {
+        contributor_plot <- create_exploratory_no_gep_direct_model_contributions_plot(
+            contribution_table = results$predictor_contribution,
+            model_name = model_name,
+            output_path = tempfile(fileext = ".png"),
+            return_plot = TRUE
+        )
+        actual_contributor_source <- contributor_plot$plot_data %>%
+            dplyr::mutate(
+                model = as.character(.data$model),
+                predictor = as.character(.data$predictor)
+            ) %>%
+            dplyr::select("model", "predictor", "coefficient", "direction", "rank") %>%
+            dplyr::arrange(.data$model, .data$rank, .data$predictor)
+        expected_contributor_source <- contribution_rows %>%
+            dplyr::filter(.data$model == model_name) %>%
+            dplyr::mutate(
+                model = as.character(.data$model),
+                predictor = as.character(.data$predictor)
+            ) %>%
+            dplyr::select("model", "predictor", "coefficient", "direction", "rank") %>%
+            dplyr::arrange(.data$model, .data$rank, .data$predictor)
+        expect_equal(actual_contributor_source, expected_contributor_source, tolerance = 1e-12)
+        expect_false(any(contributor_plot$plot_data$model == "Surrogate Class 2 Probability"))
+        expect_false(any(grepl("_", contributor_plot$plot_data$display_label, fixed = TRUE)))
+    }
+    ranks_by_model <- split(contribution_rows$rank, contribution_rows$model)
+    expect_true(all(vapply(ranks_by_model, function(x) {
+        identical(sort(as.integer(x)), seq_len(length(x)))
+    }, logical(1))))
 })

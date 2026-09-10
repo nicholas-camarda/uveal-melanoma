@@ -580,9 +580,19 @@ Objective 4 validates imported GEP probabilities directly. It does not train a n
 
 **Role of the downstream methods:**
 - Kaplan-Meier summaries in MFS estimate observed metastasis risk from follow-up data; they are not the source of the GEP prediction.
+- All Objective 4 MFS KM paths (standard GEP, no-GEP, and poster panels) use the shared incident risk set defined by `mets_free_at_baseline`, `tt_mets_months_analysis`, and `mets_event_analysis`; raw metastasis fields remain source/audit data.
 - Primary MSS summaries use cumulative-incidence methods to estimate observed melanoma-specific death risk when non-melanoma death is handled explicitly as a competing event.
 - Legacy binary/cause-specific MSS metrics can remain in technical sidecars when useful for continuity, but they are not the manuscript-facing MSS evidence.
 - IPCW-weighted recalibration models, grouped calibration statistics, discrimination metrics, and decision-curve analysis all evaluate how well the supplied GEP predictions performed.
+
+#### Exploratory no-GEP curve contracts
+
+The exploratory no-GEP report uses one prepared endpoint dataset and one fitted object for each curve, horizon estimate, and global comparison. This keeps the plotted estimate and workbook estimate on the same risk set and estimator.
+
+- **MFS:** Kaplan–Meier `survfit()` on rows with `mets_free_at_baseline == TRUE`, finite non-negative `tt_mets_months_analysis`, and valid `mets_event_analysis`. The endpoint fit uses the full incident metastasis event indicator so curves remain valid beyond the 5-year model horizon. The plot uses the canonical censored-KM renderer, including censor marks and a numbers-at-risk table. Its global comparison is a log-rank test.
+- **MSS:** Aalen–Johansen cumulative incidence from `tidycmprsk::cuminc()` with event levels `censored`, `melanoma_death`, and `other_death`. The plot and horizon rows use the same fit; the estimate at a requested horizon is the step-function value at or immediately before that time. Its global comparison is Gray’s test for melanoma death.
+- **Workbook-only p-values:** The MFS sheet uses `log_rank_global_curve_p_value` with its status and reason fields; the MSS sheet uses `gray_test_global_curve_p_value` with its status and reason fields. These fields are global across follow-up, not horizon-specific, and are intentionally not printed on the curve PNGs.
+- **Insufficient support:** If a global comparison cannot be evaluated (for example, fewer than two analyzable groups or insufficient event support), the corresponding p-value is `NA` and the status/reason fields explain why. Figure generation still completes.
 
 For a workbook-first overview written for non-statistical readers, see [Understanding GEP Analysis](INTERPRETATION_GUIDE.md#understanding-gep-analysis) and [GEP Quick Read](INTERPRETATION_GUIDE.md#gep-quick-read).
 
@@ -1178,7 +1188,9 @@ To quantify internal-validation stability without introducing a larger baseline 
 
 In addition, the workflow fits a pre-specified parsimonious direct-model sensitivity analysis using `age_at_diagnosis`, `initial_tumor_diameter`, `location`, and `initial_t_stage_simple` when those variables survive screening. These parsimonious models are used only to check whether the no-GEP subgroup ordering is robust to a lower-complexity baseline specification.
 
-The coefficient tables in this report are ridge-shrunken design-matrix coefficients at `lambda.min`. They are included for directionality and relative contribution ranking, not p-value-based inference.
+The coefficient tables report ridge-shrunken log-odds coefficients at `lambda.min` on the original design-matrix scale. Although glmnet standardizes predictors internally, its extracted coefficients are returned in their original units. Magnitudes depend on units and factor coding and must not be interpreted as standardized variable importance or p-value-based inference. The predictor summary retains the largest absolute term per predictor; the coefficient tabs retain all terms and factor reference levels.
+
+The no-GEP risk thirds group final-model fitted predictions, not held-out predictions. Their observed censoring-aware group rates are descriptive, in-sample summaries and can show optimistic separation. Internal-validation claims rely on the separately reported out-of-fold performance, not the risk-third plots.
 
 For clarity, the surrogate model is not trying to reconstruct the molecular assay itself. It uses patients with known definitive GEP labels as a definitive-GEP reference set, learns what the observed baseline clinicopathologic patterns of the Class 1 and Class 2 groups look like in this cohort, and then outputs for each no-GEP patient the probability that their baseline profile more closely resembles the observed Class 2 pattern than the observed Class 1 pattern. This is best interpreted as a clinical resemblance score anchored to the known definitive-GEP patients.
 

@@ -64,6 +64,42 @@ test_that("standalone tools use the canonical workspace runtime", {
     )
 })
 
+test_that("Objective 4 no-GEP exporter exposes every review-facing artifact", {
+    export_env <- new.env(parent = baseenv())
+    sys.source(
+        here::here("scripts", "tools", "export_gep_objective4_to_downloads.R"),
+        envir = export_env
+    )
+
+    manifest <- export_env$build_exploratory_no_gep_export_manifest(
+        tempfile("objective4-root-"),
+        "full_cohort_"
+    )
+
+    expect_setequal(
+        names(manifest),
+        c(
+            "no_gep_workbook",
+            "no_gep_summary",
+            "no_gep_mfs_km",
+            "no_gep_mss_cif",
+            "no_gep_surrogate_density",
+            "no_gep_mfs_density",
+            "no_gep_mss_density",
+            "no_gep_surrogate_bins",
+            "no_gep_mfs_bins",
+            "no_gep_mss_bins",
+            "no_gep_subgroup_outcomes",
+            "no_gep_availability",
+            "no_gep_model_auc_summary",
+            "no_gep_mfs_risk_ladder",
+            "no_gep_mss_risk_ladder",
+            "no_gep_direct_mfs_contributions",
+            "no_gep_direct_mss_contributions"
+        )
+    )
+})
+
 test_that("portable path tools do not embed a maintainer home directory", {
     tool_paths <- c(
         here::here("scripts", "tools", "browse_diagnostics.R"),

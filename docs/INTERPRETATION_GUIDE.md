@@ -668,8 +668,8 @@ Use this reading order:
   - By complement, `1 - surrogate_class2_probability` is the implied `Class 1-like` probability within that surrogate only.
   - Neither number is the probability of the patient's true molecular assay result.
 2. Read `Predictor_Contribution`.
-  - This tab shows which retained baseline predictors are doing the most work in the exploratory models.
-  - Larger absolute ridge coefficients mean stronger contribution to the model's risk ordering, not stronger statistical proof.
+  - This tab reports the largest absolute original-scale term coefficient for each retained predictor, with its sign and reference category.
+  - Coefficient magnitudes depend on units and factor coding. Their ordering is not standardized variable importance or statistical proof; the coefficient tabs retain all fitted terms.
 3. Check `Risk_Ladder_5yr`.
   - This sheet compares definitive `Class 1`, `GEP Not Tested`, `GEP Failed/Indeterminate`, and definitive `Class 2` on the same 5-year descriptive scale.
   - Use it to support statements about whether the no-GEP groups sit between the definitive GEP groups overall.
@@ -698,6 +698,8 @@ How to interpret the exploratory plots:
 - Corrected KM/CIF plots:
   - These show where `GEP Failed/Indeterminate` and `GEP Not Tested` sit relative to definitive `Class 1` and `Class 2`.
   - Curves between definitive `Class 1` and `Class 2` support an overall between-group interpretation, but inspect `GEP Failed/Indeterminate` and `GEP Not Tested` separately before calling the whole no-GEP population “intermediate risk.”
+  - The corrected MFS figure is a Kaplan–Meier estimate from the same endpoint-specific risk set used for the workbook rows. Censor marks and the numbers-at-risk table are part of the display; the global log-rank p-value is reported in the workbook only.
+  - The corrected MSS figure is an Aalen–Johansen cumulative-incidence estimate from the same endpoint-specific competing-risk fit used for the workbook rows. Melanoma death is the event of interest and other-cause death remains a competing event; the global Gray-test p-value is reported in the workbook only.
 - Density plots:
   - A right-shifted density means the subgroup is receiving higher predicted probability overall.
   - If `GEP Failed/Indeterminate` is shifted to the right of `GEP Not Tested`, it suggests the failed group is clinically higher risk on the retained baseline features.
@@ -712,6 +714,15 @@ Plain-English bottom line:
 - If you want the opposite resemblance score, use `1 - surrogate_class2_probability`, but call it `Class 1-like` probability rather than true `Class 1` probability.
 - It should not be used to claim true molecular reclassification.
 - Group-level separation is usually more reliable than any single patient-level probability.
+
+#### Curve-comparison fields in the no-GEP workbook
+
+The `KM_Corrected_MFS` and `KM_Corrected_MSS` sheets repeat one global curve-comparison result on their horizon rows so that the result is easy to find alongside the estimates. The field names carry the scope directly:
+
+- `log_rank_global_curve_p_value`, `log_rank_global_curve_test_status`, and `log_rank_global_curve_test_reason` belong to the MFS Kaplan–Meier comparison.
+- `gray_test_global_curve_p_value`, `gray_test_global_curve_test_status`, and `gray_test_global_curve_test_reason` belong to the MSS competing-risk comparison.
+
+These are not separate p-values for each horizon or subgroup. A missing p-value with a non-`ok` status is an explicit unsupported comparison, not a zero and not a failed figure. No curve PNG prints a p-value; use the workbook fields for the formal comparison result.
 
 ### Shared Conventions
 

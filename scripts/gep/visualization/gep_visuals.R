@@ -1171,6 +1171,8 @@ create_single_outcome_performance_plot <- function(results, outcome_type, output
 create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = NULL, group_var = "biopsy1_gep", model_group_var = group_var, dataset_name = "GEP Validation", output_dirs = NULL) {
     logger::log_info("Creating MFS survival curves by GEP class using existing survival analysis infrastructure")
 
+    incident_data <- prepare_incident_mfs_km_data(data)
+
     gep_prame_display_order <- c(
         "Class 1 PRAME Negative",
         "Class 1 PRAME Positive",
@@ -1203,9 +1205,9 @@ create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = N
     km_result <- tryCatch(
         {
             analyze_time_to_event_outcomes(
-                data = data,
-                time_var = "tt_mets_months",
-                event_var = "mets_event",
+                data = incident_data,
+                time_var = "tt_mets_months_analysis",
+                event_var = "mets_event_analysis",
                 group_var = group_var,
                 model_group_var = model_group_var,
                 confounders = confounders,
@@ -1272,13 +1274,10 @@ create_mfs_survival_curves <- function(data, output_dir, prefix, confounders = N
 create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix, dataset_name = "GEP Validation", confounders = NULL, output_dirs = NULL) {
     logger::log_info("Creating binary simple-GEP MFS survival analysis using the standard survival workflow")
 
-    plot_data <- data %>%
+    plot_data <- prepare_incident_mfs_km_data(data) %>%
         dplyr::filter(
             !is.na(.data$gep_class_simple),
-            .data$gep_class_simple %in% c("Class 1", "Class 2"),
-            !is.na(.data$tt_mets_months),
-            !is.na(.data$mets_event),
-            .data$tt_mets_months >= 0
+            .data$gep_class_simple %in% c("Class 1", "Class 2")
         ) %>%
         dplyr::mutate(
             gep_class_simple = factor(
@@ -1297,7 +1296,7 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
         dplyr::group_by(.data$gep_class_simple) %>%
         dplyr::summarise(
             n = dplyr::n(),
-            metastasis_events = sum(.data$mets_event == 1, na.rm = TRUE),
+            metastasis_events = sum(.data$mets_event_analysis == 1, na.rm = TRUE),
             .groups = "drop"
         )
     logger::log_info(sprintf(
@@ -1335,8 +1334,8 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
         {
             analyze_time_to_event_outcomes(
                 data = plot_data,
-                time_var = "tt_mets_months",
-                event_var = "mets_event",
+                time_var = "tt_mets_months_analysis",
+                event_var = "mets_event_analysis",
                 group_var = "gep_class_simple",
                 model_group_var = "gep_class_simple",
                 confounders = confounders,
@@ -1394,12 +1393,21 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #' @param return_plot When `TRUE`, returns the assembled plot objects for
 #'   verification or testing instead of only writing files.
 #' @param save_plot When `FALSE`, skips writing the PNG to disk.
+#' @param time_var Character name of the endpoint-specific follow-up-time
+#'   column. Defaults to the centralized incident-MFS analysis field.
+#' @param event_var Character name of the endpoint-specific event column.
+#' @param display_group_var Optional precomputed display-group column.
+#' @param display_levels Optional display order for the groups.
+#' @param show_p_value Logical; when `FALSE`, omit the p-value annotation from
+#'   the plot while retaining the fit in the returned contract.
+#' @param surv_fit Optional precomputed `survfit` object to reuse for the plot.
 #'
-#' @return Invisibly returns `NULL` after saving plots, or a list of plot
-#'   objects when `return_plot = TRUE`.
-create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE) {
-    target_levels <- c("Class 1", "Class 2", "GEP Not Tested")
-    if (isTRUE(include_failed_indeterminate)) {
+#' @return Invisibly returns `NULL` after saving plots, or a list containing the
+#'   plot, shared fit, plot data, and p-value-annotation flag when
+#'   `return_plot = TRUE`.
+create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months_analysis", event_var = "mets_event_analysis", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
+    target_levels <- display_levels %||% c("Class 1", "Class 2", "GEP Not Tested")
+    if (is.null(display_levels) && isTRUE(include_failed_indeterminate)) {
         target_levels <- c(target_levels, "GEP Failed/Indeterminate")
     }
 
@@ -1410,31 +1418,51 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
     }
     logger::log_info(sprintf("Creating %s MFS survival curves", plot_label))
 
-    plot_data <- data %>%
-        dplyr::mutate(
-            gep_km_simple = dplyr::case_when(
-                .data$biopsy1_gep == "GEP Not Tested" ~ "GEP Not Tested",
-                isTRUE(include_failed_indeterminate) & .data$biopsy1_gep == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",
-                .data$gep_class_simple %in% c("Class 1", "Class 2") ~ as.character(.data$gep_class_simple),
-                TRUE ~ NA_character_
+    plot_data <- prepare_incident_mfs_km_data(data)
+    if (!identical(time_var, "tt_mets_months_analysis") || !identical(event_var, "mets_event_analysis")) {
+        stop(
+            "Collapsed Objective 4 MFS KM requires tt_mets_months_analysis and mets_event_analysis.",
+            call. = FALSE
+        )
+    }
+    group_var <- "gep_km_simple"
+    if (is.null(display_group_var)) {
+        plot_data <- plot_data %>%
+            dplyr::mutate(
+                gep_km_simple = dplyr::case_when(
+                    .data$biopsy1_gep == "GEP Not Tested" ~ "GEP Not Tested",
+                    isTRUE(include_failed_indeterminate) & .data$biopsy1_gep == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",
+                    .data$gep_class_simple %in% c("Class 1", "Class 2") ~ as.character(.data$gep_class_simple),
+                    TRUE ~ NA_character_
+                )
             )
-        ) %>%
+    } else {
+        if (!display_group_var %in% names(plot_data)) {
+            stop(sprintf("MFS display group column is missing: %s", display_group_var), call. = FALSE)
+        }
+        group_var <- display_group_var
+    }
+
+    if (!time_var %in% names(plot_data) || !event_var %in% names(plot_data)) {
+        stop(sprintf("MFS analysis columns are missing: %s, %s", time_var, event_var), call. = FALSE)
+    }
+
+    plot_data <- plot_data %>%
         dplyr::filter(
-            !is.na(.data$gep_km_simple),
-            !is.na(.data$tt_mets_months),
-            !is.na(.data$mets_event),
-            .data$tt_mets_months >= 0
+            !is.na(.data[[group_var]]),
+            !is.na(.data[[time_var]]),
+            !is.na(.data[[event_var]]),
+            is.finite(suppressWarnings(as.numeric(.data[[time_var]]))),
+            suppressWarnings(as.numeric(.data[[time_var]])) >= 0
         ) %>%
         dplyr::mutate(
-            gep_km_simple = factor(
-                .data$gep_km_simple,
-                levels = target_levels
-            )
+            !!group_var := factor(as.character(.data[[group_var]]), levels = target_levels)
         ) %>%
+        dplyr::filter(!is.na(.data[[group_var]])) %>%
         as.data.frame()
 
-    present_levels <- levels(droplevels(plot_data$gep_km_simple))
-    if (nrow(plot_data) == 0 || length(unique(stats::na.omit(plot_data$gep_km_simple))) < 2) {
+    present_levels <- levels(droplevels(plot_data[[group_var]]))
+    if (nrow(plot_data) == 0 || length(unique(stats::na.omit(plot_data[[group_var]]))) < 2) {
         logger::log_warn(sprintf("Insufficient data/groups for %s MFS survival curves", plot_label))
         return(invisible(NULL))
     }
@@ -1442,18 +1470,17 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
     logger::log_info(sprintf(
         "Collapsed MFS KM groups (%s): %s",
         plot_label,
-        paste(
-            capture.output(print(table(plot_data$gep_km_simple, useNA = "no"))),
+            paste(
+            capture.output(print(table(plot_data[[group_var]], useNA = "no"))),
             collapse = " "
         )
     ))
 
-    surv_fit <- survival::survfit(
-        survival::Surv(tt_mets_months, mets_event) ~ gep_km_simple,
-        data = plot_data
-    )
+    surv_formula <- stats::as.formula(sprintf("survival::Surv(%s, %s) ~ %s", time_var, event_var, group_var))
+    surv_fit <- surv_fit %||% survival::survfit(surv_formula, data = plot_data)
+    surv_fit$call$formula <- surv_formula
 
-    raw_max_time <- max(plot_data$tt_mets_months, na.rm = TRUE)
+    raw_max_time <- max(suppressWarnings(as.numeric(plot_data[[time_var]])), na.rm = TRUE)
     max_time <- min(raw_max_time, SURVIVAL_XAXIS_MAX_MONTHS)
     base_by <- if (max_time <= 60) 6 else 12
     x_breaks <- seq(0, ceiling(max_time / base_by) * base_by, by = base_by)
@@ -1465,7 +1492,7 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
         palette = unname(color_palette),
         risk.table = TRUE,
         conf.int = FALSE,
-        pval = TRUE,
+        pval = show_p_value,
         pval.size = 6 * plot_scale,
         title = paste("Kaplan-Meier Survival Curves", "Metastasis-Free Survival Probability", sep = "\n"),
         subtitle = paste(
@@ -1657,6 +1684,8 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
             plot = surv_plot,
             combined_plot = combined_km,
             plot_data = plot_data,
+            fit = surv_fit,
+            p_value_annotation = isTRUE(show_p_value),
             present_levels = present_levels,
             output_path = output_path
         ))
@@ -1725,6 +1754,69 @@ create_mfs_four_group_survival_curves <- function(data, output_dir, prefix, data
         return_plot = return_plot,
         save_plot = save_plot
     )
+}
+
+#' Build a shared cumulative-incidence curve plot
+#'
+#' @param ci_obj A `tidycuminc` competing-risk fit.
+#' @param outcome Outcome level to display.
+#' @param title Plot title.
+#' @param subtitle Plot subtitle.
+#' @param xlab X-axis label.
+#' @param ylab Y-axis label.
+#' @param color_title Legend title.
+#' @param palette Named color vector.
+#' @param xlim Numeric x-axis limits.
+#' @param caption Optional initial caption.
+#'
+#' @return A styled `ggplot` cumulative-incidence plot.
+build_cif_curve_plot <- function(ci_obj, outcome, title, subtitle, xlab, ylab, color_title, palette, xlim, caption = NULL) {
+    # CIFs are bounded at zero. A small view-only margin keeps a true zero
+    # curve visible without changing estimates, limits, or tick labels.
+    y_baseline_padding <- 0.02
+    p <- ggsurvfit::ggcuminc(ci_obj, outcome = outcome)
+    p$layers <- lapply(p$layers, function(layer) {
+        layer$aes_params$na.rm <- TRUE
+        layer$geom_params$na.rm <- TRUE
+        layer$stat_params$na.rm <- TRUE
+        layer
+    })
+    p <- remove_plot_scales(p, aesthetics = c("colour", "color", "x", "y")) +
+        ggplot2::labs(
+            title = title,
+            subtitle = subtitle,
+            x = xlab,
+            y = ylab,
+            color = color_title,
+            caption = caption
+        ) +
+        ggplot2::theme_classic() +
+        ggplot2::theme(
+            plot.background = ggplot2::element_rect(fill = "white"),
+            panel.background = ggplot2::element_rect(fill = "white"),
+            plot.title = ggplot2::element_text(size = 16, face = "bold", lineheight = 1.05),
+            plot.subtitle = ggplot2::element_text(size = 12, color = "darkgray"),
+            plot.caption = ggplot2::element_text(size = 10.5, color = "darkgray", hjust = 0, lineheight = 1.1),
+            legend.position = "bottom",
+            legend.title = ggplot2::element_text(face = "bold", size = 12),
+            legend.text = ggplot2::element_text(size = 11),
+            axis.title = ggplot2::element_text(size = 13.5),
+            axis.text = ggplot2::element_text(size = 11.5),
+            axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5),
+            axis.ticks.x = ggplot2::element_line(color = "black", linewidth = 0.5)
+        ) +
+        ggplot2::scale_color_manual(values = palette) +
+        ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.02))) +
+        ggplot2::scale_y_continuous(
+            expand = ggplot2::expansion(mult = c(0, 0.04)),
+            labels = scales::label_percent(accuracy = 1)
+        ) +
+        ggplot2::coord_cartesian(
+            xlim = xlim,
+            ylim = c(-y_baseline_padding, 1)
+        )
+
+    p
 }
 
 #' Create MSS cumulative incidence curves using ggsurvfit
@@ -1901,58 +1993,32 @@ create_mss_cumulative_incidence_curves <- function(data, timepoint, output_dir, 
         }
     }
 
-    # Use ggsurvfit's ggcuminc function for much simpler CIF plotting
-    # This automatically handles axis formatting and prevents the "48" tick mark issue
-
-    # Create the CIF plot using ggcuminc with tidycmprsk
-    # First create the competing risks object with tidycmprsk::cuminc
+    # Create the CIF fit once for the existing GEP-specific workflow, then use
+    # the shared renderer for the reader-facing curve assembly.
     ci_obj <- tidycmprsk::cuminc(
         formula = as.formula(paste("Surv(", time_var_char, ",", event_type_var_char, ") ~", group_var_char)),
         data = surv_data
     )
-    
-    # Then use ggcuminc to plot it
-    p <- ggcuminc(ci_obj, outcome = "Melanoma Death")
-    p <- remove_plot_scales(p, aesthetics = c("colour", "color", "x", "y"))
-    p <- p + # Focus on melanoma death
-        ggplot2::labs(
-            title = plot_title,
-            subtitle = sprintf(
-                "Competing Risks Analysis: %d patients, %d melanoma deaths",
-                nrow(surv_data),
-                melanoma_death_total
-            ),
-            x = "Time (years)",
-            y = "Cumulative Incidence of Melanoma Death",
-            color = grouping_spec$legend_title,
-            caption = if (simplified_display) {
-                "Display curves use simplified Class 1 vs Class 2 grouping for readability.\nTechnical competing-risk model summaries remain available in the companion workbook."
-            } else {
-                "Fine-Gray subdistribution hazard ratios shown for significant associations\n* p < 0.05 indicates significant difference"
-            }
-        ) +
-        ggplot2::theme_classic() +
-        ggplot2::theme(
-            plot.background = ggplot2::element_rect(fill = "white"),
-            panel.background = ggplot2::element_rect(fill = "white"),
-            plot.title = ggplot2::element_text(size = 16, face = "bold", lineheight = 1.05),
-            plot.subtitle = ggplot2::element_text(size = 12, color = "darkgray"),
-            plot.caption = ggplot2::element_text(size = 10.5, color = "darkgray", hjust = 0, lineheight = 1.1),
-            legend.position = "bottom",
-            legend.title = ggplot2::element_text(face = "bold", size = 12),
-            legend.text = ggplot2::element_text(size = 11),
-            axis.title = ggplot2::element_text(size = 13.5),
-            axis.text = ggplot2::element_text(size = 11.5),
-            axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5),
-            axis.ticks.x = ggplot2::element_line(color = "black", linewidth = 0.5)
-        ) +
-        ggplot2::scale_color_manual(values = get_palette_by_variable(group_var_char, unique(surv_data[[group_var_char]]))) +
-        ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0, 0.02))) +
-        ggplot2::scale_y_continuous(
-            expand = ggplot2::expansion(mult = c(0, 0.04)),
-            labels = scales::label_percent(accuracy = 1)
-        ) +
-        ggplot2::coord_cartesian(xlim = c(0, timepoint), expand = FALSE) # Limit to timepoint in years with tighter margins
+    p <- build_cif_curve_plot(
+        ci_obj = ci_obj,
+        outcome = "Melanoma Death",
+        title = plot_title,
+        subtitle = sprintf(
+            "Competing Risks Analysis: %d patients, %d melanoma deaths",
+            nrow(surv_data),
+            melanoma_death_total
+        ),
+        xlab = "Time (years)",
+        ylab = "Cumulative Incidence of Melanoma Death",
+        color_title = grouping_spec$legend_title,
+        palette = get_palette_by_variable(group_var_char, unique(surv_data[[group_var_char]])),
+        xlim = c(0, timepoint),
+        caption = if (simplified_display) {
+            "Display curves use simplified Class 1 vs Class 2 grouping for readability.\nTechnical competing-risk model summaries remain available in the companion workbook."
+        } else {
+            "Fine-Gray subdistribution hazard ratios shown for significant associations\n* p < 0.05 indicates significant difference"
+        }
+    )
 
     caption_lines <- character()
 
