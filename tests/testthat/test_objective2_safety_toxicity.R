@@ -2,6 +2,20 @@ build_objective2_output_dirs <- function(test_output_dir) {
     build_subdivided_output_dirs(test_output_dir, "^obj2_")
 }
 
+test_that("Objective 2 toxicity routing uses canonical route directories", {
+    function_text <- paste(
+        deparse(analyze_radiation_complications),
+        collapse = "\n"
+    )
+
+    expect_false(grepl("output_dir <- switch", function_text, fixed = TRUE))
+    expect_true(grepl("route_prefix <- switch", function_text, fixed = TRUE))
+    expect_equal(
+        length(gregexpr("resolve_route_output_dir", function_text, fixed = TRUE)[[1]]),
+        3L
+    )
+})
+
 test_that("visual-acuity timing summary exports quartile endpoints and IQR", {
     data <- tibble::tibble(
         treatment_group = factor(
