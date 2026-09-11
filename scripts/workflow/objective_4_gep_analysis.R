@@ -114,13 +114,6 @@ run_objective_4 <- function(data, dataset_name, output_dirs, prefix, confounders
             output_dir = gep_base_dir,
             prefix = prefix
         )
-        # Create unified visualization (no survival curves here; per-outcome only)
-        create_unified_gep_visuals(
-            mfs_results = mfs_gep_results,
-            mss_results = mss_gep_results,
-            output_dir = file.path(gep_base_dir, "unified_summary"),
-            prefix = prefix
-        )
         # Unified artifacts only; no post-hoc file moving
         TRUE
     }, error = function(e) {

@@ -257,13 +257,27 @@ read_json_artifact <- function(path) {
     jsonlite::read_json(path, simplifyVector = FALSE)
 }
 
-#' Read a UTF-8 text artifact as its exact sequence of lines.
+#' Read a UTF-8 text artifact and normalize generated timestamp metadata only.
 #'
 #' @param path Path to a text artifact.
-#' @return Character vector containing the artifact lines.
+#' @return Character vector containing the artifact lines, with only complete
+#'   generated timestamp metadata lines replaced by a stable marker.
 #' @noRd
 read_text_artifact <- function(path) {
-    readLines(path, warn = FALSE, encoding = "UTF-8")
+    lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+    timestamp_pattern <- paste0(
+        "^(Analysis completed|Test Date):[[:space:]]+",
+        "[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}",
+        "([ T][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?",
+        "([[:space:]]*(UTC|Z))?)?[[:space:]]*$"
+    )
+    unname(vapply(lines, function(line) {
+        if (grepl(timestamp_pattern, line, perl = TRUE)) {
+            sub(":[[:space:]].*$", ": <generated timestamp>", line)
+        } else {
+            line
+        }
+    }, character(1)))
 }
 
 #' Read one XML member from an OOXML archive with temporary extraction cleanup.

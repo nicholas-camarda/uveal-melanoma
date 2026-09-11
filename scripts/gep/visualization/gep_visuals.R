@@ -100,24 +100,6 @@ create_mss_gep_visuals <- function(mss_results, mss_data, output_dir, prefix, gr
     invisible(NULL)
 }
 
-#' Create unified GEP visuals across outcomes (no survival curves)
-#'
-#' Produces combined calibration, discrimination, and performance visuals when
-#' both outcomes are available.
-#'
-#' @param mfs_results list MFS results
-#' @param mss_results list MSS results
-#' @param output_dir character Unified directory
-#' @param prefix character Filename prefix
-create_unified_gep_visuals <- function(mfs_results, mss_results, output_dir, prefix) {
-    if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-    # create_combined_calibration_plot(mfs_results, mss_results, output_dir, prefix)
-    # create_combined_discrimination_plot(mfs_results, mss_results, output_dir, prefix)
-    # REMOVED: Redundant performance comparison plot that duplicates discrimination metrics
-    # create_performance_comparison_plot(mfs_results, mss_results, output_dir, prefix)
-    invisible(NULL)
-}
-
 #' Create a PRAME incremental-value delta-C plot
 #'
 #' Save one outcome-specific dot-and-whisker plot showing the delta Harrell's C
@@ -762,23 +744,6 @@ create_decision_curve_plot <- function(results, outcome_type, output_dir, prefix
         logger::log_info(sprintf("Skipping %s decision curve: no valid DCA data available", outcome_type))
     }
     invisible(NULL)
-}
-
-#' Create integrated GEP visualizations
-#'
-#' Produces combined calibration, discrimination, and performance comparison
-#' visuals across outcomes (MFS/MSS) in the specified directory.
-#'
-#' @param mfs_results list|NULL MFS validation results (or NULL).
-#' @param mss_results list|NULL MSS validation results (or NULL).
-#' @param output_dir character Directory for the combined visuals.
-#' @param prefix character Filename prefix for saved PNGs.
-#' @return Invisibly returns NULL after writing files.
-create_integrated_gep_visuals <- function(mfs_results, mss_results, output_dir, prefix) {
-    logger::log_info("Creating integrated GEP visualizations")
-    # create_combined_calibration_plot(mfs_results, mss_results, output_dir, prefix)
-    # create_combined_discrimination_plot(mfs_results, mss_results, output_dir, prefix)
-    # create_performance_comparison_plot(mfs_results, mss_results, output_dir, prefix)
 }
 
 #' Create combined calibration plot across outcomes
