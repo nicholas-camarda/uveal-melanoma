@@ -212,6 +212,63 @@ test_that("comparator passes exact and tolerance-compatible synthetic artifacts"
     expect_false(grepl("unit-a|unit-b|1\\.000|1e-13", paste(readLines(report_file), collapse = "\n")))
 })
 
+test_that("comparator ignores only generated timestamp metadata in text artifacts", {
+    if (!require_file_for_contract_test(comparator_path)) {
+        return(invisible(NULL))
+    }
+
+    test_root <- withr::local_tempdir("important-results-timestamp-")
+    base_runtime <- file.path(test_root, "base")
+    candidate_runtime <- file.path(test_root, "candidate")
+    for (root in c(base_runtime, candidate_runtime)) {
+        dir.create(file.path(root, "text"), recursive = TRUE, showWarnings = FALSE)
+    }
+
+    writeLines(
+        c(
+            "Analysis completed: 2026-09-11 08:54:45",
+            "Test Date: 2026-09-11",
+            "Estimate: 1.000"
+        ),
+        file.path(base_runtime, "text", "summary.txt")
+    )
+    writeLines(
+        c(
+            "Analysis completed: 2026-09-11 08:55:12",
+            "Test Date: 2026-09-12",
+            "Estimate: 1.000"
+        ),
+        file.path(candidate_runtime, "text", "summary.txt")
+    )
+
+    contract_file <- file.path(test_root, "contract.yaml")
+    yaml::write_yaml(
+        list(
+            version = 1L,
+            numeric_tolerance = list(absolute = 1e-12, relative = 1e-10),
+            comparisons = list(
+                list(id = "timestamped-summary", type = "text", path = "text/summary.txt")
+            )
+        ),
+        contract_file
+    )
+    report_file <- file.path(test_root, "report.json")
+
+    exit_code <- system2(
+        "Rscript",
+        c(
+            comparator_path,
+            "--base-runtime", base_runtime,
+            "--candidate-runtime", candidate_runtime,
+            "--contract", contract_file,
+            "--report", report_file
+        )
+    )
+    expect_identical(exit_code, 0L)
+    report <- jsonlite::read_json(report_file, simplifyVector = FALSE)
+    expect_identical(report$status, "pass")
+})
+
 test_that("comparator rejects displayed, ordered-cohort, formula, and missing-artifact changes", {
     if (!require_file_for_contract_test(comparator_path)) {
         return(invisible(NULL))
