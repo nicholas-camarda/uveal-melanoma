@@ -6,6 +6,21 @@ build_objective4_output_dirs <- function(test_output_dir) {
     )
 }
 
+test_that("Objective 4 does not retain the no-op unified-visuals path", {
+    workflow_text <- paste(
+        readLines(here::here("scripts", "workflow", "objective_4_gep_analysis.R"), warn = FALSE),
+        collapse = "\n"
+    )
+    visualization_text <- paste(
+        readLines(here::here("scripts", "gep", "visualization", "gep_visuals.R"), warn = FALSE),
+        collapse = "\n"
+    )
+
+    expect_false(grepl("create_unified_gep_visuals(", workflow_text, fixed = TRUE))
+    expect_false(grepl("create_unified_gep_visuals <- function", visualization_text, fixed = TRUE))
+    expect_false(grepl("create_integrated_gep_visuals <- function", visualization_text, fixed = TRUE))
+})
+
 test_that("Objective 4 simple validation works on synthetic data", {
     test_output_dir <- file.path(TEST_OUTPUT_DIR, "objective4_simple_validation")
     output_dirs <- build_objective4_output_dirs(test_output_dir)
