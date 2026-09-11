@@ -1,3 +1,21 @@
+test_that("Objective 3 documentation names the owning PFS-2 analysis file", {
+    technical_text <- paste(
+        readLines(here::here("docs", "TECHNICAL.md"), warn = FALSE),
+        collapse = "\n"
+    )
+
+    expect_match(
+        technical_text,
+        "`analyze_pfs2()` is implemented in `scripts/analysis/survival_outcomes.R`",
+        fixed = TRUE
+    )
+    expect_false(grepl(
+        "`analyze_pfs2()` is implemented in `scripts/workflow/objective_3_repeat_radiation.R`",
+        technical_text,
+        fixed = TRUE
+    ))
+})
+
 test_that("documentation keeps Objective 2d aligned with the inclusive SRD endpoint", {
     objectives_text <- paste(readLines(here::here("docs", "OBJECTIVES.md"), warn = FALSE), collapse = "\n")
     technical_text <- paste(readLines(here::here("docs", "TECHNICAL.md"), warn = FALSE), collapse = "\n")
