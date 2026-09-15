@@ -509,9 +509,7 @@ validate_endpoint_chronology_contract <- function(data, cohort_name) {
         "tt_mets_months", "tt_mets_months_analysis",
         "tt_death_months", "tt_death_months_analysis",
         "tt_pfs_months", "tt_pfs_months_analysis",
-        "tt_pfs2_months", "tt_pfs2_years",
-        "tt_mfs_5yr", "tt_mfs_7yr", "tt_mfs_10yr",
-        "tt_mss_5yr", "tt_mss_7yr", "tt_mss_10yr"
+        "tt_pfs2_months", "tt_pfs2_years"
     )
     present_fields <- intersect(endpoint_time_fields, names(data))
 
@@ -912,30 +910,31 @@ validate_objective4_gep_derivation_contract <- function(data, cohort_name) {
         expected_survival <- ifelse(!is.na(source_probability), source_probability^(horizon_years / 5), NA_real_)
         expected_risk <- 1 - expected_survival
         if (identical(outcome, "mfs")) {
-            expected_event <- ifelse(
-                !data$mets_free_at_baseline,
-                NA_integer_,
-                ifelse(data$mets_event_analysis == 1 & data$tt_mets_months_analysis <= horizon_months, 1L, 0L)
-            )
             expected_type <- dplyr::case_when(
-                !data$mets_free_at_baseline ~ NA_integer_,
-                is.na(data$mets_event_analysis) | is.na(data$tt_mets_months_analysis) ~ NA_integer_,
-                data$mets_event_analysis == 1 & data$tt_mets_months_analysis <= horizon_months ~ 1L,
-                !is.na(data$death_event) & data$death_event == 1 & !is.na(data$tt_death_years) & data$tt_death_years <= horizon_years & !is.na(data$melanoma_death_event) & data$melanoma_death_event == 0 ~ 2,
-                TRUE ~ 0
+                !data$mets_free_at_baseline | is.na(data$mets_event_analysis) |
+                    is.na(data$tt_mets_months_analysis) ~ NA_integer_,
+                data$mets_event_analysis == 1L ~ 1L,
+                TRUE ~ 0L
             )
-            expected_time <- pmin(data$tt_mets_months_analysis, horizon_months)
+            expected_event <- derive_fixed_horizon_binary_outcome(
+                data$tt_mets_months_analysis, expected_type, horizon_months
+            )
+            expected_time <- data$tt_mets_months_analysis
             expected_eligible <- definitive_gep & valid_mfs & data$mets_free_at_baseline &
                 !is.na(data$tt_mets_months_analysis) & !is.na(data$mets_event_analysis) &
                 data$tt_mets_months_analysis >= 0
         } else {
-            expected_event <- ifelse(data$melanoma_death_event == 1 & data$tt_death_years <= horizon_years, 1, 0)
             expected_type <- dplyr::case_when(
-                !is.na(data$melanoma_death_event) & data$melanoma_death_event == 1 & !is.na(data$tt_death_years) & data$tt_death_years <= horizon_years ~ 1L,
-                !is.na(data$competing_death_event) & data$competing_death_event == 1 & !is.na(data$tt_death_years) & data$tt_death_years <= horizon_years ~ 2L,
+                is.na(data$tt_death_months) | is.na(data$melanoma_death_event) |
+                    is.na(data$competing_death_event) ~ NA_integer_,
+                data$melanoma_death_event == 1L ~ 1L,
+                data$competing_death_event == 1L ~ 2L,
                 TRUE ~ 0L
             )
-            expected_time <- pmin(data$tt_death_years, horizon_years)
+            expected_event <- derive_fixed_horizon_binary_outcome(
+                data$tt_death_months, expected_type, horizon_months
+            )
+            expected_time <- data$tt_death_months
             expected_eligible <- definitive_gep & valid_mss & !is.na(data$tt_death_years) &
                 !is.na(data$melanoma_death_event) & !is.na(data$competing_death_event) & data$tt_death_years >= 0
         }

@@ -232,34 +232,18 @@ create_test_dataset <- function() {
     predicted_mss_risk_7yr = 1 - expected_mss_7yr,
     predicted_mss_risk_10yr = 1 - expected_mss_10yr,
 
-    # Time-specific event indicators for GEP analysis
-    mfs_event_5yr = c(rep(0, 10), rep(1, 10)),
-    mfs_event_7yr = c(rep(0, 10), rep(1, 10)),
-    mfs_event_10yr = c(rep(0, 10), rep(1, 10)),
-    mss_event_5yr = as.integer(tt_death_years <= 5 & melanoma_death_event == 1),
-    mss_event_7yr = as.integer(tt_death_years <= 7 & melanoma_death_event == 1),
-    mss_event_10yr = as.integer(tt_death_years <= 10 & melanoma_death_event == 1),
-    event_type_mss_5yr = dplyr::case_when(
-      melanoma_death_event == 1 & tt_death_years <= 5 ~ 1L,
-      competing_death_event == 1 & tt_death_years <= 5 ~ 2L,
+    mfs_event_type = as.integer(mets_event_analysis == 1L),
+    mss_event_type = dplyr::case_when(
+      melanoma_death_event == 1L ~ 1L,
+      competing_death_event == 1L ~ 2L,
       TRUE ~ 0L
     ),
-    event_type_mss_7yr = dplyr::case_when(
-      melanoma_death_event == 1 & tt_death_years <= 7 ~ 1L,
-      competing_death_event == 1 & tt_death_years <= 7 ~ 2L,
-      TRUE ~ 0L
-    ),
-    event_type_mss_10yr = dplyr::case_when(
-      melanoma_death_event == 1 & tt_death_years <= 10 ~ 1L,
-      competing_death_event == 1 & tt_death_years <= 10 ~ 2L,
-      TRUE ~ 0L
-    ),
-    tt_mfs_5yr = pmin(tt_mets_months, 60),
-    tt_mfs_7yr = pmin(tt_mets_months, 84),
-    tt_mfs_10yr = pmin(tt_mets_months, 120),
-    tt_mss_5yr = pmin(tt_death_years, 5),
-    tt_mss_7yr = pmin(tt_death_years, 7),
-    tt_mss_10yr = pmin(tt_death_years, 10),
+    metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
+    metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
+    metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
+    melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
+    melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
+    melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
     mfs_analysis_eligible = TRUE,
     mss_analysis_eligible = TRUE,
 
@@ -515,24 +499,18 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
         sample(c("Female", "Male"), n, replace = TRUE, prob = c(0.48, 0.52)),
         levels = c("Female", "Male")
       ),
-      mfs_event_5yr = as.integer(tt_mets_months <= 60 & mets_event == 1L),
-      mfs_event_7yr = as.integer(tt_mets_months <= 84 & mets_event == 1L),
-      mfs_event_10yr = as.integer(tt_mets_months <= 120 & mets_event == 1L),
-      event_type_mfs_5yr = as.integer(tt_mets_months <= 60 & mets_event == 1L),
-      event_type_mfs_7yr = as.integer(tt_mets_months <= 84 & mets_event == 1L),
-      event_type_mfs_10yr = as.integer(tt_mets_months <= 120 & mets_event == 1L),
-      mss_event_5yr = as.integer(tt_death_months <= 60 & death_event == 1L),
-      mss_event_7yr = as.integer(tt_death_months <= 84 & death_event == 1L),
-      mss_event_10yr = as.integer(tt_death_months <= 120 & death_event == 1L),
-      event_type_mss_5yr = as.integer(tt_death_months <= 60 & death_event == 1L),
-      event_type_mss_7yr = as.integer(tt_death_months <= 84 & death_event == 1L),
-      event_type_mss_10yr = as.integer(tt_death_months <= 120 & death_event == 1L),
-      tt_mfs_5yr = pmin(tt_mets_months, 60),
-      tt_mfs_7yr = pmin(tt_mets_months, 84),
-      tt_mfs_10yr = pmin(tt_mets_months, 120),
-      tt_mss_5yr = pmin(tt_death_months / 12, 5),
-      tt_mss_7yr = pmin(tt_death_months / 12, 7),
-      tt_mss_10yr = pmin(tt_death_months / 12, 10),
+      mfs_event_type = as.integer(mets_event_analysis == 1L),
+      mss_event_type = dplyr::case_when(
+        melanoma_death_event == 1L ~ 1L,
+        competing_death_event == 1L ~ 2L,
+        TRUE ~ 0L
+      ),
+      metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
+      metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
+      metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
+      melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
+      melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
+      melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
       initial_tumor_diameter = runif(n, 6, 19)
     ) %>%
       dplyr::mutate(

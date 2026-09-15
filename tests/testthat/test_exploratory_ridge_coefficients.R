@@ -25,7 +25,7 @@ test_that("ridge reporting preserves original-scale coefficients and their signs
 })
 
 test_that("coefficient plots retain all predictors and the actual coded factor levels", {
-    model <- "Direct 5-Year MFS Risk"
+    model <- "Direct 5-Year Metastasis Risk"
     coefficients <- tibble::tibble(
         term = c("sexFemale", "srfNo", "initial_t_stage_simpleT3", "initial_tumor_diameter", "age_at_diagnosis", "optic_nerve_involvement"),
         predictor = c("sex", "srf", "initial_t_stage_simple", "initial_tumor_diameter", "age_at_diagnosis", "optic_nerve_involvement"),

@@ -1820,11 +1820,11 @@ create_mss_cumulative_incidence_curves <- function(data, timepoint, output_dir, 
     # Use pre-processed variables instead of recreating them
     # For 5-year analysis, use the specific 5-year time variable
     if (timepoint == 5) {
-        time_var_char <- "tt_mss_5yr"
+        time_var_char <- "tt_death_months"
     } else {
         time_var_char <- as.character(time_var)
     }
-    event_type_var_char <- paste0("event_type_mss_", timepoint, "yr")
+    event_type_var_char <- "mss_event_type"
 
     # Check that required variables exist
     if (!time_var_char %in% names(surv_data)) {

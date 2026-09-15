@@ -26,7 +26,7 @@ test_that("Exploratory no-GEP follow-up block summarizes follow-up and operation
             tt_mets_months_analysis = 12 * .data$follow_up_years,
             mets_event_analysis = 0L,
             tt_death_months = 12 * .data$follow_up_years,
-            objective4_mss_event_type = 0L
+            mss_event_type = 0L
         )
 
     block <- build_exploratory_no_gep_followup_block(

@@ -120,24 +120,14 @@ make_objective0_validation_dataset <- function() {
         predicted_mss_risk_5yr = c(0.04, 0.40, 0.08),
         predicted_mss_risk_7yr = 1 - c(0.96, 0.60, 0.92)^(7 / 5),
         predicted_mss_risk_10yr = 1 - c(0.96, 0.60, 0.92)^(10 / 5),
-        mfs_event_5yr = c(0L, 0L, 1L),
-        mfs_event_7yr = c(0L, 0L, 1L),
-        mfs_event_10yr = c(0L, 0L, 1L),
-        mss_event_5yr = c(0L, 0L, 1L),
-        mss_event_7yr = c(0L, 0L, 1L),
-        mss_event_10yr = c(0L, 0L, 1L),
-        event_type_mfs_5yr = c(0L, 0L, 1L),
-        event_type_mfs_7yr = c(0L, 0L, 1L),
-        event_type_mfs_10yr = c(0L, 0L, 1L),
-        event_type_mss_5yr = c(0L, 0L, 1L),
-        event_type_mss_7yr = c(0L, 0L, 1L),
-        event_type_mss_10yr = c(0L, 0L, 1L),
-        tt_mfs_5yr = c(20, 22, 10),
-        tt_mfs_7yr = c(20, 22, 10),
-        tt_mfs_10yr = c(20, 22, 10),
-        tt_mss_5yr = c(3.3, 3.0, 2.5),
-        tt_mss_7yr = c(3.3, 3.0, 2.5),
-        tt_mss_10yr = c(3.3, 3.0, 2.5)
+        metastasis_by_5yr = c(NA_integer_, NA_integer_, 1L),
+        metastasis_by_7yr = c(NA_integer_, NA_integer_, 1L),
+        metastasis_by_10yr = c(NA_integer_, NA_integer_, 1L),
+        melanoma_death_by_5yr = c(NA_integer_, NA_integer_, 1L),
+        melanoma_death_by_7yr = c(NA_integer_, NA_integer_, 1L),
+        melanoma_death_by_10yr = c(NA_integer_, NA_integer_, 1L),
+        mfs_event_type = c(0L, 0L, 1L),
+        mss_event_type = c(0L, 0L, 1L)
     )
 }
 
@@ -280,15 +270,10 @@ test_that("adjudicated baseline metastasis is informational and incomplete sourc
     baseline_mets_data$pfs_event[1] <- 1L
     baseline_mets_data$tt_pfs_months[1] <- 0
     baseline_mets_data$tt_pfs_months_analysis[1] <- 0
-    baseline_mets_data$mfs_event_5yr[1] <- NA_integer_
-    baseline_mets_data$mfs_event_7yr[1] <- NA_integer_
-    baseline_mets_data$mfs_event_10yr[1] <- NA_integer_
-    baseline_mets_data$event_type_mfs_5yr[1] <- NA_integer_
-    baseline_mets_data$event_type_mfs_7yr[1] <- NA_integer_
-    baseline_mets_data$event_type_mfs_10yr[1] <- NA_integer_
-    baseline_mets_data$tt_mfs_5yr[1] <- NA_real_
-    baseline_mets_data$tt_mfs_7yr[1] <- NA_real_
-    baseline_mets_data$tt_mfs_10yr[1] <- NA_real_
+    baseline_mets_data$metastasis_by_5yr[1] <- NA_integer_
+    baseline_mets_data$metastasis_by_7yr[1] <- NA_integer_
+    baseline_mets_data$metastasis_by_10yr[1] <- NA_integer_
+    baseline_mets_data$mfs_event_type[1] <- NA_integer_
     baseline_mets_data$mfs_analysis_eligible[1] <- FALSE
 
     baseline_result <- validate_processing_pipeline(
@@ -382,7 +367,7 @@ test_that("reconciled present-date non-events remain fail-closed from their audi
 test_that("downstream objective input contract catches missing and invalid inputs", {
     invalid_contract_data <- make_objective0_validation_dataset()
     invalid_contract_data$predicted_mfs_risk_5yr[1] <- 1.5
-    invalid_contract_data$event_type_mfs_5yr[2] <- 4L
+    invalid_contract_data$mfs_event_type[2] <- 4L
     invalid_contract_data$pfs_event[3] <- NA_integer_
     invalid_contract_data$recurrence_event <- NULL
 
@@ -402,7 +387,7 @@ test_that("downstream objective input contract catches missing and invalid input
     expect_true(any(contract_findings$check_id == "downstream_objective_inputs_present" & contract_findings$status == "fail"))
     expect_true(any(contract_findings$check_id == "downstream_objective_inputs_valid" & contract_findings$status == "fail"))
     expect_true(any(invalid_details$variable_name == "predicted_mfs_risk_5yr"))
-    expect_true(any(invalid_details$variable_name == "event_type_mfs_5yr"))
+    expect_true(any(invalid_details$variable_name == "mfs_event_type"))
     expect_true(any(invalid_details$variable_name == "pfs_event"))
     expect_true(any(missing_details$variable_name == "recurrence_event"))
 })
@@ -634,15 +619,10 @@ test_that("Objective 1 endpoint invariants include metastatic progression in PFS
     invariant_data$tt_mets_months_analysis[1] <- 10
     invariant_data$tt_pfs_months[1] <- 10
     invariant_data$tt_pfs_months_analysis[1] <- 10
-    invariant_data$mfs_event_5yr[1] <- 1L
-    invariant_data$mfs_event_7yr[1] <- 1L
-    invariant_data$mfs_event_10yr[1] <- 1L
-    invariant_data$event_type_mfs_5yr[1] <- 1L
-    invariant_data$event_type_mfs_7yr[1] <- 1L
-    invariant_data$event_type_mfs_10yr[1] <- 1L
-    invariant_data$tt_mfs_5yr[1] <- 10
-    invariant_data$tt_mfs_7yr[1] <- 10
-    invariant_data$tt_mfs_10yr[1] <- 10
+    invariant_data$metastasis_by_5yr[1] <- 1L
+    invariant_data$metastasis_by_7yr[1] <- 1L
+    invariant_data$metastasis_by_10yr[1] <- 1L
+    invariant_data$mfs_event_type[1] <- 1L
 
     validation_result <- validate_processing_pipeline(
         invariant_data,

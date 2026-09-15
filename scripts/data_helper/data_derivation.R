@@ -17,6 +17,47 @@ normalize_raw_or_display_binary_indicator <- function(values) {
     )
 }
 
+#' Derive a fixed-horizon binary outcome
+#'
+#' A target event observed by the horizon is coded `1`. A competing event
+#' observed by the horizon, or observation through the horizon without the
+#' target event, is coded `0`. A type-0 observation ending before the horizon
+#' is coded `NA` because the patient's horizon status is unknown. For endpoints
+#' without competing risks, use only event types 0 and 1.
+#'
+#' @param time_months Numeric follow-up/event time in months.
+#' @param event_type Integer event type: 0 censored, 1 target event, 2 competing
+#'   event. Missing values remain unknown.
+#' @param horizon_months Positive scalar horizon in months.
+#' @return Integer vector containing only 1, 0, and `NA`.
+derive_fixed_horizon_binary_outcome <- function(time_months, event_type, horizon_months) {
+    if (length(time_months) != length(event_type)) {
+        stop("time_months and event_type must have the same length.", call. = FALSE)
+    }
+    if (length(horizon_months) != 1L || !is.numeric(horizon_months) ||
+        !is.finite(horizon_months) || horizon_months <= 0) {
+        stop("horizon_months must be one positive finite number.", call. = FALSE)
+    }
+
+    time_months <- suppressWarnings(as.numeric(time_months))
+    event_type <- suppressWarnings(as.integer(event_type))
+    invalid_type <- !is.na(event_type) & !event_type %in% c(0L, 1L, 2L)
+    invalid_time <- !is.na(time_months) & (!is.finite(time_months) | time_months < 0)
+    # Objective 0 preserves invalid source chronology for the validation layer;
+    # it must not turn such rows into known horizon outcomes.
+    time_months[invalid_time] <- NA_real_
+    event_type[invalid_type] <- NA_integer_
+
+    outcome <- rep(NA_integer_, length(time_months))
+    known <- !is.na(time_months) & !is.na(event_type) &
+        ((event_type %in% c(1L, 2L) & time_months <= horizon_months) |
+            time_months >= horizon_months)
+    outcome[known] <- 0L
+    outcome[!is.na(time_months) & !is.na(event_type) &
+        event_type == 1L & time_months <= horizon_months] <- 1L
+    outcome
+}
+
 #' Normalize recurrence indicator columns before endpoint derivation
 #'
 #' Applies canonical Y/N normalization to recurrence columns that may arrive
@@ -248,10 +289,13 @@ create_derived_variables <- function(data) {
             death_before_treatment = tt_death_months < 0,
             # Raw metastasis fields remain audit-visible. Incident MFS is
             # undefined for metastatic disease present on or before treatment.
-            tt_mets_months_analysis = if_else(
-                mets_at_or_before_treatment,
-                NA_real_,
-                tt_mets_months
+            tt_mets_months_analysis = case_when(
+                mets_at_or_before_treatment ~ NA_real_,
+                mets_progression == "Y" ~ tt_mets_months,
+                !is.na(dod) & !is.na(tt_mets_months) & !is.na(tt_death_months) ~
+                    pmin(tt_mets_months, tt_death_months),
+                !is.na(dod) ~ dplyr::coalesce(tt_mets_months, tt_death_months),
+                TRUE ~ tt_mets_months
             ),
             tt_recurrence_months_analysis = tt_recurrence_months,
             tt_death_months_analysis = tt_death_months,
@@ -291,20 +335,33 @@ create_derived_variables <- function(data) {
                 mets_event
             ),
             death_event = if_else(!is.na(dod), 1, 0, missing = 0),
-            # Melanoma-specific death event using cause of death when available
-            # Event = metastasis only (mets_event with tt_mets_months)
-            # Non‑metastatic deaths are censored
+            # Melanoma-specific death is defined by the recorded cause of death.
             melanoma_death_event = case_when(
                 cod == "Metastatic_Uveal_Melanoma" ~ 1,
                 TRUE ~ 0
             ),
-            # Competing death is any non-melanoma death
-            # MSS: Yes, with your edit. Event = 1 only when cod == "Metastatic_Uveal_Melanoma"
-            # All other deaths become competing; survivors are censored
+            # Every death not classified as melanoma-specific is competing;
+            # patients without a death are censored.
             competing_death_event = case_when(
                 death_event == 0 ~ 0L,
                 melanoma_death_event == 1 ~ 0L,
                 TRUE ~ 1L
+            ),
+            # Canonical survival-process endpoint representation. These event
+            # types are paired with untruncated times and are not fixed-horizon
+            # binary outcomes.
+            mfs_event_type = case_when(
+                !mets_free_at_baseline | is.na(tt_mets_months_analysis) |
+                    is.na(mets_event_analysis) ~ NA_integer_,
+                mets_event_analysis == 1L ~ 1L,
+                TRUE ~ 0L
+            ),
+            mss_event_type = case_when(
+                is.na(tt_death_months) | is.na(melanoma_death_event) |
+                    is.na(competing_death_event) ~ NA_integer_,
+                melanoma_death_event == 1L ~ 1L,
+                competing_death_event == 1L ~ 2L,
+                TRUE ~ 0L
             ),
             pfs_event = if_else(recurrence_event == 1 | mets_event == 1 | death_event == 1, 1, 0),
             pfs2_event = case_when(
@@ -393,15 +450,16 @@ create_derived_variables <- function(data) {
             )
         ) %>%
         mutate(
-             # Pre-process GEP analysis variables to ensure consistency and prevent output ordering issues
-            # Time-specific event indicators for consistent analysis (prevents timepoint ordering issues)
-            mfs_event_5yr = if_else(mets_event_analysis == 1 & tt_mets_months_analysis <= 60, 1L, 0L, missing = NA_integer_),
-            mfs_event_7yr = if_else(mets_event_analysis == 1 & tt_mets_months_analysis <= 84, 1L, 0L, missing = NA_integer_),
-            mfs_event_10yr = if_else(mets_event_analysis == 1 & tt_mets_months_analysis <= 120, 1L, 0L, missing = NA_integer_),
-            
-            mss_event_5yr = if_else(melanoma_death_event == 1 & tt_death_years <= 5, 1, 0),
-            mss_event_7yr = if_else(melanoma_death_event == 1 & tt_death_years <= 7, 1, 0),
-            mss_event_10yr = if_else(melanoma_death_event == 1 & tt_death_years <= 10, 1, 0),
+            # Canonical fixed-horizon classification outcomes. Early-censored
+            # rows are NA, never controls. Competing deaths are known controls
+            # for melanoma-death risk; death before metastasis is censoring for
+            # MFS and therefore remains unknown at later horizons.
+            metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
+            metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
+            metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
+            melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
+            melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
+            melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
             
             # Pre-calculated risk variables (prevents redundant calculations in analysis)
             predicted_mfs_risk_5yr = 1 - expected_mfs_5yr,
@@ -411,63 +469,6 @@ create_derived_variables <- function(data) {
             predicted_mss_risk_5yr = 1 - expected_mss_5yr,
             predicted_mss_risk_7yr = 1 - expected_mss_7yr,
             predicted_mss_risk_10yr = 1 - expected_mss_10yr,
-            
-            # Competing risk event type classifications (prevents analysis-time creation)
-            # NA handling required: case_when() returns NA when conditions involve NA values, not FALSE
-            # Without explicit NA checks, variables like mets_event == 1 return NA if mets_event is NA
-            # This causes event_type_mfs_*yr variables to be NA instead of 0 (censored)
-            event_type_mfs_5yr = case_when(
-                !mets_free_at_baseline ~ NA_integer_,
-                is.na(mets_event_analysis) | is.na(tt_mets_months_analysis) ~ NA_integer_,
-                !is.na(mets_event_analysis) & mets_event_analysis == 1 & !is.na(tt_mets_months_analysis) & tt_mets_months_analysis <= 60 ~ 1L,
-                !is.na(death_event) & death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 5 & !is.na(melanoma_death_event) & melanoma_death_event == 0 ~ 2,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            event_type_mfs_7yr = case_when(
-                !mets_free_at_baseline ~ NA_integer_,
-                is.na(mets_event_analysis) | is.na(tt_mets_months_analysis) ~ NA_integer_,
-                !is.na(mets_event_analysis) & mets_event_analysis == 1 & !is.na(tt_mets_months_analysis) & tt_mets_months_analysis <= 84 ~ 1L,
-                !is.na(death_event) & death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 7 & !is.na(melanoma_death_event) & melanoma_death_event == 0 ~ 2,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            event_type_mfs_10yr = case_when(
-                !mets_free_at_baseline ~ NA_integer_,
-                is.na(mets_event_analysis) | is.na(tt_mets_months_analysis) ~ NA_integer_,
-                !is.na(mets_event_analysis) & mets_event_analysis == 1 & !is.na(tt_mets_months_analysis) & tt_mets_months_analysis <= 120 ~ 1L,
-                !is.na(death_event) & death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 10 & !is.na(melanoma_death_event) & melanoma_death_event == 0 ~ 2,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            
-            # Competing risk event type variables with validation
-            # NA handling required: case_when() returns NA when conditions involve NA values, not FALSE
-            # Without explicit NA checks, melanoma_death_event == 1 returns NA if melanoma_death_event is NA
-            # This causes event_type_mss_*yr variables to be NA instead of 0L (censored)
-            event_type_mss_5yr = case_when(
-                !is.na(melanoma_death_event) & melanoma_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 5 ~ 1L,  # Melanoma death
-                !is.na(competing_death_event) & competing_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 5 ~ 2L,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            event_type_mss_7yr = case_when(
-                !is.na(melanoma_death_event) & melanoma_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 7 ~ 1L,  # Melanoma death
-                !is.na(competing_death_event) & competing_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 7 ~ 2L,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            event_type_mss_10yr = case_when(
-                !is.na(melanoma_death_event) & melanoma_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 10 ~ 1L,  # Melanoma death
-                !is.na(competing_death_event) & competing_death_event == 1 & !is.na(tt_death_years) & tt_death_years <= 10 ~ 2L,  # Competing death
-                TRUE ~ 0L  # Censored
-            ),
-            
-            # Time-to-event variables for specific timepoints (prevents analysis-time creation)
-            # MFS: already in months (correct)
-            tt_mfs_5yr = pmin(tt_mets_months_analysis, 60),
-            tt_mfs_7yr = pmin(tt_mets_months_analysis, 84),
-            tt_mfs_10yr = pmin(tt_mets_months_analysis, 120),
-            
-            # MSS: keep years for compatibility
-            tt_mss_5yr = pmin(tt_death_years, 5),
-            tt_mss_7yr = pmin(tt_death_years, 7),
-            tt_mss_10yr = pmin(tt_death_years, 10),
             
             # Statistical summary variables (prevents analysis-time calculations)
             mfs_analysis_eligible = !is.na(biopsy1_gep) & 

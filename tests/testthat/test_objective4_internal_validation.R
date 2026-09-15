@@ -11,6 +11,52 @@ test_that("horizon status distinguishes known competing outcomes from early cens
     expect_identical(status$use_left_limit, c(TRUE, TRUE, FALSE, FALSE))
 })
 
+test_that("IPCW decision curves exclude early censoring and retain competing deaths", {
+    payload <- calculate_ipcw_decision_curve(
+        data = tibble::tibble(
+            risk = c(0.9, 0.8, 0.2, 0.1),
+            followup = c(12, 18, 24, 60),
+            event_type = c(1L, 2L, 0L, 0L)
+        ),
+        predicted_risk_var = "risk",
+        time_var = "followup",
+        event_type_var = "event_type",
+        horizon_months = 60,
+        thresholds = c(0.25, 0.5)
+    )
+
+    expect_identical(payload$data$outcome, c(1L, 0L, NA_integer_, 0L))
+    expect_equal(payload$data$ipcw_weight[[3]], 0)
+    expect_gt(payload$data$ipcw_weight[[2]], 0)
+    expect_equal(payload$known_n, 3L)
+    expect_equal(payload$early_censored_n, 1L)
+})
+
+test_that("direct ridge models fail closed when named horizon outcome disagrees", {
+    fixture <- tibble::tibble(
+        patient_id = sprintf("p%02d", 1:12),
+        exploratory_gep_group = rep(c("Class 1", "Class 2"), 6),
+        age = seq(40, 70, length.out = 12),
+        followup = rep(c(12, 72), 6),
+        event_type = rep(c(1L, 0L), 6),
+        metastasis_by_5yr = rep(0L, 12)
+    )
+
+    expect_error(
+        fit_exploratory_binary_model(
+            data = fixture,
+            outcome_var = "metastasis_by_5yr",
+            predictors = "age",
+            model_name = "Direct 5-Year Metastasis Risk",
+            model_mode = "ipcw_horizon_mfs",
+            time_var = "followup",
+            event_var = "event_type",
+            eval_time_months = 60
+        ),
+        "fixed-horizon outcome contract failed"
+    )
+})
+
 test_that("fold IPCW payload uses only training rows for censoring estimation", {
     training <- tibble::tibble(
         followup = c(10, 20, 70, 80),
@@ -321,10 +367,37 @@ test_that("nested horizon ridge is deterministic and keyed independently of row 
     expect_true(all(stats::complete.cases(first$oof_predictions$prediction)))
 })
 
+test_that("post-horizon target events do not change horizon-stratified validation", {
+    late_event <- make_nested_cv_fixture()
+    late_event$event_type[late_event$followup == 72] <- 1L
+    late_censor <- late_event
+    late_censor$event_type[late_censor$followup == 72] <- 0L
+    args <- list(
+        predictors = c("age", "diameter"),
+        time_var = "followup",
+        event_type_var = "event_type",
+        horizon_months = 60,
+        stable_id_var = "patient_id",
+        seed = GEP_EXPLORATORY_CV_SEED,
+        repeats = 1L,
+        outer_folds = 3L,
+        inner_folds = 3L
+    )
+
+    event_result <- do.call(cross_validate_horizon_ridge, c(list(data = late_event), args))
+    censor_result <- do.call(cross_validate_horizon_ridge, c(list(data = late_censor), args))
+
+    expect_equal(event_result$oof_predictions, censor_result$oof_predictions)
+    expect_equal(event_result$fold_metadata, censor_result$fold_metadata)
+})
+
 test_that("assessment censoring cannot alter outer-training weights or lambda", {
     fixture <- make_nested_cv_fixture()
+    horizon_status <- derive_horizon_status(fixture$followup, fixture$event_type, 60)
     outer_ids <- create_deterministic_fold_ids(
-        strata = ifelse(fixture$event_type == 1L, "target", "other"),
+        strata = as.integer(
+            !is.na(horizon_status$horizon_event) & horizon_status$horizon_event == 1L
+        ),
         folds = 3L,
         seed = GEP_EXPLORATORY_CV_SEED,
         stable_id = fixture$patient_id

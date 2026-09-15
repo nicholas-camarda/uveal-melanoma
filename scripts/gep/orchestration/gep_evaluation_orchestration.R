@@ -114,9 +114,13 @@ analyze_gep_mfs_validation <- function(data,
             ), indent = 2))
         }
     }
-    # Use pre-processed time-specific event indicators for consistency
+    # Count observed target events directly from the canonical event process.
     events_per_timepoint <- sapply(timepoints, function(tp) {
-        sum(analysis_data[[paste0("mfs_event_", tp, "yr")]])
+        sum(
+            analysis_data$mfs_event_type == 1L &
+                analysis_data$tt_mets_months_analysis <= tp * 12,
+            na.rm = TRUE
+        )
     })
     names(events_per_timepoint) <- paste0(timepoints, "yr")
     logger::log_info(formatted("Events per timepoint:", indent = 1))
@@ -468,9 +472,13 @@ analyze_gep_mss_validation <- function(data,
             ), indent = 2))
         }
     }
-    # Use pre-processed time-specific event indicators for consistency
+    # Count melanoma deaths directly from the canonical competing-risk process.
     events_per_timepoint <- sapply(timepoints, function(tp) {
-        sum(analysis_data[[paste0("mss_event_", tp, "yr")]])
+        sum(
+            analysis_data$mss_event_type == 1L &
+                analysis_data$tt_death_months <= tp * 12,
+            na.rm = TRUE
+        )
     })
     names(events_per_timepoint) <- paste0(timepoints, "yr")
     logger::log_info(formatted("Events per timepoint:", indent = 1))

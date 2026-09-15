@@ -82,10 +82,7 @@ test_that("Comprehensive GEP summary includes the compact follow-up limitation b
     full_source_data <- create_test_dataset() %>%
         dplyr::mutate(
             follow_up_years = as.numeric(1:20),
-            consort_group = rep(c("eligible_both", "gksrs_only"), each = 10),
-            mss_event_5yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 60),
-            mss_event_7yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 84),
-            mss_event_10yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 120)
+            consort_group = rep(c("eligible_both", "gksrs_only"), each = 10)
         )
     gksrs_source_data <- full_source_data %>%
         dplyr::filter(.data$consort_group == "gksrs_only")

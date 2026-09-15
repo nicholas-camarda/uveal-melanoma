@@ -110,13 +110,13 @@ test_that("simple GEP validation uses melanoma-specific MSS endpoint", {
         expected_mss_5yr = c(0.85, 0.15),
         tt_mets_months = c(72, 24),
         mets_event = c(0, 1),
-        mfs_event_5yr = c(0, 1),
+        metastasis_by_5yr = c(0, 1),
         tt_death_months = c(24, 24),
         tt_death_years = c(2, 2),
         death_event = c(1, 1),
         melanoma_death_event = c(0, 1),
         competing_death_event = c(1, 0),
-        mss_event_5yr = c(0, 1),
+        melanoma_death_by_5yr = c(0, 1),
         mfs_analysis_eligible = c(TRUE, TRUE),
         mss_analysis_eligible = c(TRUE, TRUE)
     )
@@ -161,12 +161,12 @@ test_that("simple GEP validation uses canonical analytic labels directly", {
         expected_mss_5yr = c(0.85, 0.15),
         tt_mets_months = c(72, 24),
         mets_event = c(0, 1),
-        mfs_event_5yr = c(0, 1),
+        metastasis_by_5yr = c(0, 1),
         tt_death_months = c(24, 24),
         tt_death_years = c(2, 2),
         melanoma_death_event = c(0, 1),
         competing_death_event = c(1, 0),
-        mss_event_5yr = c(0, 1),
+        melanoma_death_by_5yr = c(0, 1),
         mfs_analysis_eligible = c(TRUE, TRUE),
         mss_analysis_eligible = c(TRUE, TRUE)
     )
@@ -898,7 +898,7 @@ test_that("MFS observed expected summaries retain the overall denominator", {
         expected_mfs_5yr = c(0.90, 0.80, 0.40),
         tt_mets_months = c(12, 60, 72),
         mets_event = c(0, 1, 0),
-        mfs_event_5yr = c(0, 1, 0),
+        metastasis_by_5yr = c(0, 1, 0),
         mfs_analysis_eligible = c(TRUE, TRUE, TRUE)
     )
 
@@ -930,7 +930,7 @@ test_that("MSS observed expected summaries use censoring-aware cumulative incide
         tt_death_months = c(48, 24, 24, 72, 72),
         melanoma_death_event = c(1, 0, 0, 0, 0),
         competing_death_event = c(0, 0, 0, 0, 0),
-        mss_event_5yr = c(1, 0, 0, 0, 0),
+        melanoma_death_by_5yr = c(1, 0, 0, 0, 0),
         mss_analysis_eligible = c(TRUE, TRUE, TRUE, TRUE, TRUE)
     )
 
@@ -1043,7 +1043,7 @@ test_that("Unstable IPCW recalibration fits are suppressed as unavailable", {
         data = analysis_data,
         predicted_risk_var = "predicted_mss_risk_7yr",
         time_var = "tt_death_months",
-        event_var = "mss_event_7yr",
+        event_var = "melanoma_death_by_7yr",
         eval_time_months = 84
     )
 
@@ -1363,14 +1363,14 @@ test_that("PRAME incremental helper returns delta-C metrics on deterministic dat
     test_data <- tibble::tibble(
         prame_status = prame_positive,
         predicted_mfs_risk_5yr = base_risk,
-        tt_mfs_5yr = observed_time,
-        mfs_event_5yr = horizon_event
+        tt_mets_months_analysis = observed_time,
+        metastasis_by_5yr = horizon_event
     )
 
     result <- calculate_prame_incremental_value_metrics(
         data = test_data,
-        time_var = "tt_mfs_5yr",
-        event_var = "mfs_event_5yr",
+        time_var = "tt_mets_months_analysis",
+        event_var = "metastasis_by_5yr",
         base_risk_var = "predicted_mfs_risk_5yr",
         timepoint = 5,
         outcome_label = "MFS",
@@ -1404,8 +1404,8 @@ test_that("Objective 4 MSS core components run without fatal errors", {
 
     required_vars <- c(
         "biopsy1_gep", "expected_mss_5yr", "expected_mss_7yr", "expected_mss_10yr",
-        "mss_event_5yr", "mss_event_7yr", "mss_event_10yr",
-        "event_type_mss_5yr", "tt_mss_5yr", "melanoma_death_event", "competing_death_event"
+        "melanoma_death_by_5yr", "melanoma_death_by_7yr", "melanoma_death_by_10yr",
+        "mss_event_type", "tt_death_months", "melanoma_death_event", "competing_death_event"
     )
     expect_true(all(required_vars %in% names(test_data)))
 
@@ -1428,9 +1428,9 @@ test_that("Objective 4 MSS core components run without fatal errors", {
     expect_no_error({
         calculate_cif_by_class_with_ci(
             data = test_data,
-            time_var = "tt_mss_5yr",
-            event_type_var = "event_type_mss_5yr",
-            eval_time = 5,
+            time_var = "tt_death_months",
+            event_type_var = "mss_event_type",
+            eval_time = 60,
             n_boot = 10
         )
     })
@@ -1438,8 +1438,8 @@ test_that("Objective 4 MSS core components run without fatal errors", {
     expect_no_error({
         calculate_fine_gray_model(
             data = test_data,
-            time_var = "tt_mss_5yr",
-            event_var = "event_type_mss_5yr",
+            time_var = "tt_death_months",
+            event_var = "mss_event_type",
             group_var = "biopsy1_gep",
             eligibility_filter = "mss_analysis_eligible"
         )
@@ -1448,8 +1448,8 @@ test_that("Objective 4 MSS core components run without fatal errors", {
     expect_no_error({
         calculate_cause_specific_cox_model(
             data = test_data,
-            time_var = "tt_mss_5yr",
-            event_var = "event_type_mss_5yr",
+            time_var = "tt_death_months",
+            event_var = "mss_event_type",
             group_var = "biopsy1_gep",
             eligibility_filter = "mss_analysis_eligible"
         )
@@ -1483,7 +1483,7 @@ test_that("Competing-risk MSS feasibility returns explicit skip metadata", {
         ),
         mss_analysis_eligible = TRUE,
         tt_death_months = c(rep(24, 10), rep(24, 10)),
-        event_type_mss_5yr = c(rep(0, 10), rep(1, 10))
+        mss_event_type = c(rep(0, 10), rep(1, 10))
     )
 
     results <- perform_competing_risk_mss_validation(test_data, timepoint = 5)

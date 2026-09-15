@@ -7,8 +7,8 @@ test_that("Objective 0 preprocessing creates expected derived fields on syntheti
         "tt_mets_months",
         "tt_death_months",
         "pfs_event",
-        "mfs_event_5yr",
-        "mss_event_5yr",
+        "metastasis_by_5yr",
+        "melanoma_death_by_5yr",
         "retinopathy_burden_event",
         "nvg_burden_event",
         "srd_burden_event",
@@ -96,7 +96,7 @@ test_that("Objective 0 excludes metastasis on or before treatment from incident 
     test_data$initial_plaque <- "N"
     test_data$initial_gk_date <- treatment_date
     test_data$treatment_date <- treatment_date
-    test_data$last_known_alive_date <- as.Date("2021-01-01")
+    test_data$last_known_alive_date <- as.Date("2022-01-01")
     test_data$mets_progression <- "Y"
     test_data$mets_progression_date <- as.Date(c(
         "2019-12-31", "2020-01-01", "2020-01-02"
@@ -176,20 +176,57 @@ test_that("Objective 0 classifies exact five-year endpoint boundaries and compet
 
     derived <- create_derived_variables(test_data)
 
-    expect_equal(derived$mfs_event_5yr, c(1L, 1L, 0L, 0L))
-    expect_equal(derived$mss_event_5yr, c(1L, 0L, 0L, 0L))
-    expect_equal(derived$event_type_mss_5yr, c(1L, 2L, 0L, 0L))
-    expect_equal(
-        derived$tt_mfs_5yr,
-        c(
-            lubridate::time_length(lubridate::interval(treatment_date, treatment_date + 1), "months"),
-            60,
-            60,
-            60
+    expect_equal(derived$metastasis_by_5yr, c(1L, 1L, 0L, 0L))
+    expect_equal(derived$melanoma_death_by_5yr, c(1L, 0L, 0L, 0L))
+    expect_equal(derived$mss_event_type, c(1L, 2L, 1L, 0L))
+    expect_equal(derived$tt_mets_months_analysis, derived$tt_mets_months)
+    expect_equal(derived$tt_death_months[1], 0)
+    expect_true(all(derived$tt_death_months[2:4] >= 60))
+})
+
+test_that("fixed-horizon outcomes distinguish known controls from early censoring", {
+    expect_identical(
+        derive_fixed_horizon_binary_outcome(
+            time_months = c(12, 12, 60, 80),
+            event_type = c(1L, 0L, 0L, 1L),
+            horizon_months = 60
         ),
-        tolerance = 1e-8
+        c(1L, NA_integer_, 0L, 0L)
     )
-    expect_equal(derived$tt_mss_5yr, c(0, 5, 5, 5), tolerance = 1e-8)
+    expect_identical(
+        derive_fixed_horizon_binary_outcome(
+            time_months = c(12, 12, 30, 80),
+            event_type = c(1L, 2L, 0L, 1L),
+            horizon_months = 60
+        ),
+        c(1L, 0L, NA_integer_, 0L)
+    )
+})
+
+test_that("death without metastasis censors MFS but is an MSS competing control", {
+    test_data <- create_test_dataset()[1, ]
+    treatment_date <- as.Date("2020-01-01")
+
+    test_data$initial_gk <- "Y"
+    test_data$initial_plaque <- "N"
+    test_data$initial_gk_date <- treatment_date
+    test_data$treatment_date <- treatment_date
+    test_data$last_known_alive_date <- as.Date("2021-01-01")
+    test_data$mets_progression <- "N"
+    test_data$mets_progression_date <- as.Date(NA)
+    test_data$dod <- as.Date("2021-01-01")
+    test_data$cod <- "Cardiac_Arrest"
+    test_data$mets_event <- NULL
+    test_data$death_event <- NULL
+
+    derived <- create_derived_variables(test_data)
+
+    expect_identical(derived$mfs_event_type, 0L)
+    expect_identical(derived$mss_event_type, 2L)
+    expect_equal(derived$tt_mets_months_analysis, derived$tt_death_months)
+    expect_true(derived$tt_mets_months_analysis < 60)
+    expect_identical(derived$metastasis_by_5yr, NA_integer_)
+    expect_identical(derived$melanoma_death_by_5yr, 0L)
 })
 
 test_that("Objective 0 factor preparation and cohort criteria run on synthetic data", {

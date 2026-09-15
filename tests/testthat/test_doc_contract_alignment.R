@@ -67,6 +67,65 @@ test_that("Objective 2 toxicity display and analysis input roles remain explicit
     )
 })
 
+test_that("derived-variable registry documents canonical MFS and MSS endpoints", {
+    endpoint_doc_env <- new.env(parent = globalenv())
+    sys.source(
+        here::here("scripts", "tools", "derived_variables_documentation.R"),
+        envir = endpoint_doc_env
+    )
+
+    canonical_endpoint_fields <- c(
+        "tt_mets_months_analysis",
+        "mfs_event_type",
+        "mss_event_type",
+        paste0("metastasis_by_", c(5, 7, 10), "yr"),
+        paste0("melanoma_death_by_", c(5, 7, 10), "yr")
+    )
+    retired_endpoint_fields <- c(
+        paste0("mfs_event_", c(5, 7, 10), "yr"),
+        paste0("mss_event_", c(5, 7, 10), "yr"),
+        paste0("event_type_mfs_", c(5, 7, 10), "yr"),
+        paste0("event_type_mss_", c(5, 7, 10), "yr"),
+        paste0("tt_mfs_", c(5, 7, 10), "yr"),
+        paste0("tt_mss_", c(5, 7, 10), "yr")
+    )
+
+    expect_true(all(canonical_endpoint_fields %in% names(endpoint_doc_env$DERIVED_VARIABLE_DOCUMENTATION)))
+    expect_false(any(retired_endpoint_fields %in% names(endpoint_doc_env$DERIVED_VARIABLE_DOCUMENTATION)))
+    expect_match(
+        endpoint_doc_env$DERIVED_VARIABLE_DOCUMENTATION$metastasis_by_5yr$description,
+        "NA = status unknown because censoring occurred earlier",
+        fixed = TRUE
+    )
+    expect_match(
+        endpoint_doc_env$DERIVED_VARIABLE_DOCUMENTATION$melanoma_death_by_5yr$description,
+        "including an earlier competing death",
+        fixed = TRUE
+    )
+    expect_match(
+        endpoint_doc_env$DERIVED_VARIABLE_DOCUMENTATION$mfs_event_type$purpose,
+        "death before metastasis is censoring",
+        fixed = TRUE
+    )
+
+    dictionary_path <- tempfile("derived-variable-dictionary-", fileext = ".xlsx")
+    withr::defer(unlink(dictionary_path, force = TRUE), envir = parent.frame())
+    endpoint_doc_env$export_derived_variables_to_excel(
+        output_file = dictionary_path,
+        include_timestamp = FALSE
+    )
+    dictionary <- readxl::read_excel(
+        dictionary_path,
+        sheet = "Derived Variables",
+        skip = 1
+    )
+    expect_identical(
+        names(dictionary),
+        c("Variable_Name", "Category", "Description", "Calculation", "Purpose", "Data_Type", "Units")
+    )
+    expect_true(all(canonical_endpoint_fields %in% dictionary$Variable_Name))
+})
+
 test_that("README uses the canonical repository identity", {
     readme_text <- paste(readLines(here::here("README.md"), warn = FALSE), collapse = "\n")
 
