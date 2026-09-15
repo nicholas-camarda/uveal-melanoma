@@ -606,8 +606,8 @@ The main Objective 4 denominator is deliberately stricter than “any row with a
 - Unified cross-outcome summaries live at the root of `04_GEP_Validation/` as `<prefix>unified_gep_validation_summary.xlsx`. This workbook is comparison-only rather than a second outcome-summary workbook.
 - For the full cohort, that unified workbook now also includes compact no-GEP tabs: `No_GEP_Overview`, `No_GEP_Model_Comparison`, and `No_GEP_Risk_Strata`.
 - Simple actual-vs-expected QC outputs live in `04_GEP_Validation/unified_summary/` as `<prefix>simple_gep_validation.xlsx`.
-- For MFS, treat the observed 5-year value in that QC workbook as Kaplan-Meier MFS at 60 months. It is censoring-aware and should match the 5-year KM summary, not the raw count of patients with `mfs_event_5yr == 0`.
-- Treat older slide numbers based on raw `mfs_event_5yr` counts as non-canonical if they disagree with the current workbook. The repository-standard interpretation is the Kaplan-Meier estimate at 60 months.
+- For MFS, treat the observed 5-year value in that QC workbook as Kaplan-Meier MFS at 60 months. It is censoring-aware and should match the 5-year KM summary, not the raw count of patients with `metastasis_by_5yr == 0`.
+- Treat older slide numbers based on raw `metastasis_by_5yr` counts as non-canonical if they disagree with the current workbook. The repository-standard interpretation is the Kaplan-Meier estimate at 60 months.
 
 ### Workbook Layout at a Glance
 

@@ -33,11 +33,11 @@ test_that("Objective 4 MFS sensitivity collector builds follow-up and repeat-rad
     expect_equal(sum(horizon_overall$n), 20)
     expect_equal(
         horizon_overall$n[horizon_overall$five_year_followup_view == "event_by_5yr"],
-        10
+        8
     )
     expect_equal(
         horizon_overall$n[horizon_overall$five_year_followup_view == "followup_ge_5yr"],
-        2
+        4
     )
     expect_equal(
         horizon_overall$n[horizon_overall$five_year_followup_view == "censored_pre_5yr"],
@@ -54,12 +54,14 @@ test_that("Objective 4 MFS sensitivity collector builds follow-up and repeat-rad
 })
 
 test_that("Shared Objective 4 follow-up helper derives endpoint-specific counts and definition text", {
-    test_data <- create_test_dataset() %>%
-        dplyr::mutate(
-            mss_event_5yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 60),
-            mss_event_7yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 84),
-            mss_event_10yr = as.integer(.data$melanoma_death_event == 1 & .data$tt_death_months <= 120)
-        )
+    test_data <- create_test_dataset()
+    test_data$melanoma_death_event[3] <- 0L
+    test_data$competing_death_event[3] <- 1L
+    test_data$mss_event_type[3] <- 2L
+    test_data$tt_death_months[3] <- 36
+    test_data$melanoma_death_by_5yr <- derive_fixed_horizon_binary_outcome(
+        test_data$tt_death_months, test_data$mss_event_type, 60
+    )
 
     mfs_followup <- collect_objective4_endpoint_followup_summary(
         data = test_data,
@@ -81,7 +83,7 @@ test_that("Shared Objective 4 follow-up helper derives endpoint-specific counts 
         dplyr::filter(.data$mfs_analysis_eligible) %>%
         dplyr::mutate(
             expected_view = dplyr::case_when(
-                .data$mfs_event_5yr == 1 ~ "event_by_5yr",
+                .data$metastasis_by_5yr == 1 ~ "event_by_5yr",
                 .data$tt_mets_months >= 60 ~ "followup_ge_5yr",
                 TRUE ~ "censored_pre_5yr"
             )
@@ -92,8 +94,9 @@ test_that("Shared Objective 4 follow-up helper derives endpoint-specific counts 
         dplyr::filter(.data$mss_analysis_eligible) %>%
         dplyr::mutate(
             expected_view = dplyr::case_when(
-                .data$melanoma_death_event == 1 & .data$tt_death_months <= 60 ~ "event_by_5yr",
-                .data$tt_death_months >= 60 ~ "followup_ge_5yr",
+                .data$melanoma_death_by_5yr == 1 ~ "event_by_5yr",
+                .data$mss_event_type == 2L & .data$tt_death_months <= 60 ~ "competing_death_by_5yr",
+                .data$melanoma_death_by_5yr == 0 ~ "followup_ge_5yr",
                 TRUE ~ "censored_pre_5yr"
             )
         ) %>%
@@ -109,12 +112,19 @@ test_that("Shared Objective 4 follow-up helper derives endpoint-specific counts 
 
     expect_equal(actual_mfs, expected_mfs)
     expect_equal(actual_mss, expected_mss)
+    expect_equal(
+        mss_followup$horizon_overall$n[mss_followup$horizon_overall$horizon_followup_view == "competing_death_by_5yr"],
+        1L
+    )
 
     block_lines <- build_objective4_followup_limitation_block(mfs_followup)
     expect_true(any(grepl("Follow-Up Limitation", block_lines, fixed = TRUE)))
     expect_true(any(grepl("`followup_ge_5yr` means", block_lines, fixed = TRUE)))
     expect_true(any(grepl("`censored_pre_5yr` means", block_lines, fixed = TRUE)))
     expect_true(any(grepl("Among the", block_lines, fixed = TRUE)))
+
+    mss_block_lines <- build_objective4_followup_limitation_block(mss_followup)
+    expect_true(any(grepl("`competing_death_by_5yr` means", mss_block_lines, fixed = TRUE)))
 })
 
 test_that("Shared Objective 4 follow-up helper escalates the impact line for heavy class-imbalanced censoring", {
@@ -122,9 +132,12 @@ test_that("Shared Objective 4 follow-up helper escalates the impact line for hea
         dplyr::mutate(
             tt_mets_months = c(rep(24, 8), rep(72, 2), rep(24, 10)),
             mets_event = c(rep(0, 10), rep(1, 10)),
-            mfs_event_5yr = c(rep(0, 10), rep(1, 10)),
-            mfs_event_7yr = .data$mfs_event_5yr,
-            mfs_event_10yr = .data$mfs_event_5yr
+            mfs_event_type = as.integer(.data$mets_event == 1L),
+            metastasis_by_5yr = derive_fixed_horizon_binary_outcome(
+                .data$tt_mets_months, .data$mfs_event_type, 60
+            ),
+            metastasis_by_7yr = .data$metastasis_by_5yr,
+            metastasis_by_10yr = .data$metastasis_by_5yr
         )
 
     followup_summary <- collect_objective4_endpoint_followup_summary(

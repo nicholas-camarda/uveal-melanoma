@@ -921,7 +921,7 @@ simple_gep_validation <- function(data, output_dirs, prefix, dataset_name = NULL
 
     required_canonical_fields <- c(
         "expected_mfs_5yr", "expected_mss_5yr",
-        "mfs_event_5yr", "mss_event_5yr",
+        "metastasis_by_5yr", "melanoma_death_by_5yr",
         "mfs_analysis_eligible", "mss_analysis_eligible",
         "tt_mets_months", "tt_death_months"
     )

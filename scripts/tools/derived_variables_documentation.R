@@ -247,9 +247,9 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
 
     # ===== ANALYSIS-READY TIME VARIABLES =====
     tt_mets_months_analysis = list(
-        description = "Incident-MFS metastasis time, missing for metastatic disease on or before treatment",
-        calculation = "if_else(mets_at_or_before_treatment, NA_real_, tt_mets_months)",
-        purpose = "Analysis-ready incident metastasis time after baseline-disease adjudication and chronology validation",
+        description = "Incident-MFS time from treatment to metastasis or censoring; death before metastasis censors follow-up at death; missing for metastatic disease on or before treatment",
+        calculation = "case_when(mets_at_or_before_treatment ~ NA, mets_progression == 'Y' ~ tt_mets_months, death recorded ~ pmin(tt_mets_months, tt_death_months), TRUE ~ tt_mets_months)",
+        purpose = "Canonical untruncated incident-MFS time paired with mfs_event_type",
         data_type = "numeric",
         units = "months"
     ),
@@ -304,12 +304,84 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
         data_type = "numeric",
         units = "binary"
     ),
+    melanoma_death_event = list(
+        description = "Binary melanoma-specific death indicator (1 = recorded cause is Metastatic_Uveal_Melanoma, 0 = otherwise)",
+        calculation = "if_else(cod == 'Metastatic_Uveal_Melanoma', 1, 0, missing = 0)",
+        purpose = "Target-event indicator for melanoma-specific mortality analyses",
+        data_type = "integer",
+        units = "binary"
+    ),
+    competing_death_event = list(
+        description = "Binary competing-death indicator (1 = death from any cause not classified as melanoma-specific, 0 = alive/censored or melanoma-specific death)",
+        calculation = "case_when(death_event == 0 ~ 0, melanoma_death_event == 1 ~ 0, TRUE ~ 1)",
+        purpose = "Identifies other-cause deaths, including deaths with an unknown recorded cause, for competing-risk MSS analyses",
+        data_type = "integer",
+        units = "binary"
+    ),
+    mfs_event_type = list(
+        description = "Canonical incident-MFS process type (1 = metastasis, 0 = censored, NA = endpoint not analyzable)",
+        calculation = "case_when(baseline metastasis or missing analysis time/event ~ NA, mets_event_analysis == 1 ~ 1, TRUE ~ 0)",
+        purpose = "Untruncated event process paired with tt_mets_months_analysis; death before metastasis is censoring, not an MFS event",
+        data_type = "integer",
+        units = "event type"
+    ),
+    mss_event_type = list(
+        description = "Canonical MSS competing-risk process type (1 = melanoma-specific death, 2 = other-cause death, 0 = censored, NA = endpoint not analyzable)",
+        calculation = "case_when(missing death follow-up/event data ~ NA, melanoma_death_event == 1 ~ 1, competing_death_event == 1 ~ 2, TRUE ~ 0)",
+        purpose = "Untruncated competing-risk event process paired with tt_death_months",
+        data_type = "integer",
+        units = "event type"
+    ),
     pfs_event = list(
         description = "Binary indicator for progression-free survival (1 = local recurrence, metastatic progression, or death; 0 = censored)",
         calculation = "if_else(recurrence_event == 1 | mets_event == 1 | death_event == 1, 1, 0)",
         purpose = "Event indicator for progression-free survival analysis",
         data_type = "numeric",
         units = "binary"
+    ),
+
+    # ===== FIXED-HORIZON OUTCOMES =====
+    metastasis_by_5yr = list(
+        description = "Metastasis status at 5 years (1 = metastasis by 60 months, 0 = known metastasis-free at 60 months, NA = status unknown because censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60)",
+        purpose = "Auditable 5-year metastasis-risk outcome; it is not MFS probability or metastatic mortality",
+        data_type = "integer",
+        units = "1/0/NA"
+    ),
+    metastasis_by_7yr = list(
+        description = "Metastasis status at 7 years (1 = metastasis by 84 months, 0 = known metastasis-free at 84 months, NA = status unknown because censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84)",
+        purpose = "Auditable 7-year metastasis-risk outcome",
+        data_type = "integer",
+        units = "1/0/NA"
+    ),
+    metastasis_by_10yr = list(
+        description = "Metastasis status at 10 years (1 = metastasis by 120 months, 0 = known metastasis-free at 120 months, NA = status unknown because censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120)",
+        purpose = "Auditable 10-year metastasis-risk outcome",
+        data_type = "integer",
+        units = "1/0/NA"
+    ),
+    melanoma_death_by_5yr = list(
+        description = "Melanoma-death status at 5 years (1 = melanoma-specific death by 60 months, 0 = known non-case at 60 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60)",
+        purpose = "Auditable 5-year melanoma-specific mortality outcome; competing deaths remain controls",
+        data_type = "integer",
+        units = "1/0/NA"
+    ),
+    melanoma_death_by_7yr = list(
+        description = "Melanoma-death status at 7 years (1 = melanoma-specific death by 84 months, 0 = known non-case at 84 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84)",
+        purpose = "Auditable 7-year melanoma-specific mortality outcome; competing deaths remain controls",
+        data_type = "integer",
+        units = "1/0/NA"
+    ),
+    melanoma_death_by_10yr = list(
+        description = "Melanoma-death status at 10 years (1 = melanoma-specific death by 120 months, 0 = known non-case at 120 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
+        calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120)",
+        purpose = "Auditable 10-year melanoma-specific mortality outcome; competing deaths remain controls",
+        data_type = "integer",
+        units = "1/0/NA"
     ),
     pfs2_event = list(
         description = "Binary indicator for PFS-2 (1 = second recurrence, 0 = censored, NA = no first recurrence)",
@@ -496,7 +568,11 @@ print_derived_variables_summary <- function() {
 #' @param variable_name Name of the variable
 #' @return Category string
 categorize_derived_variable <- function(variable_name) {
-    if (grepl("^age_", variable_name)) {
+    if (grepl("^(metastasis|melanoma_death)_by_[0-9]+yr$", variable_name)) {
+        return("Fixed-Horizon Outcomes")
+    } else if (grepl("_event_type$", variable_name)) {
+        return("Event Processes")
+    } else if (grepl("^age_", variable_name)) {
         return("Demographic")
     } else if (grepl("^follow_up_", variable_name)) {
         return("Follow-up Time")
@@ -586,9 +662,13 @@ export_derived_variables_to_excel <- function(output_file = NULL, include_timest
         textDecoration = "bold"
     )
 
-    openxlsx::writeData(wb, sheet_name,
-        data.frame(Header = "DERIVED VARIABLES DOCUMENTATION"),
-        startRow = 1, startCol = 1
+    openxlsx::writeData(
+        wb,
+        sheet_name,
+        "DERIVED VARIABLES DOCUMENTATION",
+        startRow = 1,
+        startCol = 1,
+        colNames = FALSE
     )
     openxlsx::mergeCells(wb, sheet_name, cols = 1:7, rows = 1)
     openxlsx::addStyle(wb, sheet_name, header_style, rows = 1, cols = 1)
@@ -624,9 +704,13 @@ export_derived_variables_to_excel <- function(output_file = NULL, include_timest
         Percentage = round(as.numeric(category_counts) / sum(category_counts) * 100, 1)
     )
 
-    openxlsx::writeData(wb, summary_sheet,
-        data.frame(Header = "DERIVED VARIABLES SUMMARY"),
-        startRow = 1, startCol = 1
+    openxlsx::writeData(
+        wb,
+        summary_sheet,
+        "DERIVED VARIABLES SUMMARY",
+        startRow = 1,
+        startCol = 1,
+        colNames = FALSE
     )
     openxlsx::mergeCells(wb, summary_sheet, cols = 1:3, rows = 1)
     openxlsx::addStyle(wb, summary_sheet, header_style, rows = 1, cols = 1)

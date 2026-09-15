@@ -585,6 +585,16 @@ Objective 4 validates imported GEP probabilities directly. It does not train a n
 - Legacy binary/cause-specific MSS metrics can remain in technical sidecars when useful for continuity, but they are not the manuscript-facing MSS evidence.
 - IPCW-weighted recalibration models, grouped calibration statistics, discrimination metrics, and decision-curve analysis all evaluate how well the supplied GEP predictions performed.
 
+#### Endpoint and estimand contract
+
+The code intentionally keeps three quantities distinct:
+
+1. **MFS/MSS time-to-event processes.** MFS is time to documented distant metastasis, with death before recorded metastasis censored. MSS is time to death whose recorded cause is exactly `Metastatic_Uveal_Melanoma`. Every death with another recorded cause—including the explicit `Unknown` categories—is represented as a competing death; a patient without death is censored.
+2. **Fixed-horizon classification outcomes.** `metastasis_by_5yr` and `melanoma_death_by_5yr` are `1/0/NA` variables used to make the model target auditable. `0` means a known non-case at 60 months; `NA` means status is unknown because follow-up ended early. They are risks of metastasis or melanoma death, not survival probabilities and not metastatic mortality.
+3. **Descriptive horizon estimates.** Five-year MFS is estimated with Kaplan-Meier; melanoma-death cumulative incidence is estimated with Aalen-Johansen. These cohort-level time-to-event estimates are not the row-level quantities used in the IPCW AUC calculation.
+
+The no-GEP ridge models predict **60-month post-treatment metastasis risk** and **60-month melanoma-death cumulative-incidence risk**. Therefore their reader-facing AUC labels use those risk descriptions. “MFS AUC” and “MSS AUC” may be used only as short section labels, not as exact definitions of the modeled binary estimands.
+
 #### Exploratory no-GEP curve contracts
 
 The exploratory no-GEP report uses one prepared endpoint dataset and one fitted object for each curve, horizon estimate, and global comparison. This keeps the plotted estimate and workbook estimate on the same risk set and estimator.
@@ -596,7 +606,7 @@ The exploratory no-GEP report uses one prepared endpoint dataset and one fitted 
 
 For a workbook-first overview written for non-statistical readers, see [Understanding GEP Analysis](INTERPRETATION_GUIDE.md#understanding-gep-analysis) and [GEP Quick Read](INTERPRETATION_GUIDE.md#gep-quick-read).
 
-The canonical repository interpretation is that the Objective 4 MFS 5-year observed value should be read as Kaplan-Meier MFS at 60 months rather than a naive `1 - mfs_event_5yr` count, because the KM estimate remains censoring-aware and aligned with the workbook summaries.
+The canonical repository interpretation is that the Objective 4 MFS 5-year observed value should be read as Kaplan-Meier MFS at 60 months rather than a naive `1 - metastasis_by_5yr` count, because the KM estimate remains censoring-aware and aligned with the workbook summaries.
 
 ### Calibration Assessment
 
@@ -690,12 +700,12 @@ $$
 
 This is a pseudo-event count on the original denominator scale. It is not the same as the raw number of events recorded by time $t$ when pre-horizon censoring is present.
 
-Raw horizon event indicators are still created during preprocessing:
+Explicit fixed-horizon outcomes are created during preprocessing:
 
-- MFS uses `mfs_event_5yr`, `mfs_event_7yr`, and `mfs_event_10yr`
-- MSS uses `mss_event_5yr`, `mss_event_7yr`, and `mss_event_10yr`
+- MFS uses `metastasis_by_5yr`, `metastasis_by_7yr`, and `metastasis_by_10yr`
+- MSS uses `melanoma_death_by_5yr`, `melanoma_death_by_7yr`, and `melanoma_death_by_10yr`
 
-Those binary indicators remain useful for descriptive sensitivity summaries, but they are no longer the primary observed side of the MFS O/E calculation.
+Each is coded `1` for the target event by the horizon, `0` only when absence of the target event by the horizon is known, and `NA` after early censoring. For MSS, an other-cause death by the horizon is a known control (`0`); for MFS, death before metastasis is censoring and does not establish 5-year metastasis status. These fields are contract checks and row-level descriptive aids, not the primary observed side of the KM/AJ O/E calculations.
 
 For MSS, the primary observed side of the O/E calculation is now also censoring-aware when the workbook is summarizing melanoma-specific death under competing risks:
 
@@ -929,7 +939,7 @@ The pipeline intentionally removed Uno's C and single-timepoint time-dependent A
 **Integrated AUC (`Integrated_AUC`):**
 - MFS fits `coxph(Surv(observed_time, observed_event) ~ predicted_risk)` and calls `riskRegression::Score()` with monthly evaluation times.
 - MSS primary discrimination calls `timeROC::timeROC()` with melanoma-specific death as cause 1 and non-melanoma death as the competing event.
-- The reported MSS primary value is carried in both `Integrated_AUC` and `Primary_Discrimination` with method `timeROC_competing_risk_auc`.
+- The reported MSS primary value is carried in both `Integrated_AUC` and `Primary_Discrimination` with method `timeROC_AUC_2_competing_deaths_are_controls`. This definition retains other-cause deaths as non-cases at the horizon.
 - If `riskRegression::Score()` does not return a finite integrated AUC, the pipeline now leaves `Integrated_AUC` as missing and carries the explanation in `Integrated_AUC_Status`, `Integrated_AUC_Method`, and `Integrated_AUC_Unavailable_Reason`.
 - The pipeline does not silently substitute Harrell's C or another discrimination metric when integrated AUC is not estimable.
 
@@ -959,8 +969,11 @@ The current Objective 4 implementation reports clinical-utility metrics through 
 - MFS uses `1 - expected_mfs_{timepoint}yr`.
 - MSS uses `1 - expected_mss_{timepoint}yr`.
 
-**Observed outcome:**
-- The code constructs a binary outcome indicating whether the endpoint occurred by the requested horizon.
+**Observed outcome and censoring:**
+- The code derives horizon status from the canonical untruncated time/event-type process.
+- Target events by the horizon are cases; patients observed event-free through the horizon are controls.
+- Other-cause deaths are MSS controls. Death before metastasis is MFS censoring.
+- Early-censored rows are not recoded as controls; they receive zero evaluation weight, while known outcomes receive inverse-probability-of-censoring weights.
 
 **Threshold grid:**
 - Decision curves are evaluated on `seq(GEP_DCA_THRESHOLD_MIN, GEP_DCA_THRESHOLD_MAX, by = GEP_DCA_THRESHOLD_STEP)`.
@@ -971,7 +984,7 @@ $$
 NB(p_t) = \frac{TP}{N} - \frac{FP}{N} \cdot \frac{p_t}{1 - p_t}
 $$
 
-where $p_t$ is the decision threshold, $TP$ is the number of true positives, and $FP$ is the number of false positives under the threshold-based treatment rule.
+where $p_t$ is the decision threshold and $TP$ and $FP$ are IPCW-weighted case/control totals under the threshold-based treatment rule.
 
 **Workbook outputs:**
 - `Event_Rate`
@@ -1116,7 +1129,7 @@ This workflow keeps `GEP Failed/Indeterminate` and `GEP Not Tested` separate in 
 
 - definitive-GEP reference set: `Class 1` and `Class 2` only
 - no-GEP scoring cohort: `GEP Failed/Indeterminate` and `GEP Not Tested`
-- direct-risk modeling sets for 5-year MFS and 5-year MSS
+- direct-risk modeling sets for 5-year metastasis and melanoma-death risk
 
 #### Data preparation and verification
 
@@ -1126,7 +1139,7 @@ Before fitting exploratory models, the workflow:
 - fails fast if the required columns or expected report-facing GEP group structure are missing
 - restores the report-facing GEP class variables used for Objective 4 summaries
 - derives `no_gep_group` and the fixed binary baseline indicators (`ciliary_involvement`, `optic_nerve_involvement`)
-- derives 5-year binary endpoints (`mfs_event_5yr`, `mss_event_5yr`) when needed from event/time fields
+- requires the Objective 0 endpoint contract: untruncated time/event-type fields plus explicit 5-year `1/0/NA` outcomes, and fails if the two representations disagree
 - derives the expected exploratory group counts from the prepared-dataset snapshot itself rather than from hardcoded numbers
 - optionally verifies expected cohort counts and simplified KM risk-table row/count alignment for the four exploratory GEP groups
 
@@ -1154,12 +1167,12 @@ The derived `ciliary_involvement` field is included in no-GEP prediction outputs
 Three exploratory models are fit:
 
 1. surrogate `Class 2-like` model fitted only on definitive `Class 1` versus `Class 2` patients, with binary outcome coding `class2_outcome = 1` for `Class 2` and `0` for `Class 1`
-2. direct 5-year MFS risk model fitted on the full eligible cohort with a 5-year metastasis endpoint
-3. direct 5-year MSS risk model fitted on the full eligible cohort with a 5-year melanoma-specific death endpoint
+2. direct 5-year metastasis-risk model fitted on the full eligible cohort
+3. direct 5-year melanoma-death cumulative-incidence-risk model fitted on the full eligible cohort
 
 The surrogate remains a ridge-penalized logistic model fit with `glmnet::cv.glmnet(..., family = "binomial", alpha = 0)`.
 
-For the direct 5-year MFS and MSS models, the pipeline uses IPCW-weighted horizon modeling so the binary horizon target remains aligned with censoring-aware estimation. If that declared method is not supportable, the workflow records an explicit unsupported status and does not substitute a raw-binary `cv.glmnet` estimate.
+For the direct 5-year metastasis-risk and melanoma-death-risk models, the pipeline uses IPCW-weighted horizon modeling so the binary horizon target remains aligned with censoring-aware estimation. Outer folds are stratified on target events observed by the modeled horizon, not on events occurring only after that horizon. If the declared method is not supportable, the workflow records an explicit unsupported status and does not substitute a raw-binary `cv.glmnet` estimate.
 
 #### Ridge regression: form and motivation
 

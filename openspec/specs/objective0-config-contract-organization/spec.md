@@ -122,7 +122,11 @@ The contract MUST cover 5-, 7-, and 10-year MFS and MSS expected survival probab
 - **WHEN** Objective 0 derives MFS and MSS horizon fields
 - **THEN** MFS event/type/time fields match metastasis and competing-death source data at 5, 7, and 10 years
 - **AND** MSS event/type/time fields match melanoma-death and competing-death source data at 5, 7, and 10 years
-- **AND** the contract explicitly preserves the existing unit convention: `tt_mfs_*` horizons are in months and `tt_mss_*` horizons are in years
+- **AND** the contract uses the canonical untruncated endpoint pairs:
+  `tt_mets_months_analysis` with `mfs_event_type`, and `tt_death_months`
+  with `mss_event_type`; all endpoint times are in months
+- **AND** fixed-horizon audit outcomes are separate `1/0/NA` fields, where
+  early censoring is `NA` rather than a manufactured control
 
 #### Scenario: GEP eligibility and availability labels cannot drift
 - **WHEN** Objective 0 derives GEP eligibility and availability fields

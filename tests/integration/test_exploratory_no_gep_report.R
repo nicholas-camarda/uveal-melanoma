@@ -7,20 +7,20 @@ test_that("shared endpoint datasets use corrected fields and eligibility", {
         mets_free_at_baseline = c(TRUE, TRUE, TRUE, FALSE),
         tt_mets_months_analysis = c(12, 18, 72, 120),
         mets_event_analysis = c(0L, 1L, 1L, 1L),
-        objective4_mfs_event_type = c(0L, 1L, 0L, 0L),
+        mfs_event_type = c(0L, 1L, 1L, 0L),
         tt_mets_months = c(99, 99, 99, 99),
         mets_event = c(1L, 1L, 0L, 0L),
         tt_death_months = c(12, 18, 24, 30),
-        objective4_mss_event_type = c(0L, 1L, 2L, 1L)
+        mss_event_type = c(0L, 1L, 2L, 1L)
     ))
     mfs <- prepare_exploratory_mfs_analysis_data(prepared)
     mss <- prepare_exploratory_mss_analysis_data(prepared)
 
     expect_equal(mfs$tt_mets_months_analysis, c(12, 18, 72))
     expect_equal(mfs$mets_event_analysis, c(0L, 1L, 1L))
-    expect_false("objective4_mfs_event_type" %in% names(mfs))
+    expect_false("mfs_event_type" %in% names(mfs))
     expect_true(all(mfs$mets_free_at_baseline))
-    expect_true(all(mss$objective4_mss_event_type %in% c(0L, 1L, 2L)))
+    expect_true(all(mss$mss_event_type %in% c(0L, 1L, 2L)))
     expect_equal(mfs$tt_mets_months, c(99, 99, 99))
     expect_equal(mfs$mets_event, c(1L, 1L, 0L))
 })
@@ -48,7 +48,7 @@ test_that("no-GEP MFS uses shared censor and risk-table machinery", {
         mets_free_at_baseline = TRUE,
         tt_mets_months_analysis = c(12, 18, 24, 30),
         mets_event_analysis = c(0L, 1L, 0L, 1L),
-        objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
+        mfs_event_type = c(0L, 1L, 0L, 1L),
         tt_mets_months = c(99, 99, 99, 99),
         mets_event = c(1L, 1L, 1L, 1L)
     )
@@ -81,7 +81,7 @@ test_that("standard GEP KM uses the shared incident-MFS representation", {
         mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
         tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
         mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
-        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        mfs_event_type = c(NA_integer_, 1L, 0L, 1L),
         tt_mets_months = c(0, 12, 90, 18),
         mets_event = c(1L, 0L, 0L, 1L)
     )
@@ -129,7 +129,7 @@ test_that("standard GEP and no-GEP KM preparation retain the same incident-MFS r
         mets_free_at_baseline = c(FALSE, TRUE, TRUE, TRUE),
         tt_mets_months_analysis = c(NA_real_, 72, 90, 18),
         mets_event_analysis = c(NA_integer_, 1L, 0L, 1L),
-        objective4_mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
+        mfs_event_type = c(NA_integer_, 0L, 0L, 1L),
         tt_mets_months = c(0, 12, 90, 18),
         mets_event = c(1L, 0L, 0L, 1L)
     )
@@ -170,7 +170,7 @@ test_that("MSS CIF uses Aalen-Johansen coding and a single shared fit", {
     fixture <- tibble::tibble(
         exploratory_gep_group = factor(rep(c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate"), each = 4)),
         tt_death_months = c(12, 18, 24, 30, 10, 20, 35, 40, 8, 16, 28, 44, 14, 22, 32, 48),
-        objective4_mss_event_type = c(0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L, 0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L)
+        mss_event_type = c(0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L, 0L, 1L, 2L, 0L, 0L, 1L, 0L, 2L)
     )
     fitted <- fit_exploratory_mss_cif(fixture)
     result <- create_exploratory_mss_cif_plot(
@@ -192,7 +192,7 @@ test_that("unsupported MSS comparisons are explicit and non-fatal", {
     fixture <- tibble::tibble(
         exploratory_gep_group = factor(c("Class 1", "Class 1")),
         tt_death_months = c(12, 18),
-        objective4_mss_event_type = c(0L, 0L)
+        mss_event_type = c(0L, 0L)
     )
     fitted <- fit_exploratory_mss_cif(fixture)
     expect_true(is.na(fitted$gray_test$p_value))
@@ -287,12 +287,13 @@ test_that("exploratory direct targets preserve MFS eligibility and MSS competing
 
     fixture$mets_free_at_baseline[[baseline_row]] <- FALSE
     fixture$tt_mets_months_analysis[[baseline_row]] <- NA_real_
-    fixture$mfs_event_5yr[[baseline_row]] <- 1L
+    fixture$metastasis_by_5yr[[baseline_row]] <- 1L
 
     fixture$tt_death_months[mss_rows_index] <- 12
     fixture$melanoma_death_event[mss_rows_index] <- 0L
     fixture$competing_death_event[mss_rows_index] <- c(1L, 0L)
-    fixture$mss_event_5yr[mss_rows_index] <- 0L
+    fixture$mss_event_type[mss_rows_index] <- c(2L, 0L)
+    fixture$melanoma_death_by_5yr[mss_rows_index] <- 0L
 
     prepared <- prepare_exploratory_no_gep_data(fixture)
 
@@ -305,11 +306,11 @@ test_that("exploratory direct targets preserve MFS eligibility and MSS competing
         dplyr::arrange(match(.data$id, c(competing_id, early_censor_id)))
     mss_status <- derive_horizon_status(
         mss_rows$tt_death_months,
-        mss_rows$objective4_mss_event_type,
+        mss_rows$mss_event_type,
         60
     )
 
-    expect_identical(mss_rows$objective4_mss_event_type, c(2L, 0L))
+    expect_identical(mss_rows$mss_event_type, c(2L, 0L))
     expect_identical(mss_status$horizon_event, c(0L, NA_integer_))
     expect_identical(mss_status$known_status, c(TRUE, FALSE))
 
@@ -320,7 +321,7 @@ test_that("exploratory direct targets preserve MFS eligibility and MSS competing
         ),
         assessment = tibble::tibble(
             time = mss_rows$tt_death_months,
-            event_type = mss_rows$objective4_mss_event_type
+            event_type = mss_rows$mss_event_type
         ),
         time_var = "time",
         event_type_var = "event_type",
@@ -389,12 +390,12 @@ test_that("exploratory horizon summaries use censoring-aware event estimates", {
         mets_event_analysis = c(1L, 0L, 0L),
         mets_event = c(1, 0, 0),
         mets_free_at_baseline = TRUE,
-        objective4_mfs_event_type = c(1L, 0L, 0L),
+        mfs_event_type = c(1L, 0L, 0L),
         tt_death_months = c(48, 24, 24),
         melanoma_death_event = c(1, 0, 0),
         competing_death_event = c(0, 0, 0),
-        mfs_event_5yr = c(1L, 0L, 0L),
-        mss_event_5yr = c(1L, 0L, 0L),
+        metastasis_by_5yr = c(1L, 0L, 0L),
+        melanoma_death_by_5yr = c(1L, 0L, 0L),
         surrogate_class2_probability = c(0.5, 0.4, 0.6),
         predicted_mfs_5yr_risk = c(0.5, 0.4, 0.6),
         predicted_mss_5yr_risk = c(0.5, 0.4, 0.6)
@@ -404,8 +405,8 @@ test_that("exploratory horizon summaries use censoring-aware event estimates", {
 
     expect_equal(summary_tbl$mfs_observed_method[[1]], "kaplan_meier_at_horizon")
     expect_equal(summary_tbl$mss_observed_method[[1]], "aalen_johansen_cif_at_horizon")
-    expect_true(summary_tbl$observed_mfs_5yr_event_rate[[1]] > mean(prediction_data$mfs_event_5yr))
-    expect_true(summary_tbl$observed_mss_5yr_event_rate[[1]] > mean(prediction_data$mss_event_5yr))
+    expect_true(summary_tbl$observed_mfs_5yr_event_rate[[1]] > mean(prediction_data$metastasis_by_5yr))
+    expect_true(summary_tbl$observed_mss_5yr_event_rate[[1]] > mean(prediction_data$melanoma_death_by_5yr))
 })
 
 test_that("exploratory pooled summaries tolerate bins with no melanoma failures", {
@@ -422,12 +423,12 @@ test_that("exploratory pooled summaries tolerate bins with no melanoma failures"
         mets_event_analysis = c(0L, 1L, 0L, 1L),
         mets_event = c(0, 1, 0, 1),
         mets_free_at_baseline = TRUE,
-        objective4_mfs_event_type = c(0L, 1L, 0L, 1L),
+        mfs_event_type = c(0L, 1L, 0L, 1L),
         tt_death_months = c(24, 48, 36, 60),
         melanoma_death_event = c(0, 1, 0, 0),
         competing_death_event = c(0, 0, 0, 0),
-        mfs_event_5yr = c(0L, 1L, 0L, 1L),
-        mss_event_5yr = c(0L, 1L, 0L, 0L)
+        metastasis_by_5yr = c(0L, 1L, 0L, 1L),
+        melanoma_death_by_5yr = c(0L, 1L, 0L, 0L)
     )
 
     pooled_summary <- summarize_pooled_no_gep_sensitivity(prediction_data)
@@ -460,12 +461,12 @@ test_that("exploratory pooled summaries omit unbinned predictions", {
         mets_event_analysis = c(0L, 1L, NA_integer_),
         mets_event = c(0, 1, NA_integer_),
         mets_free_at_baseline = c(TRUE, TRUE, FALSE),
-        objective4_mfs_event_type = c(0L, 1L, NA_integer_),
+        mfs_event_type = c(0L, 1L, NA_integer_),
         tt_death_months = c(24, 48, 36),
         melanoma_death_event = c(0, 0, 0),
         competing_death_event = c(0, 0, 0),
-        mfs_event_5yr = c(0L, 1L, NA_integer_),
-        mss_event_5yr = c(0L, 0L, 0L)
+        metastasis_by_5yr = c(0L, 1L, NA_integer_),
+        melanoma_death_by_5yr = c(0L, 0L, 0L)
     )
 
     pooled_summary <- summarize_pooled_no_gep_sensitivity(prediction_data)
@@ -484,13 +485,13 @@ test_that("exploratory predictor screening ignores unused Other factor levels", 
             c(rep("Class 1", 41), rep("Class 2", 40)),
             levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
         ),
-        mfs_event_5yr = c(rep(0L, 50), rep(1L, 31)),
-        mss_event_5yr = c(rep(0L, 55), rep(1L, 26)),
+        metastasis_by_5yr = c(rep(0L, 50), rep(1L, 31)),
+        melanoma_death_by_5yr = c(rep(0L, 55), rep(1L, 26)),
         tt_mets_months_analysis = rep(72, 81),
         mets_free_at_baseline = TRUE,
-        objective4_mfs_event_type = as.integer(c(rep(0L, 50), rep(1L, 31))),
+        mfs_event_type = as.integer(c(rep(0L, 50), rep(1L, 31))),
         tt_death_months = rep(72, 81),
-        objective4_mss_event_type = as.integer(c(rep(0L, 55), rep(1L, 26))),
+        mss_event_type = as.integer(c(rep(0L, 55), rep(1L, 26))),
         location = factor(
             c(rep("Choroidal", 74), rep("Cilio-Choroidal", 7)),
             levels = c("Choroidal", "Cilio-Choroidal", "Other")
@@ -927,7 +928,7 @@ test_that("report-native no-GEP figures reconcile to source tables", {
         output_path = tempfile(fileext = ".png"),
         return_plot = TRUE
     )
-    expect_equal(round(auc_plot$plot_data$cv_auc, 3), c(0.563, 0.656, 0.603))
+    expect_equal(round(auc_plot$plot_data$cv_auc, 3), c(0.563, 0.656, 0.617))
     expect_true(all(auc_plot$plot_data$stability_lower <= auc_plot$plot_data$cv_auc))
     expect_true(all(auc_plot$plot_data$stability_upper >= auc_plot$plot_data$cv_auc))
 
@@ -976,11 +977,11 @@ test_that("report-native no-GEP figures reconcile to source tables", {
     contribution_rows <- results$predictor_contribution %>%
         dplyr::filter(
             .data$section == "model_contribution",
-            .data$model %in% c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+            .data$model %in% c("Direct 5-Year Metastasis Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
         )
     expect_true(setequal(
         unique(contribution_rows$model),
-        c("Direct 5-Year MFS Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
+        c("Direct 5-Year Metastasis Risk", "Direct 60-Month Melanoma-Death Cumulative-Incidence Risk")
     ))
     for (model_name in unique(contribution_rows$model)) {
         contributor_plot <- create_exploratory_no_gep_direct_model_contributions_plot(

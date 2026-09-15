@@ -116,13 +116,13 @@ test_that("Simple GEP validation uses KM-adjusted MFS at 5 years", {
         expected_mss_5yr = c(0.85, 0.85, 0.15, 0.15),
         tt_mets_months = c(12, 60, 72, 72),
         mets_event = c(0, 1, 0, 0),
-        mfs_event_5yr = c(0, 1, 0, 0),
+        metastasis_by_5yr = c(0, 1, 0, 0),
         tt_death_months = c(72, 72, 72, 72),
         tt_death_years = c(6, 6, 6, 6),
         death_event = c(0, 0, 0, 0),
         melanoma_death_event = c(0, 0, 0, 0),
         competing_death_event = c(0, 0, 0, 0),
-        mss_event_5yr = c(0, 0, 0, 0),
+        melanoma_death_by_5yr = c(0, 0, 0, 0),
         mfs_analysis_eligible = c(TRUE, TRUE, TRUE, TRUE),
         mss_analysis_eligible = c(TRUE, TRUE, TRUE, TRUE)
     )
@@ -192,6 +192,7 @@ test_that("MSS decision curve analysis respects month-based horizons", {
         event_occurred = c(1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0),
         expected_mss_5yr = c(0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.22, 0.35, 0.42, 0.18, 0.28, 0.33, 0.14, 0.24, 0.31, 0.45, 0.39, 0.21, 0.29, 0.34)
     )
+    dca_data$event_type <- as.integer(dca_data$event_occurred)
 
     dca_result <- perform_decision_curve_analysis_mss(
         data = dca_data,
@@ -237,13 +238,17 @@ test_that("standard MSS validation exposes a competing-risk primary lane", {
     test_data$tt_death_months[melanoma_rows] <- seq(12, 58, length.out = length(melanoma_rows))
     test_data$competing_death_event[competing_rows] <- 1L
     test_data$tt_death_months[competing_rows] <- seq(18, 54, length.out = length(competing_rows))
-    test_data$mss_event_5yr <- as.integer(test_data$melanoma_death_event == 1L & test_data$tt_death_months <= 60)
-    test_data$tt_death_years <- test_data$tt_death_months / 12
-    test_data$event_type_mss_5yr <- dplyr::case_when(
-        test_data$melanoma_death_event == 1L & test_data$tt_death_months <= 60 ~ 1L,
-        test_data$competing_death_event == 1L & test_data$tt_death_months <= 60 ~ 2L,
+    test_data$tt_death_months[1] <- 12
+    test_data$mss_event_type <- dplyr::case_when(
+        test_data$melanoma_death_event == 1L ~ 1L,
+        test_data$competing_death_event == 1L ~ 2L,
         TRUE ~ 0L
     )
+    test_data$melanoma_death_by_5yr <- derive_fixed_horizon_binary_outcome(
+        test_data$tt_death_months, test_data$mss_event_type, 60
+    )
+    expect_true(is.na(test_data$melanoma_death_by_5yr[1]))
+    test_data$tt_death_years <- test_data$tt_death_months / 12
 
     result <- perform_standard_mss_validation(
         data = test_data,
@@ -255,12 +260,17 @@ test_that("standard MSS validation exposes a competing-risk primary lane", {
     expect_equal(result$calibration$ici_method, "grouped_aalen_johansen_cif")
     expect_match(result$calibration$estimand, "competing event")
     expect_equal(result$discrimination$analysis_tier, "primary_competing_risk")
-    expect_equal(result$discrimination$integrated_auc_method, "timeROC_competing_risk_auc")
+    expect_equal(
+        result$discrimination$integrated_auc_method,
+        "timeROC_AUC_2_competing_deaths_are_controls"
+    )
     expect_equal(result$discrimination$integrated_auc_status, "ok")
     expect_true(is.finite(result$discrimination$primary_discrimination))
     expect_equal(result$discrimination$harrell_method, "not_primary_for_competing_risk_mss")
     expect_equal(result$decision_curve$analysis_tier, "technical_sidecar")
     expect_true(all(c("legacy_binary_calibration", "legacy_binary_discrimination", "legacy_binary_decision_curve") %in% names(result$technical_sidecars)))
+    expect_equal(result$technical_sidecars$legacy_binary_discrimination$n, nrow(test_data))
+    expect_equal(result$technical_sidecars$legacy_binary_calibration$n, nrow(test_data))
 })
 
 test_that("Simple GEP validation uses competing-risk CIF-adjusted MSS at 5 years", {
@@ -281,13 +291,13 @@ test_that("Simple GEP validation uses competing-risk CIF-adjusted MSS at 5 years
         expected_mss_5yr = c(0.8, 0.8, 0.8, 0.8, 0.4, 0.4),
         tt_mets_months = rep(72, 6),
         mets_event = rep(0L, 6),
-        mfs_event_5yr = rep(0L, 6),
+        metastasis_by_5yr = rep(0L, 6),
         tt_death_months = c(12, 48, 72, 72, 72, 72),
         tt_death_years = tt_death_months / 12,
         death_event = c(0L, 1L, 0L, 0L, 0L, 0L),
         melanoma_death_event = c(0L, 1L, 0L, 0L, 0L, 0L),
         competing_death_event = rep(0L, 6),
-        mss_event_5yr = c(0L, 1L, 0L, 0L, 0L, 0L),
+        melanoma_death_by_5yr = c(0L, 1L, 0L, 0L, 0L, 0L),
         mfs_analysis_eligible = TRUE,
         mss_analysis_eligible = TRUE
     )

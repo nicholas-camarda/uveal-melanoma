@@ -12,20 +12,16 @@ test_that("Persisted actual-data artifacts contain the pre-processed contract", 
   # Test that all expected pre-processed variables exist
   expected_vars <- c(
     # Time-specific event indicators
-    "mfs_event_5yr", "mfs_event_7yr", "mfs_event_10yr",
-    "mss_event_5yr", "mss_event_7yr", "mss_event_10yr",
+    "metastasis_by_5yr", "metastasis_by_7yr", "metastasis_by_10yr",
+    "melanoma_death_by_5yr", "melanoma_death_by_7yr", "melanoma_death_by_10yr",
     
     # Pre-calculated risk variables
     "predicted_mfs_risk_5yr", "predicted_mfs_risk_7yr", "predicted_mfs_risk_10yr",
     "predicted_mss_risk_5yr", "predicted_mss_risk_7yr", "predicted_mss_risk_10yr",
     
-    # Competing risk classifications
-    "event_type_mfs_5yr", "event_type_mfs_7yr", "event_type_mfs_10yr",
-    "event_type_mss_5yr", "event_type_mss_7yr", "event_type_mss_10yr",
-    
-    # Time-to-event variables
-    "tt_mfs_5yr", "tt_mfs_7yr", "tt_mfs_10yr",
-    "tt_mss_5yr", "tt_mss_7yr", "tt_mss_10yr",
+    # Canonical untruncated endpoint processes
+    "mfs_event_type", "mss_event_type",
+    "tt_mets_months_analysis", "tt_death_months",
     
     # Analysis eligibility flags
     "mfs_analysis_eligible", "mss_analysis_eligible"
@@ -80,8 +76,8 @@ test_that("Time-specific event indicators are calculated correctly", {
   data_derived <- data
   
   # Test that event indicators are binary (0 or 1)
-  event_vars <- c("mfs_event_5yr", "mfs_event_7yr", "mfs_event_10yr",
-                  "mss_event_5yr", "mss_event_7yr", "mss_event_10yr")
+  event_vars <- c("metastasis_by_5yr", "metastasis_by_7yr", "metastasis_by_10yr",
+                  "melanoma_death_by_5yr", "melanoma_death_by_7yr", "melanoma_death_by_10yr")
   
   for (var in event_vars) {
     values <- data_derived[[var]]
@@ -92,17 +88,17 @@ test_that("Time-specific event indicators are calculated correctly", {
   # Test that 5yr events <= 7yr events <= 10yr events (monotonicity)
   mfs_eligible <- data_derived %>% filter(mfs_analysis_eligible)
   if (nrow(mfs_eligible) > 0) {
-    expect_true(all(mfs_eligible$mfs_event_5yr <= mfs_eligible$mfs_event_7yr, na.rm = TRUE),
+    expect_true(all(mfs_eligible$metastasis_by_5yr <= mfs_eligible$metastasis_by_7yr, na.rm = TRUE),
                 info = "MFS 5yr events should be <= 7yr events")
-    expect_true(all(mfs_eligible$mfs_event_7yr <= mfs_eligible$mfs_event_10yr, na.rm = TRUE),
+    expect_true(all(mfs_eligible$metastasis_by_7yr <= mfs_eligible$metastasis_by_10yr, na.rm = TRUE),
                 info = "MFS 7yr events should be <= 10yr events")
   }
   
   mss_eligible <- data_derived %>% filter(mss_analysis_eligible)
   if (nrow(mss_eligible) > 0) {
-    expect_true(all(mss_eligible$mss_event_5yr <= mss_eligible$mss_event_7yr, na.rm = TRUE),
+    expect_true(all(mss_eligible$melanoma_death_by_5yr <= mss_eligible$melanoma_death_by_7yr, na.rm = TRUE),
                 info = "MSS 5yr events should be <= 7yr events")
-    expect_true(all(mss_eligible$mss_event_7yr <= mss_eligible$mss_event_10yr, na.rm = TRUE),
+    expect_true(all(mss_eligible$melanoma_death_by_7yr <= mss_eligible$melanoma_death_by_10yr, na.rm = TRUE),
                 info = "MSS 7yr events should be <= 10yr events")
   }
 })
@@ -144,8 +140,7 @@ test_that("Competing risk variables are valid", {
   data_derived <- data
   
   # Test that event type variables are valid (0, 1, 2, or NA)
-  event_type_vars <- c("event_type_mfs_5yr", "event_type_mfs_7yr", "event_type_mfs_10yr",
-                       "event_type_mss_5yr", "event_type_mss_7yr", "event_type_mss_10yr")
+  event_type_vars <- c("mfs_event_type", "mss_event_type")
   
   for (var in event_type_vars) {
     values <- data_derived[[var]]
@@ -154,8 +149,7 @@ test_that("Competing risk variables are valid", {
   }
   
   # Test that time-to-event variables are non-negative
-  time_vars <- c("tt_mfs_5yr", "tt_mfs_7yr", "tt_mfs_10yr",
-                 "tt_mss_5yr", "tt_mss_7yr", "tt_mss_10yr")
+  time_vars <- c("tt_mets_months_analysis", "tt_death_months")
   
   for (var in time_vars) {
     values <- data_derived[[var]]
@@ -173,11 +167,11 @@ test_that("GEP analysis functions can use pre-processed variables", {
   mfs_eligible <- data_derived %>% filter(mfs_analysis_eligible)
   if (nrow(mfs_eligible) > 0) {
     # Test that we can access the pre-processed variables
-    expect_true(all(c("mfs_event_5yr", "predicted_mfs_risk_5yr", "tt_mfs_5yr") %in% names(mfs_eligible)),
+    expect_true(all(c("metastasis_by_5yr", "predicted_mfs_risk_5yr", "tt_mets_months_analysis", "mfs_event_type") %in% names(mfs_eligible)),
                 info = "MFS analysis should have access to pre-processed variables")
     
     # Test that the variables have expected values
-    expect_true(sum(mfs_eligible$mfs_event_5yr, na.rm = TRUE) >= 0,
+    expect_true(sum(mfs_eligible$metastasis_by_5yr, na.rm = TRUE) >= 0,
                 info = "MFS 5yr events should be non-negative")
     expect_true(mean(mfs_eligible$predicted_mfs_risk_5yr, na.rm = TRUE) >= 0,
                 info = "MFS 5yr risk should be non-negative")
@@ -187,11 +181,11 @@ test_that("GEP analysis functions can use pre-processed variables", {
   mss_eligible <- data_derived %>% filter(mss_analysis_eligible)
   if (nrow(mss_eligible) > 0) {
     # Test that we can access the pre-processed variables
-    expect_true(all(c("mss_event_5yr", "predicted_mss_risk_5yr", "tt_mss_5yr") %in% names(mss_eligible)),
+    expect_true(all(c("melanoma_death_by_5yr", "predicted_mss_risk_5yr", "tt_death_months", "mss_event_type") %in% names(mss_eligible)),
                 info = "MSS analysis should have access to pre-processed variables")
     
     # Test that the variables have expected values
-    expect_true(sum(mss_eligible$mss_event_5yr, na.rm = TRUE) >= 0,
+    expect_true(sum(mss_eligible$melanoma_death_by_5yr, na.rm = TRUE) >= 0,
                 info = "MSS 5yr events should be non-negative")
     expect_true(mean(mss_eligible$predicted_mss_risk_5yr, na.rm = TRUE) >= 0,
                 info = "MSS 5yr risk should be non-negative")

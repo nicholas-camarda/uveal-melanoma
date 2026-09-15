@@ -239,6 +239,9 @@ tt_mets_months = case_when(
 
 - Captures time to **distant** metastases (not local recurrence)
 - Used for metastasis-free survival analysis
+- `tt_mets_months_analysis` excludes patients metastatic at or before treatment.
+  For a patient who dies without recorded metastasis, it ends observation at
+  the earlier of the last metastasis-free follow-up time and death.
 
 ---
 
@@ -257,6 +260,30 @@ tt_death_months = case_when(
 
 - **Death event:** Time from treatment to death (any cause)
 - **Censored:** Time from treatment to last known alive
+
+---
+
+### **Canonical MFS/MSS Event Processes and Fixed-Horizon Outcomes**
+
+Objective 0 stores one untruncated process for each endpoint:
+
+- MFS: `tt_mets_months_analysis` plus `mfs_event_type` (`1` metastasis,
+  `0` censored). Death before metastasis is censoring.
+- MSS: `tt_death_months` plus `mss_event_type` (`1` melanoma death,
+  `2` other death, `0` censored). Other death is a competing event.
+
+The separate fixed-horizon fields `metastasis_by_*yr` and
+`melanoma_death_by_*yr` contain `1`, `0`, or `NA`:
+
+- `1`: target event observed by the horizon
+- `0`: known non-case because the patient was observed through the horizon, or
+  because an MSS competing death occurred by the horizon
+- `NA`: follow-up ended before the horizon without an outcome that establishes
+  case/control status
+
+There are no horizon-specific event-type or truncated-time aliases. Downstream
+code derives IPCW status from the canonical untruncated process and verifies it
+against the fixed-horizon audit field.
 
 ---
 

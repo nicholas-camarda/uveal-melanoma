@@ -230,7 +230,7 @@ prepare_mss_competing_risk_validation_data <- function(data,
                                                        melanoma_event_var = "melanoma_death_event",
                                                        competing_event_var = "competing_death_event") {
     expected_var <- expected_var %||% paste0("expected_mss_", timepoint, "yr")
-    canonical_event_type_var <- paste0("event_type_mss_", timepoint, "yr")
+    canonical_event_type_var <- "mss_event_type"
     required_vars <- c(
         time_var,
         expected_var,
@@ -440,11 +440,15 @@ perform_standard_mss_validation <- function(data, timepoint, bootstrap_iteration
     # Convert timepoint to months for consistency with survival time units
     timepoint_months <- timepoint * 12
 
-    # Use pre-processed time-specific variables for consistency
+    # Survival sidecars require the untruncated cause-specific event process.
+    # The fixed-horizon field remains available in `data` for binary/DCA uses;
+    # using it here would turn early administrative censoring into missingness
+    # before the survival helpers can estimate censoring weights.
     analysis_data <- data %>%
         mutate(
-            time_to_event = .data[[time_var]],  # Use the specified time variable
-            event_occurred = .data[[paste0("mss_event_", timepoint, "yr")]]
+            time_to_event = .data[[time_var]],
+            event_type = .data$mss_event_type,
+            event_occurred = as.integer(.data$mss_event_type == 1L)
         )
 
     # Calculate observed vs expected rates
@@ -529,14 +533,14 @@ perform_competing_risk_mss_validation <- function(data, timepoint, time_var = "t
     analysis_data <- data %>%
         mutate(
             time_to_event = .data[[time_var]],  # Use the specified time variable
-            event_type = .data[[paste0("event_type_mss_", timepoint, "yr")]]
+            event_type = .data$mss_event_type
         )
 
     cif_source_data <- if (is.null(cif_data)) data else cif_data
     cif_analysis_data <- cif_source_data %>%
         mutate(
             time_to_event = .data[[time_var]],
-            event_type = .data[[paste0("event_type_mss_", timepoint, "yr")]]
+            event_type = .data$mss_event_type
         )
 
     analysis_feasibility <- assess_competing_risk_feasibility(
@@ -681,8 +685,8 @@ perform_prame_augmented_analysis_mss <- function(data, timepoints) {
 
         comparison_results[[paste0("yr", timepoint)]] <- calculate_prame_incremental_value_metrics(
             data = prame_data,
-            time_var = paste0("tt_mss_", timepoint, "yr"),
-            event_var = paste0("mss_event_", timepoint, "yr"),
+            time_var = "tt_death_months",
+            event_var = "melanoma_death_event",
             base_risk_var = paste0("predicted_mss_risk_", timepoint, "yr"),
             timepoint = timepoint,
             outcome_label = "MSS",
@@ -773,7 +777,7 @@ perform_competing_risk_discrimination_mss <- function(data,
 
     integrated_auc <- NA_real_
     integrated_auc_status <- "not_estimable"
-    integrated_auc_method <- "timeROC_competing_risk_auc"
+    integrated_auc_method <- "timeROC_AUC_2_competing_deaths_are_controls"
     if (is.na(not_estimable_reason)) {
         auc_result <- tryCatch({
             timeROC::timeROC(
@@ -791,9 +795,22 @@ perform_competing_risk_discrimination_mss <- function(data,
         })
 
         auc_values <- if (!is.null(auc_result)) {
-            auc_result$AUC_1 %||% auc_result$AUC
+            # Definition 2 treats anyone who is not a melanoma-death case by
+            # the horizon—including an earlier competing death—as a control.
+            auc_result$AUC_2
         } else {
             NULL
+        }
+        if (
+            !is.null(auc_result) &&
+            competing_by_timepoint == 0L &&
+            (is.null(auc_values) || !any(is.finite(auc_values)))
+        ) {
+            # With no competing deaths by the horizon, timeROC definitions 1
+            # and 2 have the same control set. Some timeROC versions return
+            # only AUC_1 in that degenerate competing-risk setting.
+            auc_values <- auc_result$AUC_1
+            integrated_auc_method <- "timeROC_AUC_1_equivalent_no_competing_deaths"
         }
         auc_value <- if (!is.null(auc_values) && length(auc_values) > 0) {
             utils::tail(auc_values[is.finite(auc_values)], 1)
@@ -1146,8 +1163,8 @@ perform_discrimination_mss <- function(data, timepoint) {
 #' Computes net benefit across threshold probabilities using observed events by
 #' the specified timepoint (in years) and predicted risk from expected MSS.
 #'
-#' @param data Data frame with columns: `time_to_event`, `event_occurred`
-#'   (0/1), and `expected_mss_*yr`.
+#' @param data Data frame with columns `time_to_event`, `event_type`
+#'   (0=censored, 1=melanoma death, 2=other death), and `expected_mss_*yr`.
 #' @param timepoint numeric Time in years for evaluation (e.g., 5)
 #' @param time_unit Character scalar giving the units stored in
 #'   `data$time_to_event`. Supported values are `"months"` and `"years"`.
@@ -1160,10 +1177,9 @@ perform_decision_curve_analysis_mss <- function(data, timepoint, time_unit = c("
     evaluation_horizon <- if (identical(time_unit, "months")) timepoint * 12 else timepoint
 
     dca_data <- data %>%
-        dplyr::filter(!is.na(.data[[expected_var]]), !is.na(time_to_event), !is.na(event_occurred)) %>%
+        dplyr::filter(!is.na(.data[[expected_var]]), !is.na(.data$time_to_event), !is.na(.data$event_type)) %>%
         dplyr::mutate(
-            predicted_risk = 1 - .data[[expected_var]],
-            outcome = as.integer(event_occurred == 1 & time_to_event <= evaluation_horizon)
+            predicted_risk = 1 - .data[[expected_var]]
         )
 
     if (nrow(dca_data) < GEP_MIN_SAMPLE_SIZE) {
@@ -1171,36 +1187,18 @@ perform_decision_curve_analysis_mss <- function(data, timepoint, time_unit = c("
         return(list(n = nrow(dca_data), status = "insufficient_data"))
     }
 
-    event_rate <- mean(dca_data$outcome)
     risk_thresholds <- seq(GEP_DCA_THRESHOLD_MIN, GEP_DCA_THRESHOLD_MAX, by = GEP_DCA_THRESHOLD_STEP)
-
-    dca_results <- data.frame(
-        threshold = risk_thresholds,
-        net_benefit_model = NA_real_,
-        net_benefit_all = NA_real_,
-        net_benefit_none = 0
+    dca_payload <- calculate_ipcw_decision_curve(
+        data = dca_data,
+        predicted_risk_var = "predicted_risk",
+        time_var = "time_to_event",
+        event_type_var = "event_type",
+        horizon_months = evaluation_horizon,
+        thresholds = risk_thresholds
     )
-
-    for (i in seq_along(risk_thresholds)) {
-        threshold <- risk_thresholds[i]
-        treat_model <- dca_data$predicted_risk >= threshold
-        treat_all <- rep(TRUE, nrow(dca_data))
-
-        if (sum(treat_model) > 0) {
-            tp_model <- sum(dca_data$outcome & treat_model)
-            fp_model <- sum(!dca_data$outcome & treat_model)
-            net_benefit_model <- (tp_model / nrow(dca_data)) - (fp_model / nrow(dca_data)) * (threshold / (1 - threshold))
-        } else {
-            net_benefit_model <- 0
-        }
-
-        tp_all <- sum(dca_data$outcome)
-        fp_all <- sum(!dca_data$outcome)
-        net_benefit_all <- (tp_all / nrow(dca_data)) - (fp_all / nrow(dca_data)) * (threshold / (1 - threshold))
-
-        dca_results$net_benefit_model[i] <- net_benefit_model
-        dca_results$net_benefit_all[i] <- net_benefit_all
-    }
+    dca_results <- dca_payload$curve
+    dca_data <- dca_payload$data
+    event_rate <- dca_payload$event_rate
 
     # Find optimal threshold with safety checks
     valid_net_benefits <- !is.na(dca_results$net_benefit_model)
@@ -1234,8 +1232,11 @@ perform_decision_curve_analysis_mss <- function(data, timepoint, time_unit = c("
 
     return(list(
         n = nrow(dca_data),
-        events = sum(dca_data$outcome),
+        events = sum(dca_data$outcome, na.rm = TRUE),
         event_rate = round(event_rate, 3),
+        known_outcome_n = dca_payload$known_n,
+        early_censored_n = dca_payload$early_censored_n,
+        method = dca_payload$method,
         optimal_threshold = round(optimal_threshold, 3),
         optimal_net_benefit = round(optimal_net_benefit, 4),
         threshold_range_min = round(threshold_range[1], 3),

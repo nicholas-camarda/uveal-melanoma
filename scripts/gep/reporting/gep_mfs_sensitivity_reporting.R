@@ -63,7 +63,7 @@ add_objective4_operational_followup_status <- function(data) {
 #' @return Character scalar naming the time-to-event column.
 resolve_objective4_followup_time_var <- function(event_prefix) {
     dplyr::case_when(
-        identical(event_prefix, "mfs") ~ "tt_mets_months",
+        identical(event_prefix, "mfs") ~ "tt_mets_months_analysis",
         identical(event_prefix, "mss") ~ "tt_death_months",
         TRUE ~ NA_character_
     )
@@ -149,12 +149,21 @@ collect_objective4_endpoint_followup_summary <- function(data,
         prepared_data[[eligibility_filter]] <- FALSE
     }
 
-    event_col <- paste0(event_prefix, "_event_", time_horizon_years, "yr")
+    event_col <- dplyr::case_when(
+        identical(event_prefix, "mfs") ~ paste0("metastasis_by_", time_horizon_years, "yr"),
+        identical(event_prefix, "mss") ~ paste0("melanoma_death_by_", time_horizon_years, "yr"),
+        TRUE ~ NA_character_
+    )
     time_var <- resolve_objective4_followup_time_var(event_prefix)
     cohort_label <- format_objective4_gep_cohort_label(dataset_name)
     followup_ge_label <- paste0("followup_ge_", time_horizon_years, "yr")
     censored_label <- paste0("censored_pre_", time_horizon_years, "yr")
     event_label <- paste0("event_by_", time_horizon_years, "yr")
+    competing_label <- if (identical(event_prefix, "mss")) {
+        paste0("competing_death_by_", time_horizon_years, "yr")
+    } else {
+        NA_character_
+    }
 
     empty_operational <- data.frame(
         operational_followup_status = character(),
@@ -215,6 +224,7 @@ collect_objective4_endpoint_followup_summary <- function(data,
             time_var = time_var,
             horizon_years = time_horizon_years,
             event_label = event_label,
+            competing_label = competing_label,
             followup_ge_label = followup_ge_label,
             censored_label = censored_label,
             operational_overall = empty_operational,
@@ -234,6 +244,13 @@ collect_objective4_endpoint_followup_summary <- function(data,
         ))
     }
 
+    prepared_data$.objective4_competing_by_horizon <- FALSE
+    if (identical(event_prefix, "mss") && "mss_event_type" %in% names(prepared_data)) {
+        prepared_data$.objective4_competing_by_horizon <-
+            prepared_data$mss_event_type == 2L &
+            prepared_data[[time_var]] <= (time_horizon_years * 12)
+    }
+
     eligible_data <- prepared_data %>%
         dplyr::filter(.data[[eligibility_filter]]) %>%
         dplyr::mutate(
@@ -251,7 +268,8 @@ collect_objective4_endpoint_followup_summary <- function(data,
             },
             horizon_followup_view = dplyr::case_when(
                 !is.na(.data[[event_col]]) & .data[[event_col]] == 1 ~ event_label,
-                !is.na(.data[[time_var]]) & .data[[time_var]] >= (time_horizon_years * 12) ~ followup_ge_label,
+                .data$.objective4_competing_by_horizon ~ competing_label,
+                !is.na(.data[[event_col]]) & .data[[event_col]] == 0 ~ followup_ge_label,
                 TRUE ~ censored_label
             )
         )
@@ -265,6 +283,7 @@ collect_objective4_endpoint_followup_summary <- function(data,
             time_var = time_var,
             horizon_years = time_horizon_years,
             event_label = event_label,
+            competing_label = competing_label,
             followup_ge_label = followup_ge_label,
             censored_label = censored_label,
             operational_overall = empty_operational,
@@ -420,6 +439,7 @@ collect_objective4_endpoint_followup_summary <- function(data,
         time_var = time_var,
         horizon_years = time_horizon_years,
         event_label = event_label,
+        competing_label = competing_label,
         followup_ge_label = followup_ge_label,
         censored_label = censored_label,
         operational_overall = operational_overall,
@@ -453,6 +473,7 @@ build_objective4_followup_limitation_block <- function(followup_summary, include
     followup_ge_label <- followup_summary$followup_ge_label %||% paste0("followup_ge_", horizon_years, "yr")
     event_label <- followup_summary$event_label %||% paste0("event_by_", horizon_years, "yr")
     censored_label <- followup_summary$censored_label %||% paste0("censored_pre_", horizon_years, "yr")
+    competing_label <- followup_summary$competing_label %||% NA_character_
     horizon_overall <- followup_summary$horizon_overall %||% data.frame()
     horizon_by_class <- followup_summary$horizon_by_class %||% data.frame()
     operational_overall <- followup_summary$operational_overall %||% data.frame()
@@ -472,6 +493,11 @@ build_objective4_followup_limitation_block <- function(followup_summary, include
     horizon_censored_n <- if (censored_label %in% names(horizon_counts)) horizon_counts[[censored_label]] else 0L
     horizon_event_n <- if (event_label %in% names(horizon_counts)) horizon_counts[[event_label]] else 0L
     horizon_followup_ge_n <- if (followup_ge_label %in% names(horizon_counts)) horizon_counts[[followup_ge_label]] else 0L
+    horizon_competing_n <- if (!is.na(competing_label) && competing_label %in% names(horizon_counts)) {
+        horizon_counts[[competing_label]]
+    } else {
+        0L
+    }
     operational_alive_n <- if ("alive" %in% names(operational_counts)) operational_counts[["alive"]] else 0L
     operational_dead_n <- if ("dead" %in% names(operational_counts)) operational_counts[["dead"]] else 0L
     operational_lost_n <- if ("lost_to_followup" %in% names(operational_counts)) operational_counts[["lost_to_followup"]] else 0L
@@ -508,29 +534,28 @@ build_objective4_followup_limitation_block <- function(followup_summary, include
         } else {
             character()
         },
-        md_bullet(sprintf(
-            "`%s` means follow-up reached at least %d years without the endpoint occurring before %d years; `censored_pre_%dyr` means follow-up ended before %d years without an observed endpoint.",
-            followup_ge_label,
-            horizon_years,
-            horizon_years,
-            horizon_years,
-            horizon_years
+        md_bullet(paste0(
+            sprintf(
+                "`%s` means status was known through %d years without the endpoint; `%s` means follow-up ended before %d years without an observed endpoint.",
+                followup_ge_label,
+                horizon_years,
+                censored_label,
+                horizon_years
+            ),
+            if (!is.na(competing_label)) {
+                sprintf(" `%s` means another-cause death occurred by %d years.", competing_label, horizon_years)
+            } else {
+                ""
+            }
         )),
-        md_bullet(sprintf(
-            "%d-year view: %s %d/%d (%.1f%%); %s %d/%d (%.1f%%); %s %d/%d (%.1f%%)",
-            horizon_years,
-            censored_label,
-            horizon_censored_n,
-            total_n,
-            100 * (horizon_censored_n / total_n),
-            event_label,
-            horizon_event_n,
-            total_n,
-            100 * (horizon_event_n / total_n),
-            followup_ge_label,
-            horizon_followup_ge_n,
-            total_n,
-            100 * (horizon_followup_ge_n / total_n)
+        md_bullet(paste(
+            c(
+                sprintf("%d-year view: %s %d/%d (%.1f%%)", horizon_years, censored_label, horizon_censored_n, total_n, 100 * (horizon_censored_n / total_n)),
+                sprintf("%s %d/%d (%.1f%%)", event_label, horizon_event_n, total_n, 100 * (horizon_event_n / total_n)),
+                if (!is.na(competing_label)) sprintf("%s %d/%d (%.1f%%)", competing_label, horizon_competing_n, total_n, 100 * (horizon_competing_n / total_n)) else character(),
+                sprintf("%s %d/%d (%.1f%%)", followup_ge_label, horizon_followup_ge_n, total_n, 100 * (horizon_followup_ge_n / total_n))
+            ),
+            collapse = "; "
         ))
     )
 
@@ -607,8 +632,8 @@ harmonize_objective4_mfs_summary_input <- function(data) {
 
     observed_events_5yr <- if ("observed_events_5yr" %in% names(harmonized_data)) {
         as.integer(harmonized_data$observed_events_5yr)
-    } else if ("mfs_event_5yr" %in% names(harmonized_data)) {
-        as.integer(!is.na(harmonized_data$mfs_event_5yr) & harmonized_data$mfs_event_5yr == 1)
+    } else if ("metastasis_by_5yr" %in% names(harmonized_data)) {
+        as.integer(harmonized_data$metastasis_by_5yr)
     } else {
         rep(0L, nrow(harmonized_data))
     }
@@ -632,9 +657,7 @@ harmonize_objective4_mfs_summary_input <- function(data) {
     } else {
         dplyr::case_when(
             observed_events_5yr == 1 ~ "event_by_5yr",
-            "tt_mets_months" %in% names(harmonized_data) &
-                !is.na(harmonized_data$tt_mets_months) &
-                harmonized_data$tt_mets_months >= 60 ~ "followup_ge_5yr",
+            observed_events_5yr == 0 ~ "followup_ge_5yr",
             TRUE ~ "censored_pre_5yr"
         )
     }
@@ -642,7 +665,7 @@ harmonize_objective4_mfs_summary_input <- function(data) {
     actual_mfs_5yr <- if ("actual_mfs_5yr" %in% names(harmonized_data)) {
         as.numeric(harmonized_data$actual_mfs_5yr)
     } else {
-        1 - observed_events_5yr
+        dplyr::if_else(is.na(observed_events_5yr), NA_real_, 1 - observed_events_5yr)
     }
 
     harmonized_data %>%
@@ -719,13 +742,13 @@ build_objective4_mfs_event_diagnostics <- function(data) {
     }
 
     id_col <- pick_objective4_row_id_column(data)
-    if (is.null(id_col) || !"mfs_event_5yr" %in% names(data)) {
+    if (is.null(id_col) || !"metastasis_by_5yr" %in% names(data)) {
         return(data.frame())
     }
 
     event_rows <- data %>%
         dplyr::filter(.data$mfs_analysis_eligible) %>%
-        dplyr::filter(!is.na(.data$mfs_event_5yr) & .data$mfs_event_5yr == 1) %>%
+        dplyr::filter(!is.na(.data$metastasis_by_5yr) & .data$metastasis_by_5yr == 1) %>%
         dplyr::mutate(row_id = .data[[id_col]])
 
     if (nrow(event_rows) == 0) {
@@ -754,8 +777,8 @@ prepare_objective4_mfs_sensitivity_data <- function(data, dataset_name = NULL) {
         "mfs_analysis_eligible",
         "expected_mfs_5yr",
         "predicted_mfs_risk_5yr",
-        "mfs_event_5yr",
-        "tt_mets_months",
+        "metastasis_by_5yr",
+        "tt_mets_months_analysis",
         "recurrence1_treatment_clean",
         "gep_class_simple"
     )
@@ -790,7 +813,7 @@ prepare_objective4_mfs_sensitivity_data <- function(data, dataset_name = NULL) {
 
     expected_mfs_5yr <- as.numeric(eligible_data$expected_mfs_5yr)
     predicted_mfs_risk_5yr <- as.numeric(eligible_data$predicted_mfs_risk_5yr)
-    observed_events_5yr <- as.integer(!is.na(eligible_data$mfs_event_5yr) & eligible_data$mfs_event_5yr == 1)
+    observed_events_5yr <- as.integer(eligible_data$metastasis_by_5yr)
 
     salvage_treatment <- as.character(eligible_data$recurrence1_treatment_clean)
     salvage_treatment[is.na(salvage_treatment) | salvage_treatment == ""] <- "None/Unknown"
@@ -810,10 +833,14 @@ prepare_objective4_mfs_sensitivity_data <- function(data, dataset_name = NULL) {
             expected_mfs_5yr = expected_mfs_5yr,
             predicted_mfs_risk_5yr = predicted_mfs_risk_5yr,
             observed_events_5yr = observed_events_5yr,
-            actual_mfs_5yr = 1 - .data$observed_events_5yr,
+            actual_mfs_5yr = dplyr::if_else(
+                is.na(.data$observed_events_5yr),
+                NA_real_,
+                1 - as.numeric(.data$observed_events_5yr)
+            ),
             five_year_followup_view = dplyr::case_when(
                 .data$observed_events_5yr == 1 ~ "event_by_5yr",
-                !is.na(.data$tt_mets_months) & .data$tt_mets_months >= 60 ~ "followup_ge_5yr",
+                .data$observed_events_5yr == 0 ~ "followup_ge_5yr",
                 TRUE ~ "censored_pre_5yr"
             ),
             salvage_treatment = salvage_treatment,

@@ -540,7 +540,7 @@ Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the 
    - For the full cohort, this workbook now also includes `No_GEP_Overview`, `No_GEP_Model_Comparison`, and `No_GEP_Risk_Strata`
 - Simple QC workbook under `04_GEP_Validation/unified_summary/`:
    - `*simple_gep_validation.xlsx`
-   - For MFS, this workbook reports KM-observed 5-year MFS rather than a naive `1 - mfs_event_5yr` average.
+   - For MFS, this workbook reports KM-observed 5-year MFS rather than a naive `1 - metastasis_by_5yr` average.
 - Limited visuals: KM curves for MFS, CIF curves for MSS, and optional outcome-specific PRAME delta-C PNGs (`*mfs_prame_delta_c.png`, `*mss_prame_delta_c.png`)
 
 **Workbook contract:** the consolidated outcome workbook is the primary review artifact. Technical workbooks retain lower-level detail, and the root unified workbook is comparison-only (`*_Comparison` sheet naming). For full cohort runs, the unified workbook may append compact `No_GEP_*` summary tabs.

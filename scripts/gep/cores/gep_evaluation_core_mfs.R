@@ -286,12 +286,13 @@ perform_calibration_mfs <- function(data, timepoint, bootstrap_iterations) {
     timepoint_months <- timepoint * 12
     expected_var <- paste0("expected_mfs_", timepoint, "yr")
 
-    # Use pre-processed variables for consistency
+    # Keep the untruncated survival process intact. The calibration helper
+    # applies the requested horizon and IPCW itself.
     cal_data <- data %>%
         filter(mfs_analysis_eligible) %>%
         mutate(
-            observed_time = .data[[paste0("tt_mfs_", timepoint, "yr")]],
-            observed_event = .data[[paste0("mfs_event_", timepoint, "yr")]],
+            observed_time = .data$tt_mets_months_analysis,
+            observed_event = as.integer(.data$mfs_event_type == 1L),
             # Use pre-calculated risk variables
             predicted_risk = .data[[paste0("predicted_mfs_risk_", timepoint, "yr")]]
         )
@@ -342,14 +343,14 @@ perform_discrimination_mfs <- function(data, timepoint) {
     logger::log_info(formatted(sprintf("Time-specific analysis: censoring at %d months (%d years)", timepoint_months, timepoint), indent = 3))
     expected_var <- paste0("expected_mfs_", timepoint, "yr")
 
-    # Use pre-processed variables for consistency
+    # Use the untruncated event process; metric code applies the horizon.
     disc_data <- data %>%
         dplyr::filter(mfs_analysis_eligible) %>%
         dplyr::mutate(
             predicted_prob = .data[[expected_var]],
             predicted_risk = .data[[paste0("predicted_mfs_risk_", timepoint, "yr")]], # Use pre-calculated risk
-            observed_time = .data[[paste0("tt_mfs_", timepoint, "yr")]],
-            observed_event = .data[[paste0("mfs_event_", timepoint, "yr")]]
+            observed_time = .data$tt_mets_months_analysis,
+            observed_event = as.integer(.data$mfs_event_type == 1L)
         )
 
     if (nrow(disc_data) < GEP_MIN_SAMPLE_SIZE) {
@@ -656,17 +657,18 @@ perform_discrimination_mfs <- function(data, timepoint) {
 perform_decision_curve_analysis_mfs <- function(data, timepoint) {
     logger::log_info(formatted(sprintf("Performing decision curve analysis for %d-year MFS", timepoint), indent = 2))
 
-    # Prepare data
     timepoint_months <- timepoint * 12
     expected_var <- paste0("expected_mfs_", timepoint, "yr")
 
     dca_data <- data %>%
-        dplyr::filter(!is.na(.data[[expected_var]]), !is.na(tt_mets_months), !is.na(mets_event)) %>%
+        dplyr::filter(
+            .data$mfs_analysis_eligible,
+            !is.na(.data[[expected_var]]),
+            !is.na(.data$tt_mets_months_analysis),
+            !is.na(.data$mfs_event_type)
+        ) %>%
         dplyr::mutate(
-            predicted_risk = 1 - .data[[expected_var]], # Convert survival prob to risk
-            observed_time = tt_mets_months,
-            observed_event = mets_event,
-            outcome = observed_event == 1 & observed_time <= timepoint_months
+            predicted_risk = 1 - .data[[expected_var]]
         )
 
     if (nrow(dca_data) < GEP_MIN_SAMPLE_SIZE) {
@@ -677,38 +679,18 @@ perform_decision_curve_analysis_mfs <- function(data, timepoint) {
         ))
     }
 
-    event_rate <- mean(dca_data$outcome)
     risk_thresholds <- seq(GEP_DCA_THRESHOLD_MIN, GEP_DCA_THRESHOLD_MAX, by = GEP_DCA_THRESHOLD_STEP)
-
-    dca_results <- data.frame(
-        threshold = risk_thresholds,
-        net_benefit_model = NA,
-        net_benefit_all = NA,
-        net_benefit_none = 0
+    dca_payload <- calculate_ipcw_decision_curve(
+        data = dca_data,
+        predicted_risk_var = "predicted_risk",
+        time_var = "tt_mets_months_analysis",
+        event_type_var = "mfs_event_type",
+        horizon_months = timepoint_months,
+        thresholds = risk_thresholds
     )
-
-    for (i in seq_along(risk_thresholds)) {
-        threshold <- risk_thresholds[i]
-        treat_model <- dca_data$predicted_risk >= threshold
-        treat_all <- rep(TRUE, nrow(dca_data))
-
-        if (sum(treat_model) > 0) {
-            tp_model <- sum(dca_data$outcome & treat_model)
-            fp_model <- sum(!dca_data$outcome & treat_model)
-            net_benefit_model <- (tp_model / nrow(dca_data)) -
-                (fp_model / nrow(dca_data)) * (threshold / (1 - threshold))
-        } else {
-            net_benefit_model <- 0
-        }
-
-        tp_all <- sum(dca_data$outcome)
-        fp_all <- sum(!dca_data$outcome)
-        net_benefit_all <- (tp_all / nrow(dca_data)) -
-            (fp_all / nrow(dca_data)) * (threshold / (1 - threshold))
-
-        dca_results$net_benefit_model[i] <- net_benefit_model
-        dca_results$net_benefit_all[i] <- net_benefit_all
-    }
+    dca_results <- dca_payload$curve
+    dca_data <- dca_payload$data
+    event_rate <- dca_payload$event_rate
 
     # Find optimal threshold with safety checks
     valid_net_benefits <- !is.na(dca_results$net_benefit_model)
@@ -745,8 +727,11 @@ perform_decision_curve_analysis_mfs <- function(data, timepoint) {
 
     return(list(
         n = nrow(dca_data),
-        events = sum(dca_data$outcome),
+        events = sum(dca_data$outcome, na.rm = TRUE),
         event_rate = round(event_rate, 3),
+        known_outcome_n = dca_payload$known_n,
+        early_censored_n = dca_payload$early_censored_n,
+        method = dca_payload$method,
         optimal_threshold = round(optimal_threshold, 3),
         optimal_net_benefit = round(optimal_net_benefit, 4),
         threshold_range_min = round(threshold_range[1], 3),
@@ -806,8 +791,8 @@ perform_prame_augmented_analysis_mfs <- function(data, timepoints) {
 
         comparison_results[[paste0("yr", timepoint)]] <- calculate_prame_incremental_value_metrics(
             data = prame_data,
-            time_var = paste0("tt_mfs_", timepoint, "yr"),
-            event_var = paste0("mfs_event_", timepoint, "yr"),
+            time_var = "tt_mets_months_analysis",
+            event_var = "mets_event_analysis",
             base_risk_var = paste0("predicted_mfs_risk_", timepoint, "yr"),
             timepoint = timepoint,
             outcome_label = "MFS",

@@ -62,6 +62,107 @@ derive_horizon_status <- function(time, event_type, horizon_months) {
     )
 }
 
+#' Calculate an IPCW decision curve at a fixed horizon
+#'
+#' Early-censored observations receive zero evaluation weight. Target events,
+#' competing events, and patients observed through the horizon receive inverse
+#' censoring weights. Competing events are retained as known non-cases.
+#'
+#' @param data Data frame containing predictions and endpoint fields.
+#' @param predicted_risk_var Character prediction column name.
+#' @param time_var Character follow-up-time column name (months).
+#' @param event_type_var Character event-type column name.
+#' @param horizon_months Positive evaluation horizon in months.
+#' @param thresholds Numeric threshold probabilities strictly between 0 and 1.
+#' @return List containing the weighted analysis data, event rate, and curve.
+calculate_ipcw_decision_curve <- function(data,
+                                          predicted_risk_var,
+                                          time_var,
+                                          event_type_var,
+                                          horizon_months,
+                                          thresholds) {
+    required <- c(predicted_risk_var, time_var, event_type_var)
+    missing <- setdiff(required, names(data))
+    if (length(missing) > 0L) {
+        stop(sprintf("IPCW decision curve is missing: %s", paste(missing, collapse = ", ")), call. = FALSE)
+    }
+    if (!is.numeric(thresholds) || any(!is.finite(thresholds)) ||
+        any(thresholds <= 0 | thresholds >= 1)) {
+        stop("Decision thresholds must be finite probabilities strictly between 0 and 1.", call. = FALSE)
+    }
+
+    analysis_data <- data %>%
+        dplyr::transmute(
+            predicted_risk = suppressWarnings(as.numeric(.data[[predicted_risk_var]])),
+            observed_time = suppressWarnings(as.numeric(.data[[time_var]])),
+            event_type = suppressWarnings(as.integer(.data[[event_type_var]]))
+        ) %>%
+        dplyr::filter(
+            is.finite(.data$predicted_risk),
+            .data$predicted_risk >= 0,
+            .data$predicted_risk <= 1,
+            is.finite(.data$observed_time),
+            .data$observed_time >= 0,
+            !is.na(.data$event_type)
+        )
+    validate_horizon_inputs(analysis_data$observed_time, analysis_data$event_type, horizon_months)
+
+    status <- derive_horizon_status(
+        analysis_data$observed_time,
+        analysis_data$event_type,
+        horizon_months
+    )
+    censoring_fit <- fit_training_censoring_distribution(
+        analysis_data$observed_time,
+        analysis_data$event_type,
+        horizon_months
+    )
+    censoring_survival <- predict_censoring_survival(
+        censoring_fit,
+        status$weight_time,
+        status$use_left_limit
+    )
+    if (any(censoring_survival[status$known_status] <= 0)) {
+        stop("IPCW decision curve requires positive censoring survival for every known outcome.", call. = FALSE)
+    }
+
+    analysis_data$outcome <- status$horizon_event
+    analysis_data$known_status <- status$known_status
+    analysis_data$ipcw_weight <- 0
+    analysis_data$ipcw_weight[status$known_status] <-
+        1 / censoring_survival[status$known_status]
+    population_n <- nrow(analysis_data)
+    event_rate <- sum(analysis_data$ipcw_weight * analysis_data$outcome, na.rm = TRUE) / population_n
+
+    curve <- purrr::map_dfr(thresholds, function(threshold) {
+        treat_model <- analysis_data$predicted_risk >= threshold
+        odds_at_threshold <- threshold / (1 - threshold)
+        weighted_cases <- analysis_data$ipcw_weight * (analysis_data$outcome == 1L)
+        weighted_controls <- analysis_data$ipcw_weight * (analysis_data$outcome == 0L)
+        tibble::tibble(
+            threshold = threshold,
+            net_benefit_model = (
+                sum(weighted_cases[treat_model], na.rm = TRUE) -
+                    sum(weighted_controls[treat_model], na.rm = TRUE) * odds_at_threshold
+            ) / population_n,
+            net_benefit_all = (
+                sum(weighted_cases, na.rm = TRUE) -
+                    sum(weighted_controls, na.rm = TRUE) * odds_at_threshold
+            ) / population_n,
+            net_benefit_none = 0
+        )
+    })
+
+    list(
+        data = analysis_data,
+        curve = curve,
+        event_rate = event_rate,
+        known_n = sum(status$known_status),
+        early_censored_n = sum(!status$known_status),
+        method = "inverse-probability-of-censoring weighted decision curve"
+    )
+}
+
 #' Fit a censoring distribution on outer-training rows
 #'
 #' Target and competing outcomes are retained as observed outcomes rather than
@@ -758,7 +859,16 @@ cross_validate_horizon_ridge <- function(
         stop("Too few complete-predictor rows for nested horizon validation.", call. = FALSE)
     }
     stable_id <- as.character(model_data[[stable_id_var]])
-    outer_strata <- ifelse(model_data[[event_type_var]] == 1L, "target", "other")
+    horizon_status <- derive_horizon_status(
+        model_data[[time_var]],
+        model_data[[event_type_var]],
+        horizon_months
+    )
+    # Stratify on cases observed by the modeled horizon. A target event after
+    # the horizon is a known 5-year control, not a 5-year case stratum.
+    outer_strata <- as.integer(
+        !is.na(horizon_status$horizon_event) & horizon_status$horizon_event == 1L
+    )
 
     predictions <- list()
     metadata <- list()
