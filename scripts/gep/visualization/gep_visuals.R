@@ -1347,7 +1347,6 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #' Class 1 and Class 2 while optionally retaining one or both no-GEP strata.
 #'
 #' @param data Data frame with survival data and GEP labels.
-#' @param output_dir Output directory for saved plots.
 #' @param prefix Filename prefix.
 #' @param dataset_name Dataset label used in the subtitle.
 #' @param km_output_dir Directory used for the saved KM figure.
@@ -1370,7 +1369,7 @@ create_mfs_simple_binary_survival_analysis <- function(data, output_dir, prefix,
 #' @return Invisibly returns `NULL` after saving plots, or a list containing the
 #'   plot, shared fit, plot data, and p-value-annotation flag when
 #'   `return_plot = TRUE`.
-create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months_analysis", event_var = "mets_event_analysis", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
+create_mfs_collapsed_survival_curves <- function(data, prefix, km_output_dir, dataset_name = "GEP Validation", include_failed_indeterminate = FALSE, subtitle_suffix, output_filename, return_plot = FALSE, save_plot = TRUE, time_var = "tt_mets_months_analysis", event_var = "mets_event_analysis", display_group_var = NULL, display_levels = NULL, show_p_value = TRUE, surv_fit = NULL) {
     target_levels <- display_levels %||% c("Class 1", "Class 2", "GEP Not Tested")
     if (is.null(display_levels) && isTRUE(include_failed_indeterminate)) {
         target_levels <- c(target_levels, "GEP Failed/Indeterminate")
@@ -1678,7 +1677,6 @@ create_mfs_collapsed_survival_curves <- function(data, output_dir, prefix, datas
 create_mfs_simplified_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, return_plot = FALSE, save_plot = TRUE) {
     create_mfs_collapsed_survival_curves(
         data = data,
-        output_dir = output_dir,
         prefix = prefix,
         dataset_name = dataset_name,
         km_output_dir = km_output_dir,
@@ -1709,7 +1707,6 @@ create_mfs_simplified_survival_curves <- function(data, output_dir, prefix, data
 create_mfs_four_group_survival_curves <- function(data, output_dir, prefix, dataset_name = "GEP Validation", km_output_dir = output_dir, return_plot = FALSE, save_plot = TRUE) {
     create_mfs_collapsed_survival_curves(
         data = data,
-        output_dir = output_dir,
         prefix = prefix,
         dataset_name = dataset_name,
         km_output_dir = km_output_dir,

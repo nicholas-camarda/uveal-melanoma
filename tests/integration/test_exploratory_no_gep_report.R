@@ -88,8 +88,8 @@ test_that("standard GEP KM uses the shared incident-MFS representation", {
 
     result <- create_mfs_collapsed_survival_curves(
         data = fixture,
-        output_dir = tempfile(),
         prefix = "",
+        km_output_dir = tempfile(),
         subtitle_suffix = "test",
         output_filename = "unused.png",
         return_plot = TRUE,
@@ -107,6 +107,13 @@ test_that("standard GEP KM uses the shared incident-MFS representation", {
         1L
     )
     expect_true(any(result$fit$time >= 72 & result$fit$n.event == 1))
+})
+
+test_that("collapsed MFS renderer exposes only its active output directory argument", {
+    helper_formals <- names(formals(create_mfs_collapsed_survival_curves))
+
+    expect_false("output_dir" %in% helper_formals)
+    expect_true("km_output_dir" %in% helper_formals)
 })
 
 test_that("standard GEP and no-GEP KM preparation retain the same incident-MFS rows", {

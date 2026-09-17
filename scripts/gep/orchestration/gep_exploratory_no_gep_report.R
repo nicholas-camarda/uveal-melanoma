@@ -3402,7 +3402,6 @@ create_exploratory_mfs_km_plot <- function(data, output_path, return_plot = FALS
 
     rendered <- create_mfs_collapsed_survival_curves(
         data = analysis_data,
-        output_dir = dirname(output_path),
         prefix = "",
         dataset_name = "Full cohort",
         km_output_dir = dirname(output_path),
