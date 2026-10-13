@@ -1,0 +1,454 @@
+# Definitive-GEP 5-year validation
+#
+# Patients with a definitive DecisionDx Class 1/2 call and PRAME reported carry
+# one of four imported predictions (Class x PRAME). The honest check is therefore
+# observed 5-year risk in each of the four groups against the imported value,
+# plus tie-aware discrimination of that four-level predictor. No model is fit and
+# no value is extrapolated beyond the last observed follow-up.
+
+#' Assign the Class x PRAME validation group
+#'
+#' @param data Data frame with `gep_class_simple` and `prame_status`.
+#' @return `data` with a factor column `validation_group` (levels
+#'   `GEP_VALIDATION_GROUP_LEVELS`); rows outside the four groups get `NA`.
+assign_gep_validation_group <- function(data) {
+    group_label <- dplyr::case_when(
+        data$gep_class_simple == "Class 1" & data$prame_status == "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[1]],
+        data$gep_class_simple == "Class 1" & data$prame_status == "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[2]],
+        data$gep_class_simple == "Class 2" & data$prame_status == "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[3]],
+        data$gep_class_simple == "Class 2" & data$prame_status == "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[4]],
+        TRUE ~ NA_character_
+    )
+    data$validation_group <- factor(group_label, levels = GEP_VALIDATION_GROUP_LEVELS)
+    data
+}
+
+#' Prepare the analysis set for one validation endpoint
+#'
+#' Keeps the patients flagged eligible for the endpoint, assigns the validation
+#' group, and creates uniform `time_months`, `status` (0 censored, 1 event of
+#' interest, 2 competing death; MFS never uses 2), and `published_risk` columns.
+#'
+#' @param data Cohort data frame from the analytic dataset.
+#' @param endpoint Character, `"MFS"` or `"MSS"`.
+#' @return Data frame with columns `validation_group`, `time_months`, `status`,
+#'   and `published_risk` (1 minus the imported 5-year survival probability).
+prepare_gep_validation_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
+    endpoint <- match.arg(endpoint)
+    spec <- switch(
+        endpoint,
+        MFS = list(eligible = "mfs_analysis_eligible", time = "tt_mets_months_analysis",
+                   status = "mfs_event_type", expected = "biopsy1_gep_mfs"),
+        MSS = list(eligible = "mss_analysis_eligible", time = "tt_death_months",
+                   status = "mss_event_type", expected = "biopsy1_gep_mss")
+    )
+    required <- c(spec$eligible, spec$time, spec$status, spec$expected, "gep_class_simple", "prame_status")
+    missing_cols <- setdiff(required, names(data))
+    if (length(missing_cols) > 0L) {
+        stop(sprintf("%s validation requires columns: %s", endpoint, paste(missing_cols, collapse = ", ")), call. = FALSE)
+    }
+
+    prepared <- data %>%
+        dplyr::filter(.data[[spec$eligible]] %in% TRUE) %>%
+        assign_gep_validation_group() %>%
+        dplyr::mutate(
+            time_months = as.numeric(.data[[spec$time]]),
+            status = as.integer(.data[[spec$status]]),
+            published_risk = 1 - as.numeric(.data[[spec$expected]])
+        ) %>%
+        dplyr::filter(!is.na(.data$validation_group), is.finite(.data$time_months), !is.na(.data$status))
+    prepared
+}
+
+#' Kaplan-Meier risk at a horizon without extrapolation
+#'
+#' Reports the censoring-aware metastasis risk at `horizon_months`. The estimate
+#' is `NA` when the group is not followed to the horizon, rather than carrying the
+#' last value forward. The interval is `NA` when no event occurred by the horizon
+#' because the Kaplan-Meier interval is then degenerate.
+#'
+#' @param time_months Numeric follow-up times in months.
+#' @param status Integer status, 1 = event, anything else censored.
+#' @param horizon_months Numeric horizon in months.
+#' @return Named list: `n`, `events`, `censored_before`, `event_free_through`,
+#'   `max_followup_months`, `risk`, `ci_lower`, `ci_upper`, `estimable`.
+estimate_km_risk_at_horizon <- function(time_months, status, horizon_months) {
+    n <- length(time_months)
+    event <- status == 1L
+    result <- list(
+        n = n,
+        events = sum(event & time_months <= horizon_months),
+        censored_before = sum(!event & time_months < horizon_months),
+        competing = 0L,
+        event_free_through = NA_integer_,
+        max_followup_months = if (n > 0L) max(time_months) else NA_real_,
+        risk = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+        estimable = FALSE
+    )
+    result$event_free_through <- n - result$events - result$censored_before
+    if (n == 0L || max(time_months) < horizon_months) {
+        return(result)
+    }
+    fit <- survival::survfit(survival::Surv(time_months, event) ~ 1, conf.type = "log-log")
+    at_horizon <- summary(fit, times = horizon_months)
+    result$risk <- 1 - at_horizon$surv
+    result$estimable <- TRUE
+    if (result$events > 0L && length(at_horizon$lower) == 1L && is.finite(at_horizon$lower)) {
+        result$ci_lower <- 1 - at_horizon$upper
+        result$ci_upper <- 1 - at_horizon$lower
+    }
+    result
+}
+
+#' Aalen-Johansen cumulative incidence of the event of interest at a horizon
+#'
+#' Competing deaths remain in the risk set as competing events. The estimate is
+#' `NA` when the group is not followed to the horizon. The interval uses the
+#' log-log transform of the cumulative-incidence variance and is `NA` when no
+#' event of interest occurred by the horizon.
+#'
+#' @param time_months Numeric follow-up times in months.
+#' @param status Integer status: 0 censored, 1 event of interest, 2 competing.
+#' @param horizon_months Numeric horizon in months.
+#' @return Same list shape as `estimate_km_risk_at_horizon()`, with `competing`
+#'   counting competing deaths by the horizon.
+estimate_cif_risk_at_horizon <- function(time_months, status, horizon_months) {
+    n <- length(time_months)
+    result <- list(
+        n = n,
+        events = sum(status == 1L & time_months <= horizon_months),
+        censored_before = sum(status == 0L & time_months < horizon_months),
+        competing = sum(status == 2L & time_months <= horizon_months),
+        event_free_through = NA_integer_,
+        max_followup_months = if (n > 0L) max(time_months) else NA_real_,
+        risk = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+        estimable = FALSE
+    )
+    result$event_free_through <- n - result$events - result$censored_before - result$competing
+    if (n == 0L || max(time_months) < horizon_months) {
+        return(result)
+    }
+    result$estimable <- TRUE
+    if (result$events == 0L) {
+        result$risk <- 0
+        return(result)
+    }
+    fit <- cmprsk::cuminc(ftime = time_months, fstatus = status, cencode = 0)
+    point <- cmprsk::timepoints(fit, times = horizon_months)
+    cause_row <- grep("1$", rownames(point$est))[1]
+    cif <- as.numeric(point$est[cause_row, 1])
+    cif_var <- as.numeric(point$var[cause_row, 1])
+    result$risk <- cif
+    if (is.finite(cif_var) && cif_var > 0 && cif > 0 && cif < 1) {
+        log_log <- log(-log(1 - cif))
+        se_log_log <- sqrt(cif_var) / ((1 - cif) * (-log(1 - cif)))
+        z <- stats::qnorm(0.975)
+        result$ci_lower <- 1 - exp(-exp(log_log - z * se_log_log))
+        result$ci_upper <- 1 - exp(-exp(log_log + z * se_log_log))
+    }
+    result
+}
+
+#' Estimate horizon risk for one set of patients
+#'
+#' @param time_months Numeric follow-up times in months.
+#' @param status Integer status vector (see the two estimators).
+#' @param horizon_months Numeric horizon in months.
+#' @param endpoint Character, `"MFS"` (Kaplan-Meier) or `"MSS"` (Aalen-Johansen).
+#' @return List from `estimate_km_risk_at_horizon()` or `estimate_cif_risk_at_horizon()`.
+estimate_endpoint_risk <- function(time_months, status, horizon_months, endpoint) {
+    if (identical(endpoint, "MFS")) {
+        estimate_km_risk_at_horizon(time_months, status, horizon_months)
+    } else {
+        estimate_cif_risk_at_horizon(time_months, status, horizon_months)
+    }
+}
+
+#' Case-mix-standardised overall observed risk
+#'
+#' Combines the four group-level observed risks weighted by group size, so the
+#' overall observed risk does not depend on a pooled Kaplan-Meier curve that is
+#' dominated by whichever group is followed longest (Class 1 patients are
+#' censored much earlier than Class 2 patients). No interval is reported: the
+#' group-level intervals carry the uncertainty, and resampled groups are often not
+#' followed to the horizon.
+#'
+#' @param group_estimates List of estimates from `estimate_endpoint_risk()`, one per group.
+#' @return Numeric overall risk, or `NA` when any group is not followed to the horizon.
+standardised_overall_risk <- function(group_estimates) {
+    if (!all(vapply(group_estimates, function(e) isTRUE(e$estimable), logical(1)))) {
+        return(NA_real_)
+    }
+    sizes <- vapply(group_estimates, function(e) e$n, numeric(1))
+    sum(sizes * vapply(group_estimates, function(e) e$risk, numeric(1))) / sum(sizes)
+}
+
+#' Build the observed-versus-imported group table for one endpoint
+#'
+#' One row per Class x PRAME group plus a case-mix-standardised overall row.
+#' `observed_risk` is Kaplan-Meier (MFS) or Aalen-Johansen (MSS) risk at the
+#' horizon; `imported_risk` is 1 minus the imported 5-year probability.
+#'
+#' @param prepared Data frame from `prepare_gep_validation_endpoint()`.
+#' @param endpoint Character, `"MFS"` or `"MSS"`.
+#' @param horizon_months Numeric horizon in months.
+#' @return Data frame with one row per group and an `Overall` row, with counts at
+#'   the horizon, observed and imported risk, their difference in percentage
+#'   points, the observed-to-imported ratio, and an `estimable` flag with a note.
+build_gep_group_table <- function(prepared, endpoint, horizon_months) {
+    group_estimates <- list()
+    group_rows <- lapply(levels(prepared$validation_group), function(group_name) {
+        g <- prepared[prepared$validation_group == group_name, , drop = FALSE]
+        est <- estimate_endpoint_risk(g$time_months, g$status, horizon_months, endpoint)
+        group_estimates[[group_name]] <<- est
+        imported_values <- unique(round(g$published_risk, 6))
+        imported <- if (nrow(g) > 0L) mean(g$published_risk) else NA_real_
+        note <- dplyr::case_when(
+            nrow(g) == 0L ~ "No patients in this group",
+            !est$estimable ~ sprintf("Not followed to %d months (maximum %.0f months)", horizon_months, est$max_followup_months),
+            est$events == 0L ~ "No events by the horizon; interval not estimable",
+            TRUE ~ ""
+        )
+        if (length(imported_values) > 1L) {
+            note <- trimws(paste(note, "Imported value varies within group"))
+        }
+        data.frame(
+            group = group_name, n = est$n, events_by_horizon = est$events,
+            competing_deaths_by_horizon = est$competing,
+            censored_before_horizon = est$censored_before,
+            event_free_through_horizon = est$event_free_through,
+            max_followup_months = est$max_followup_months,
+            observed_risk = est$risk, observed_ci_lower = est$ci_lower, observed_ci_upper = est$ci_upper,
+            imported_risk = imported, estimable = est$estimable, note = note,
+            stringsAsFactors = FALSE
+        )
+    })
+    overall_risk <- standardised_overall_risk(group_estimates)
+    groups <- dplyr::bind_rows(group_rows)
+    overall_row <- data.frame(
+        group = "Overall (case-mix standardised)", n = nrow(prepared),
+        events_by_horizon = sum(groups$events_by_horizon),
+        competing_deaths_by_horizon = sum(groups$competing_deaths_by_horizon),
+        censored_before_horizon = sum(groups$censored_before_horizon),
+        event_free_through_horizon = sum(groups$event_free_through_horizon),
+        max_followup_months = NA_real_,
+        observed_risk = overall_risk, observed_ci_lower = NA_real_, observed_ci_upper = NA_real_,
+        imported_risk = mean(prepared$published_risk), estimable = is.finite(overall_risk),
+        note = if (is.finite(overall_risk)) {
+            "Group-size-weighted mean of group risks; no interval (see group rows)"
+        } else {
+            "At least one group is not followed to the horizon"
+        },
+        stringsAsFactors = FALSE
+    )
+    dplyr::bind_rows(groups, overall_row) %>%
+        dplyr::mutate(
+            difference_pct_points = 100 * (.data$observed_risk - .data$imported_risk),
+            observed_to_imported_ratio = dplyr::if_else(.data$imported_risk > 0, .data$observed_risk / .data$imported_risk, NA_real_)
+        )
+}
+
+#' Tie-aware Harrell's C at the horizon with a bootstrap interval
+#'
+#' Follow-up is administratively censored at the horizon. Pairs tied on the
+#' imported risk count one half, which matters here because the predictor has
+#' only four values. The interval is the percentile interval over patient-level
+#' bootstrap draws; draws without an event or with a single risk value are
+#' counted as failed.
+#'
+#' @param time_months Numeric follow-up times in months.
+#' @param status Integer status, 1 = event.
+#' @param risk Numeric imported risk (higher = worse).
+#' @param horizon_months Numeric horizon in months.
+#' @param n_boot Integer bootstrap replicates.
+#' @param seed Integer seed, applied locally.
+#' @return List: `estimable`, `reason`, `c_index`, `ci_lower`, `ci_upper`,
+#'   `events`, `concordant_pairs`, `discordant_pairs`, `tied_risk_pairs`,
+#'   `tied_pair_share`, `distinct_risk_values`, `valid_draws`, `failed_draws`.
+calculate_gep_harrell_c <- function(time_months, status, risk, horizon_months, n_boot, seed) {
+    truncated_time <- pmin(time_months, horizon_months)
+    truncated_event <- as.integer(status == 1L & time_months <= horizon_months)
+    out <- list(
+        estimable = FALSE, reason = NA_character_, c_index = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+        events = sum(truncated_event), concordant_pairs = NA_real_, discordant_pairs = NA_real_,
+        tied_risk_pairs = NA_real_, tied_pair_share = NA_real_,
+        distinct_risk_values = length(unique(risk)), valid_draws = 0L, failed_draws = 0L
+    )
+    if (length(time_months) < GEP_MIN_SAMPLE_SIZE) {
+        out$reason <- sprintf("Fewer than %d patients", GEP_MIN_SAMPLE_SIZE)
+        return(out)
+    }
+    if (out$events < GEP_MIN_DISCRIMINATION_EVENTS) {
+        out$reason <- sprintf("Fewer than %d events by %d months", GEP_MIN_DISCRIMINATION_EVENTS, horizon_months)
+        return(out)
+    }
+    if (out$distinct_risk_values < 2L) {
+        out$reason <- "Imported risk does not vary"
+        return(out)
+    }
+    concordance_at <- function(idx) {
+        if (sum(truncated_event[idx]) == 0L || length(unique(risk[idx])) < 2L) {
+            return(NULL)
+        }
+        survival::concordance(
+            survival::Surv(truncated_time[idx], truncated_event[idx]) ~ risk[idx],
+            reverse = TRUE
+        )
+    }
+    fit <- concordance_at(seq_along(risk))
+    counts <- fit$count
+    comparable <- counts[["concordant"]] + counts[["discordant"]] + counts[["tied.x"]]
+    out$estimable <- TRUE
+    out$c_index <- as.numeric(fit$concordance)
+    out$concordant_pairs <- counts[["concordant"]]
+    out$discordant_pairs <- counts[["discordant"]]
+    out$tied_risk_pairs <- counts[["tied.x"]]
+    out$tied_pair_share <- counts[["tied.x"]] / comparable
+    draws <- withr::with_seed(seed, {
+        vapply(seq_len(n_boot), function(i) {
+            resampled <- concordance_at(sample.int(length(risk), replace = TRUE))
+            if (is.null(resampled)) NA_real_ else as.numeric(resampled$concordance)
+        }, numeric(1))
+    })
+    out$valid_draws <- sum(is.finite(draws))
+    out$failed_draws <- n_boot - out$valid_draws
+    if (out$valid_draws >= 0.9 * n_boot) {
+        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
+        out$ci_lower <- bounds[[1]]
+        out$ci_upper <- bounds[[2]]
+    }
+    out
+}
+
+#' Competing-risk time-dependent AUC for melanoma-specific death at the horizon
+#'
+#' Cumulative/dynamic AUC with inverse-probability-of-censoring weights, where
+#' non-melanoma deaths before the horizon are controls (`timeROC` AUC_2). The
+#' interval is the percentile interval over patient-level bootstrap draws.
+#'
+#' @param time_months Numeric follow-up times in months.
+#' @param status Integer status: 0 censored, 1 melanoma death, 2 other death.
+#' @param risk Numeric imported risk (higher = worse).
+#' @param horizon_months Numeric horizon in months.
+#' @param n_boot Integer bootstrap replicates.
+#' @param seed Integer seed, applied locally.
+#' @return List: `estimable`, `reason`, `auc`, `ci_lower`, `ci_upper`, `events`,
+#'   `valid_draws`, `failed_draws`.
+calculate_gep_competing_risk_auc <- function(time_months, status, risk, horizon_months, n_boot, seed) {
+    out <- list(
+        estimable = FALSE, reason = NA_character_, auc = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+        events = sum(status == 1L & time_months <= horizon_months), valid_draws = 0L, failed_draws = 0L
+    )
+    if (length(time_months) < GEP_MIN_SAMPLE_SIZE) {
+        out$reason <- sprintf("Fewer than %d patients", GEP_MIN_SAMPLE_SIZE)
+        return(out)
+    }
+    if (out$events < GEP_MIN_DISCRIMINATION_EVENTS) {
+        out$reason <- sprintf("Fewer than %d melanoma-specific deaths by %d months", GEP_MIN_DISCRIMINATION_EVENTS, horizon_months)
+        return(out)
+    }
+    if (length(unique(risk)) < 2L) {
+        out$reason <- "Imported risk does not vary"
+        return(out)
+    }
+    auc_at <- function(idx) {
+        fit <- timeROC::timeROC(
+            T = time_months[idx], delta = status[idx], marker = risk[idx], cause = 1,
+            weighting = "marginal", times = horizon_months, iid = FALSE
+        )
+        # timeROC returns the competing-risk AUCs only when the sample contains a
+        # competing death; otherwise `AUC` is the same quantity (no controls to
+        # reclassify). It also prepends t = 0 when a patient has zero follow-up,
+        # so the requested horizon is always the last element.
+        auc_by_time <- if (is.null(fit$AUC_2)) fit$AUC else fit$AUC_2
+        auc_by_time[[length(auc_by_time)]]
+    }
+    # Bootstrap resamples can lack an event or a risk contrast; those draws are
+    # counted as failed rather than silently replaced.
+    auc_draw <- function(idx) {
+        if (sum(status[idx] == 1L & time_months[idx] <= horizon_months) == 0L || length(unique(risk[idx])) < 2L) {
+            return(NA_real_)
+        }
+        value <- tryCatch(auc_at(idx), error = function(e) NA_real_)
+        if (length(value) == 1L) as.numeric(value) else NA_real_
+    }
+    out$auc <- as.numeric(auc_at(seq_along(risk)))
+    out$estimable <- is.finite(out$auc)
+    if (!out$estimable) {
+        out$reason <- "timeROC returned a missing AUC at the horizon"
+        return(out)
+    }
+    draws <- withr::with_seed(seed, {
+        vapply(seq_len(n_boot), function(i) auc_draw(sample.int(length(risk), replace = TRUE)), numeric(1))
+    })
+    out$valid_draws <- sum(is.finite(draws))
+    out$failed_draws <- n_boot - out$valid_draws
+    if (out$valid_draws >= 0.9 * n_boot) {
+        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
+        out$ci_lower <- bounds[[1]]
+        out$ci_upper <- bounds[[2]]
+    }
+    out
+}
+
+#' Proportional-hazards check for the imported risk among validation patients
+#'
+#' Fits a Cox model of the endpoint on the imported risk (one term, so groups
+#' without events do not make the fit diverge) and tests scaled Schoenfeld
+#' residuals. For MSS, the cause-specific melanoma-death hazard is modelled and
+#' competing deaths are censored.
+#'
+#' @param prepared Data frame from `prepare_gep_validation_endpoint()`.
+#' @return One-row data frame: `term`, `chisq`, `df`, `p_value`, `status`
+#'   (`no concern`, `concern`, or `not assessed`) and `reason`.
+check_gep_proportional_hazards <- function(prepared) {
+    if (sum(prepared$status == 1L) < GEP_MIN_DISCRIMINATION_EVENTS || length(unique(prepared$published_risk)) < 2L) {
+        return(data.frame(term = "published_risk", chisq = NA_real_, df = NA_real_, p_value = NA_real_,
+                          status = "not assessed", reason = "Too few events or no variation in imported risk",
+                          stringsAsFactors = FALSE))
+    }
+    fit <- survival::coxph(survival::Surv(time_months, status == 1L) ~ published_risk, data = prepared)
+    zph <- survival::cox.zph(fit)
+    row <- as.data.frame(zph$table)["published_risk", ]
+    data.frame(
+        term = "published_risk", chisq = row$chisq, df = row$df, p_value = row$p,
+        status = if (row$p < 0.05) "concern" else "no concern",
+        reason = "Schoenfeld residual test of a time-constant effect; p < 0.05 flagged",
+        stringsAsFactors = FALSE
+    )
+}
+
+#' Run the definitive-GEP 5-year validation for one cohort
+#'
+#' @param data Cohort data frame from the analytic dataset.
+#' @param horizon_months Numeric horizon in months (default 60).
+#' @param n_boot Integer bootstrap replicates.
+#' @param seed Integer seed for all bootstraps in this run.
+#' @return List with `horizon_months`, `mfs` and `mss` (each with `prepared`,
+#'   `group_table`, `discrimination`, `proportional_hazards`), and `denominators`.
+run_gep_definitive_validation <- function(data,
+                                          horizon_months = GEP_VALIDATION_HORIZON_MONTHS,
+                                          n_boot = GEP_BOOTSTRAP_ITERATIONS,
+                                          seed = GEP_VALIDATION_BOOTSTRAP_SEED) {
+    mfs <- prepare_gep_validation_endpoint(data, "MFS")
+    mss <- prepare_gep_validation_endpoint(data, "MSS")
+    list(
+        horizon_months = horizon_months,
+        mfs = list(
+            prepared = mfs,
+            group_table = build_gep_group_table(mfs, "MFS", horizon_months),
+            discrimination = calculate_gep_harrell_c(
+                mfs$time_months, mfs$status, mfs$published_risk, horizon_months, n_boot, seed
+            ),
+            proportional_hazards = check_gep_proportional_hazards(mfs)
+        ),
+        mss = list(
+            prepared = mss,
+            group_table = build_gep_group_table(mss, "MSS", horizon_months),
+            discrimination = calculate_gep_competing_risk_auc(
+                mss$time_months, mss$status, mss$published_risk, horizon_months, n_boot, seed
+            ),
+            proportional_hazards = check_gep_proportional_hazards(mss)
+        )
+    )
+}

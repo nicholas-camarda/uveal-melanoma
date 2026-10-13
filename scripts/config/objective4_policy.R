@@ -14,6 +14,20 @@ GEP_SAVE_RDS <- FALSE
 # Core GEP validation settings
 GEP_VALIDATION_TIMEPOINTS <- c(5, 7, 10) # years for validation analysis
 GEP_BOOTSTRAP_ITERATIONS <- 1000
+
+# Definitive-GEP validation (Class 1/2 with PRAME reported): one horizon, one seed.
+# Seven- and ten-year results are not reported because follow-up leaves 0-1
+# patients at risk at 10 years and the longer horizons were extrapolated.
+GEP_VALIDATION_HORIZON_YEARS <- 5
+GEP_VALIDATION_HORIZON_MONTHS <- GEP_VALIDATION_HORIZON_YEARS * 12
+GEP_VALIDATION_BOOTSTRAP_SEED <- 20261013L
+GEP_MIN_DISCRIMINATION_EVENTS <- 3 # Minimum events by the horizon to estimate discrimination
+GEP_VALIDATION_GROUP_LEVELS <- c(
+    "Class 1, PRAME negative",
+    "Class 1, PRAME positive",
+    "Class 2, PRAME negative",
+    "Class 2, PRAME positive"
+)
 GEP_PRAME_BOOTSTRAP_ITERATIONS <- 100
 
 # Legacy PRAME augmentation constants
