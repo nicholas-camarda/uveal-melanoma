@@ -326,7 +326,8 @@ prepare_factor_levels <- function(data) {
                 ),
                 levels = c("GEP Failed/Indeterminate", "GEP Not Tested"),
                 ordered = FALSE
-            )
+            ),
+            gep_group = factor(as.character(gep_group), levels = GEP_GROUP_LEVELS, ordered = FALSE)
         )
 
     # Create collapsed T-stage variable (T1..T4) if needed

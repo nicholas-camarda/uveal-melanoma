@@ -101,6 +101,10 @@ make_objective0_validation_dataset <- function() {
             rep(NA_character_, 3),
             levels = c("GEP Failed/Indeterminate", "GEP Not Tested")
         ),
+        gep_group = factor(
+            c("Class 1", "Class 2", "Class 1"),
+            levels = GEP_GROUP_LEVELS
+        ),
         ciliary_involvement = c(0L, 1L, 0L),
         optic_nerve_involvement = c(0L, 0L, 0L),
         consort_group = c("eligible_both", "eligible_both", "eligible_both"),

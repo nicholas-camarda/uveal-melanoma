@@ -392,6 +392,7 @@ create_derived_variables <- function(data) {
                 biopsy1_gep %in% GEP_NOT_TESTED_RAW_LEVELS ~ "GEP Not Tested",
                 TRUE ~ NA_character_
             ),
+            gep_group = classify_gep_group(biopsy1_gep),
             exploratory_gep_group = gep_class_simple,
             no_gep_group = case_when(
                 gep_class_simple == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",

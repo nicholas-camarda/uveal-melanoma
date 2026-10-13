@@ -77,15 +77,61 @@ GEP_DEFINITIVE_RAW_LEVELS <- c(
     GEP_CLASS_1_DEFINITIVE_RAW_LEVELS,
     GEP_CLASS_2_DEFINITIVE_RAW_LEVELS
 )
-GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS <- c(
-    "Failed",
+# Source-string levels that are not definitive Class 1/2 calls. The raw strings
+# keep the laboratory's historical 1A/1B wording; reader-facing labels use the
+# current Class 1 / Class 2 terminology only.
+GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS <- c(
     "Class_1A_PRAME_not_reported",
     "Class_2_PRAME_not_reported",
-    "Class_2_PRAME_Unknown",
-    "Class_1A_PRAME_discordant",
-    "Unknown"
+    "Class_2_PRAME_Unknown"
+)
+GEP_DISCORDANT_RAW_LEVELS <- "Class_1A_PRAME_discordant"
+GEP_TEST_FAILED_RAW_LEVELS <- c("Failed", "Unknown")
+GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS <- c(
+    GEP_TEST_FAILED_RAW_LEVELS,
+    GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS,
+    GEP_DISCORDANT_RAW_LEVELS
 )
 GEP_NOT_TESTED_RAW_LEVELS <- c("No", "N/A")
+
+# Reader-facing GEP availability groups. Class 1 / Class 2 are definitive calls
+# with PRAME reported (the primary validation set). Patients whose class is known
+# but PRAME is missing keep no imputed prediction and are reported separately
+# from assay failures.
+GEP_GROUP_CLASS_PRAME_MISSING <- "Class known, PRAME not reported"
+GEP_GROUP_DISCORDANT <- "Discordant result"
+GEP_GROUP_TEST_FAILED <- "Failed or unknown result"
+GEP_GROUP_NOT_TESTED <- "Not tested"
+GEP_GROUP_LEVELS <- c(
+    "Class 1",
+    "Class 2",
+    GEP_GROUP_CLASS_PRAME_MISSING,
+    GEP_GROUP_DISCORDANT,
+    GEP_GROUP_TEST_FAILED,
+    GEP_GROUP_NOT_TESTED
+)
+
+#' Classify raw GEP source labels into reader-facing availability groups
+#'
+#' Single mapping from the laboratory source string to `GEP_GROUP_LEVELS`.
+#' Every raw level belongs to exactly one group; missing values mean no test.
+#'
+#' @param raw_label Character or factor vector of raw GEP source labels
+#'   (for example `Class_1A_PRAME_negative`).
+#' @return Character vector of group labels. Unrecognised non-missing labels
+#'   return `NA` so they surface in validation instead of being absorbed.
+classify_gep_group <- function(raw_label) {
+    raw_label <- as.character(raw_label)
+    dplyr::case_when(
+        raw_label %in% GEP_CLASS_1_DEFINITIVE_RAW_LEVELS ~ "Class 1",
+        raw_label %in% GEP_CLASS_2_DEFINITIVE_RAW_LEVELS ~ "Class 2",
+        raw_label %in% GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS ~ GEP_GROUP_CLASS_PRAME_MISSING,
+        raw_label %in% GEP_DISCORDANT_RAW_LEVELS ~ GEP_GROUP_DISCORDANT,
+        raw_label %in% GEP_TEST_FAILED_RAW_LEVELS ~ GEP_GROUP_TEST_FAILED,
+        raw_label %in% GEP_NOT_TESTED_RAW_LEVELS | is.na(raw_label) ~ GEP_GROUP_NOT_TESTED,
+        TRUE ~ NA_character_
+    )
+}
 GEP_INVALID_ANALYSIS_LABELS <- c(
     GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS,
     GEP_NOT_TESTED_RAW_LEVELS,

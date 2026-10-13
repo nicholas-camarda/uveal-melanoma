@@ -141,6 +141,11 @@ get_canonical_factor_level_expectations <- function() {
             reference = "Class 1",
             critical = FALSE
         ),
+        gep_group = list(
+            levels = GEP_GROUP_LEVELS,
+            reference = "Class 1",
+            critical = FALSE
+        ),
         no_gep_group = list(
             levels = c("GEP Failed/Indeterminate", "GEP Not Tested"),
             reference = "GEP Failed/Indeterminate",

@@ -19,6 +19,7 @@ test_that("Objective 0 preprocessing creates expected derived fields on syntheti
         "last_vision_followup_timing_source",
         "exploratory_gep_group",
         "no_gep_group",
+        "gep_group",
         "ciliary_involvement",
         "optic_nerve_involvement"
     ) %in% names(derived)))

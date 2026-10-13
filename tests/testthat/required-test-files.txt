@@ -15,6 +15,7 @@ test_forest_plot_labels.R
 test_function_documentation_contract.R
 test_generated_study_docs.R
 test_gep_calibration_curve_payload.R
+test_gep_group_classification.R
 test_gep_output_consolidation.R
 test_gep_summary_metrics_display.R
 test_integration_routing.R
