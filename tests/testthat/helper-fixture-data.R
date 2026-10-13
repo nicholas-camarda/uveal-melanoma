@@ -218,19 +218,11 @@ create_test_dataset <- function() {
 
     # Expected survival probabilities
     expected_mfs_5yr = c(rep(0.8, 10), rep(0.2, 10)),
-    expected_mfs_7yr = c(rep(0.7, 10), rep(0.15, 10)),
-    expected_mfs_10yr = c(rep(0.6, 10), rep(0.1, 10)),
     expected_mss_5yr = c(rep(0.85, 10), rep(0.15, 10)),
-    expected_mss_7yr = c(rep(0.75, 10), rep(0.1, 10)),
-    expected_mss_10yr = c(rep(0.65, 10), rep(0.05, 10)),
 
     # Canonical Objective 0 risk, eligibility, event-type, and time fields
     predicted_mfs_risk_5yr = 1 - expected_mfs_5yr,
-    predicted_mfs_risk_7yr = 1 - expected_mfs_7yr,
-    predicted_mfs_risk_10yr = 1 - expected_mfs_10yr,
     predicted_mss_risk_5yr = 1 - expected_mss_5yr,
-    predicted_mss_risk_7yr = 1 - expected_mss_7yr,
-    predicted_mss_risk_10yr = 1 - expected_mss_10yr,
 
     mfs_event_type = as.integer(mets_event_analysis == 1L),
     mss_event_type = dplyr::case_when(
@@ -239,11 +231,7 @@ create_test_dataset <- function() {
       TRUE ~ 0L
     ),
     metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
-    metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
-    metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
     melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
-    melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
-    melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
     mfs_analysis_eligible = TRUE,
     mss_analysis_eligible = TRUE,
 
@@ -344,6 +332,7 @@ create_pipeline_test_dataset <- function(n = 96L, seed = 20260816L) {
       rep(c("Class 1", "Class 2", "Class 1", "Class 2"), length.out = n)
     )
     data$gep_class_simple <- data$biopsy1_gep
+    data$gep_group <- as.character(data$biopsy1_gep)
     data$prame_status <- factor(rep(c("Negative", "Positive"), length.out = n))
     data$gep12_prame_status <- data$prame_status
     data$retinopathy_burden_event <- rep(c(1L, 0L, 0L, 1L, 0L), length.out = n)
@@ -375,10 +364,9 @@ synthetic_ci_required_columns <- function() {
     "gep12_prame_status", "gep_validation_set", "tt_mets_months",
     "mets_event", "tt_death_months", "tt_death_years",
     "melanoma_death_event", "competing_death_event",
-    "expected_mfs_5yr", "expected_mfs_7yr", "expected_mfs_10yr",
-    "expected_mss_5yr", "expected_mss_7yr", "expected_mss_10yr",
-    "predicted_mfs_risk_5yr", "predicted_mfs_risk_7yr", "predicted_mfs_risk_10yr",
-    "predicted_mss_risk_5yr", "predicted_mss_risk_7yr", "predicted_mss_risk_10yr",
+    "expected_mfs_5yr", "expected_mss_5yr",
+    "predicted_mfs_risk_5yr", "predicted_mss_risk_5yr",
+    "gep_group", "biopsy1_gep_raw",
     "recurrence1_treatment_clean", "missing_gep_group", "has_gep",
     "mfs_analysis_eligible", "mss_analysis_eligible", "initial_tumor_height",
     "age_at_diagnosis", "sex"
@@ -454,6 +442,8 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
       consort_group = treatment_group,
       synthetic_cohort = synthetic_cohort,
       gep_class_simple = gep_class,
+      gep_group = as.character(gep_class),
+      biopsy1_gep_raw = ifelse(gep_class == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
       biopsy1_gep = factor(as.character(gep_class), levels = SYNTHETIC_CI_GEP_LEVELS),
       biopsy1_gep_mfs = expected_mfs,
       biopsy1_gep_mss = expected_mss,
@@ -476,17 +466,9 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
       has_gep_mss = TRUE,
       has_prame = !is.na(prame_status),
       expected_mfs_5yr = expected_mfs,
-      expected_mfs_7yr = expected_mfs^(7 / 5),
-      expected_mfs_10yr = expected_mfs^2,
       expected_mss_5yr = expected_mss,
-      expected_mss_7yr = expected_mss^(7 / 5),
-      expected_mss_10yr = expected_mss^2,
       predicted_mfs_risk_5yr = 1 - expected_mfs_5yr,
-      predicted_mfs_risk_7yr = 1 - expected_mfs_7yr,
-      predicted_mfs_risk_10yr = 1 - expected_mfs_10yr,
       predicted_mss_risk_5yr = 1 - expected_mss_5yr,
-      predicted_mss_risk_7yr = 1 - expected_mss_7yr,
-      predicted_mss_risk_10yr = 1 - expected_mss_10yr,
       recurrence1_treatment_clean = factor(
         rep(c("GKSRS", "Plaque", NA_character_), length.out = n),
         levels = c("GKSRS", "Plaque")
@@ -506,11 +488,7 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
         TRUE ~ 0L
       ),
       metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
-      metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
-      metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
       melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
-      melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
-      melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
       initial_tumor_diameter = runif(n, 6, 19)
     ) %>%
       dplyr::mutate(

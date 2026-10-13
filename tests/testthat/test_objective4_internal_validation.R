@@ -11,27 +11,6 @@ test_that("horizon status distinguishes known competing outcomes from early cens
     expect_identical(status$use_left_limit, c(TRUE, TRUE, FALSE, FALSE))
 })
 
-test_that("IPCW decision curves exclude early censoring and retain competing deaths", {
-    payload <- calculate_ipcw_decision_curve(
-        data = tibble::tibble(
-            risk = c(0.9, 0.8, 0.2, 0.1),
-            followup = c(12, 18, 24, 60),
-            event_type = c(1L, 2L, 0L, 0L)
-        ),
-        predicted_risk_var = "risk",
-        time_var = "followup",
-        event_type_var = "event_type",
-        horizon_months = 60,
-        thresholds = c(0.25, 0.5)
-    )
-
-    expect_identical(payload$data$outcome, c(1L, 0L, NA_integer_, 0L))
-    expect_equal(payload$data$ipcw_weight[[3]], 0)
-    expect_gt(payload$data$ipcw_weight[[2]], 0)
-    expect_equal(payload$known_n, 3L)
-    expect_equal(payload$early_censored_n, 1L)
-})
-
 test_that("direct ridge models fail closed when named horizon outcome disagrees", {
     fixture <- tibble::tibble(
         patient_id = sprintf("p%02d", 1:12),

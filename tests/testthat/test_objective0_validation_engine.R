@@ -661,7 +661,7 @@ test_that("Objective 3 PFS-2 derivation contract handles death-before-second-rec
 
 test_that("Objective 4 GEP derivation contract catches formula and split-label drift", {
     gep_data <- make_objective0_validation_dataset()
-    gep_data$expected_mfs_7yr[1] <- gep_data$biopsy1_gep_mfs[1]
+    gep_data$expected_mfs_5yr[1] <- 0.5 * gep_data$biopsy1_gep_mfs[1]
     gep_data$gep_validation_set[2] <- "Training"
 
     validation_result <- validate_processing_pipeline(
@@ -673,7 +673,7 @@ test_that("Objective 4 GEP derivation contract catches formula and split-label d
         dplyr::filter(.data$detail_sheet == "Objective4_GEP_Derivation")
 
     expect_false(validation_result$success)
-    expect_true(any(gep_details$field_name == "expected_mfs_7yr"))
+    expect_true(any(gep_details$field_name == "expected_mfs_5yr"))
     expect_true(any(gep_details$field_name == "gep_validation_set"))
 })
 
@@ -749,7 +749,7 @@ test_that("config_constants remains the only public config source entry point", 
         "PROJECT_ROOT", "INPUT_FILENAME", "OBJECTIVE0_GLOBAL_REQUIRED_VARIABLES",
         "OBJECTIVE0_DERIVED_OUTPUT_MANIFEST", "OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT",
         "OBJECTIVE2_TOXICITY_ENDPOINT_MAP", "OBJECTIVE3_PFS2_DERIVATION_CONTRACT",
-        "OBJECTIVE4_GEP_DERIVATION_CONTRACT", "GEP_VALIDATION_TIMEPOINTS",
+        "OBJECTIVE4_GEP_DERIVATION_CONTRACT", "GEP_VALIDATION_HORIZON_MONTHS",
         "STANDARD_TABLE_LABELS"
     )
     expect_true(all(vapply(required_objects, exists, logical(1), inherits = TRUE)))

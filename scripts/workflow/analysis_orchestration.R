@@ -688,10 +688,9 @@ main_execution <- function() {
     })
 
     # Generate cross-cohort Objective 4 poster figures after all cohort-level
-    # simple-validation workbooks have been refreshed.
+    # validation workbooks have been refreshed.
     tryCatch({
-        create_objective4_simple_mfs_three_panel_report()
-        create_objective4_simple_mfs_two_panel_report()
+        create_gep_observed_vs_imported_panel_report()
         if (!is.null(cohort_data[["uveal_melanoma_full_cohort"]]) && !is.null(cohort_data[["uveal_melanoma_gksrs_only_cohort"]])) {
             write_mfs_simple_binary_poster_km_stack(
                 full_data = cohort_data[["uveal_melanoma_full_cohort"]],

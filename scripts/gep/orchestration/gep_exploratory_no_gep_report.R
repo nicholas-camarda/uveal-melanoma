@@ -117,37 +117,6 @@ create_quantile_bins <- function(values, n_bins = 3, labels = c("Low", "Intermed
     factor(bins, levels = labels[seq_len(length(cuts) - 1)])
 }
 
-#' Derive a Binary Event-by-Horizon Endpoint
-#'
-#' Uses an existing event indicator when present, otherwise derives a binary
-#' horizon-specific endpoint from event status and follow-up time.
-#'
-#' @param data A data frame containing event and follow-up variables.
-#' @param event_col Name of the binary event column to use when available.
-#' @param time_col Name of the follow-up time column in months.
-#' @param horizon_months Time horizon used for the derived endpoint.
-#'
-#' @return An integer vector coded as 0/1/`NA`.
-derive_binary_endpoint <- function(data, event_col, time_col, horizon_months) {
-    if (event_col %in% names(data)) {
-        return(as.integer(data[[event_col]]))
-    }
-
-    if (!time_col %in% names(data)) {
-        return(rep(NA_integer_, nrow(data)))
-    }
-
-    outcome_event <- if (grepl("mss", event_col, ignore.case = TRUE) && "melanoma_death_event" %in% names(data)) {
-        data$melanoma_death_event
-    } else if ("mets_event" %in% names(data)) {
-        data$mets_event
-    } else {
-        rep(NA_integer_, nrow(data))
-    }
-
-    as.integer(!is.na(outcome_event) & outcome_event == 1 & !is.na(data[[time_col]]) & data[[time_col]] <= horizon_months)
-}
-
 #' Preserve Validated Factor Levels for Exploratory Modeling
 #'
 #' Recasts a factor as an unordered factor without changing the existing level
@@ -4386,37 +4355,6 @@ summarize_exploratory_predictor_context <- function(prepared_data, predictor) {
     }
 
     sprintf("%s has a fitted coefficient; its original-scale magnitude is not a variable-importance measure.", predictor)
-}
-
-#' Summarize Observed Event Patterns Across Exploratory Risk Bins
-#'
-#' @param sensitivity_summary Pooled sensitivity summary table.
-#' @param analysis_name Analysis label to filter.
-#' @param event_col Event-rate column name.
-#'
-#' @return A short narrative sentence.
-summarize_exploratory_bin_pattern <- function(sensitivity_summary, analysis_name, event_col) {
-    rows <- sensitivity_summary %>%
-        dplyr::filter(.data$analysis == analysis_name, .data$bin %in% c("Low", "Intermediate", "High")) %>%
-        dplyr::mutate(bin = factor(.data$bin, levels = c("Low", "Intermediate", "High"))) %>%
-        dplyr::arrange(.data$bin)
-
-    if (nrow(rows) != 3) {
-        return("Observed risk-bin separation was unavailable from the current summary table.")
-    }
-
-    sprintf(
-        "Observed %s event rates across pooled %s bins were Low=%.1f%%, Intermediate=%.1f%%, and High=%.1f%%.",
-        if (identical(event_col, "observed_mfs_5yr_event_rate")) {
-            "KM-estimated 5-year metastasis risk"
-        } else {
-            "observed 60-month melanoma-death cumulative incidence"
-        },
-        analysis_name,
-        100 * rows[[event_col]][[1]],
-        100 * rows[[event_col]][[2]],
-        100 * rows[[event_col]][[3]]
-    )
 }
 
 #' Extract Exploratory Risk-Bin Rates

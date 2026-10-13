@@ -1,4 +1,4 @@
-test_that("portable smoke path writes simple GEP outputs and dry-run publish on synthetic data", {
+test_that("portable smoke path writes GEP validation outputs and dry-run publish on synthetic data", {
     cohort_root <- file.path(OUTPUT_DIR, "uveal_restricted")
     output_dirs <- list(
         obj4_mfs = file.path(cohort_root, "04_GEP_Validation", "a_metastasis_free_survival"),
@@ -33,22 +33,12 @@ test_that("portable smoke path writes simple GEP outputs and dry-run publish on 
     dir.create(PROCESSED_DATA_DIR, recursive = TRUE, showWarnings = FALSE)
     save_cohorts(list(uveal_melanoma_restricted_cohort = analytic_data))
 
-    results <- simple_gep_validation(
-        data = analytic_data,
-        output_dirs = output_dirs,
-        prefix = "smoke_",
-        dataset_name = "uveal_melanoma_restricted_cohort"
+    validation <- run_gep_definitive_validation(analytic_data, n_boot = 20L)
+    outputs <- write_gep_validation_outputs(
+        validation, analytic_data, "uveal_melanoma_restricted_cohort", output_dirs, "smoke_"
     )
 
-    unified_workbook <- file.path(
-        cohort_root,
-        "04_GEP_Validation",
-        "unified_summary",
-        "smoke_simple_gep_validation.xlsx"
-    )
-
-    expect_true(all(c("mfs_results", "mss_results", "overall_summary") %in% names(results)))
-    expect_true(file.exists(unified_workbook))
+    expect_true(all(file.exists(c(outputs$primary, outputs$diagnostics, outputs$figures))))
 
     logger::log_info(">>> ALL ANALYSES COMPLETED SUCCESSFULLY!")
     logger::log_info(">>> Datasets analyzed: 3")
@@ -71,6 +61,11 @@ test_that("portable smoke path writes simple GEP outputs and dry-run publish on 
         file.path(EXPORT_ANALYSIS_DIR, "portable-smoke")
     )
     expect_true(any(grepl("04_GEP_Validation", publish_result$manifest$source_path)))
+    # The primary workbook is published; the diagnostics workbook (with record
+    # identifiers) is excluded from synced publishing.
+    published_sources <- normalizePath(publish_result$manifest$source_path[publish_result$manifest$status == "would_copy"], winslash = "/", mustWork = FALSE)
+    expect_true(normalizePath(outputs$primary, winslash = "/", mustWork = FALSE) %in% published_sources)
+    expect_false(normalizePath(outputs$diagnostics, winslash = "/", mustWork = FALSE) %in% published_sources)
     normalized_manifest_sources <- normalizePath(
         publish_result$manifest$source_path,
         winslash = "/",

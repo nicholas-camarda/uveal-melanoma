@@ -194,41 +194,6 @@ build_mfs_simple_binary_poster_km_panel <- function(data,
     cowplot::plot_grid(km_plot, risk_table_plot, ncol = 1, align = "v", rel_heights = c(0.78, 0.22))
 }
 
-#' Write a Poster-Ready Simple Binary GEP MFS KM Panel
-#'
-#' @param data Data frame containing simple GEP MFS data.
-#' @param output_dir Directory where the PNG should be saved.
-#' @param prefix Filename prefix.
-#' @param dataset_name Dataset identifier used to derive the panel title.
-#' @param panel_title Optional explicit panel title.
-#' @param width Plot width in inches.
-#' @param height Plot height in inches.
-#' @param dpi Output DPI.
-#' @param filename Optional explicit output filename.
-#' @return Character path to the saved PNG.
-write_mfs_simple_binary_poster_km_panel <- function(data,
-                                                    output_dir,
-                                                    prefix,
-                                                    dataset_name,
-                                                    panel_title = NULL,
-                                                    width = 7.4,
-                                                    height = 4.95,
-                                                    dpi = PLOT_DPI,
-                                                    filename = NULL) {
-    plot_data <- prepare_mfs_simple_binary_poster_km_data(data)
-    panel_title <- panel_title %||% derive_mfs_simple_binary_poster_km_title(dataset_name, nrow(plot_data))
-    plot_obj <- build_mfs_simple_binary_poster_km_panel(
-        data = plot_data,
-        panel_title = panel_title
-    )
-
-    output_dir <- ensure_output_dir(output_dir)
-    filename <- filename %||% paste0(prefix, "poster_simple_gep_binary_mfs_km_120mo.png")
-    output_path <- file.path(output_dir, filename)
-    ggplot2::ggsave(output_path, plot_obj, width = width, height = height, dpi = dpi, bg = "white")
-    output_path
-}
-
 #' Write a Two-Cohort Poster-Ready Simple Binary GEP MFS KM Stack
 #'
 #' @param full_data Full cohort analytic data.

@@ -348,38 +348,10 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
         data_type = "integer",
         units = "1/0/NA"
     ),
-    metastasis_by_7yr = list(
-        description = "Metastasis status at 7 years (1 = metastasis by 84 months, 0 = known metastasis-free at 84 months, NA = status unknown because censoring occurred earlier)",
-        calculation = "derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84)",
-        purpose = "Auditable 7-year metastasis-risk outcome",
-        data_type = "integer",
-        units = "1/0/NA"
-    ),
-    metastasis_by_10yr = list(
-        description = "Metastasis status at 10 years (1 = metastasis by 120 months, 0 = known metastasis-free at 120 months, NA = status unknown because censoring occurred earlier)",
-        calculation = "derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120)",
-        purpose = "Auditable 10-year metastasis-risk outcome",
-        data_type = "integer",
-        units = "1/0/NA"
-    ),
     melanoma_death_by_5yr = list(
         description = "Melanoma-death status at 5 years (1 = melanoma-specific death by 60 months, 0 = known non-case at 60 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
         calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60)",
         purpose = "Auditable 5-year melanoma-specific mortality outcome; competing deaths remain controls",
-        data_type = "integer",
-        units = "1/0/NA"
-    ),
-    melanoma_death_by_7yr = list(
-        description = "Melanoma-death status at 7 years (1 = melanoma-specific death by 84 months, 0 = known non-case at 84 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
-        calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84)",
-        purpose = "Auditable 7-year melanoma-specific mortality outcome; competing deaths remain controls",
-        data_type = "integer",
-        units = "1/0/NA"
-    ),
-    melanoma_death_by_10yr = list(
-        description = "Melanoma-death status at 10 years (1 = melanoma-specific death by 120 months, 0 = known non-case at 120 months including an earlier competing death, NA = status unknown because ordinary censoring occurred earlier)",
-        calculation = "derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120)",
-        purpose = "Auditable 10-year melanoma-specific mortality outcome; competing deaths remain controls",
         data_type = "integer",
         units = "1/0/NA"
     ),
@@ -459,38 +431,10 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
         data_type = "numeric",
         units = "probability (0-1)"
     ),
-    expected_mfs_7yr = list(
-        description = "Expected 7-year metastasis-free survival from GEP (extrapolated)",
-        calculation = "biopsy1_gep_mfs^(7/5)",
-        purpose = "Extended GEP prediction assuming exponential decay",
-        data_type = "numeric",
-        units = "probability (0-1)"
-    ),
-    expected_mfs_10yr = list(
-        description = "Expected 10-year metastasis-free survival from GEP (extrapolated)",
-        calculation = "biopsy1_gep_mfs^(10/5)",
-        purpose = "Extended GEP prediction assuming exponential decay",
-        data_type = "numeric",
-        units = "probability (0-1)"
-    ),
     expected_mss_5yr = list(
         description = "Expected 5-year melanoma-specific survival from GEP",
         calculation = "biopsy1_gep_mss",
         purpose = "GEP-predicted survival for validation analysis",
-        data_type = "numeric",
-        units = "probability (0-1)"
-    ),
-    expected_mss_7yr = list(
-        description = "Expected 7-year melanoma-specific survival from GEP (extrapolated)",
-        calculation = "biopsy1_gep_mss^(7/5)",
-        purpose = "Extended GEP prediction assuming exponential decay",
-        data_type = "numeric",
-        units = "probability (0-1)"
-    ),
-    expected_mss_10yr = list(
-        description = "Expected 10-year melanoma-specific survival from GEP (extrapolated)",
-        calculation = "biopsy1_gep_mss^(10/5)",
-        purpose = "Extended GEP prediction assuming exponential decay",
         data_type = "numeric",
         units = "probability (0-1)"
     ),

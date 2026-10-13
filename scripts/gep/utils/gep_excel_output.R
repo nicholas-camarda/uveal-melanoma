@@ -1,31 +1,5 @@
 # GEP Excel output helpers
 
-#' Sanitize Excel sheet names for openxlsx output
-#'
-#' Excel sheet names must be unique, short, and free of reserved characters.
-#'
-#' @param sheet_name Proposed sheet name.
-#' @param existing_names Character vector of already-used sheet names.
-#' @return A unique sheet name safe for Excel workbooks.
-sanitize_gep_sheet_name <- function(sheet_name, existing_names = character()) {
-    safe_name <- gsub("[:\\\\/?*\\[\\]]", "_", as.character(sheet_name))
-    safe_name <- substr(safe_name, 1, 31)
-
-    if (!nzchar(safe_name)) {
-        safe_name <- "Sheet"
-    }
-
-    candidate <- safe_name
-    suffix <- 1
-    while (candidate %in% existing_names) {
-        suffix_label <- paste0("_", suffix)
-        candidate <- paste0(substr(safe_name, 1, max(1, 31 - nchar(suffix_label))), suffix_label)
-        suffix <- suffix + 1
-    }
-
-    candidate
-}
-
 #' Write a GEP workbook with automatic column widths
 #'
 #' Writes one or more data frames to an Excel workbook and applies automatic

@@ -212,3 +212,89 @@ test_that("the definitive validation module reports no 7- or 10-year horizons", 
     expect_false(grepl("7yr|10yr|expected_mfs_7|expected_mss_7|\\^\\(7", module_text))
     expect_false(grepl("concordance.index", module_text, fixed = TRUE))
 })
+
+test_that("validation outputs reconcile flow counts with Record_Issues and keep identifiers out of the primary workbook", {
+    cohort <- synthetic_validation_cohort(n_per_group = 12L)
+    extra <- data.frame(
+        gep_class_simple = c("GEP Failed/Indeterminate", "GEP Failed/Indeterminate", "GEP Not Tested", "GEP Not Tested", "GEP Not Tested"),
+        prame_status = "Not Available",
+        biopsy1_gep_mfs = NA_real_, biopsy1_gep_mss = NA_real_,
+        tt_mets_months_analysis = 30, mfs_event_type = 0L, tt_death_months = 30, mss_event_type = 0L,
+        mfs_analysis_eligible = FALSE, mss_analysis_eligible = FALSE
+    )
+    cohort <- rbind(cohort, extra)
+    cohort$id <- sprintf("P%03d", seq_len(nrow(cohort)))
+    cohort$biopsy1_gep_raw <- c(
+        ifelse(cohort$gep_class_simple[1:48] == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
+        "Failed", "Class_2_PRAME_not_reported", NA, NA, NA
+    )
+    cohort$gep_group <- classify_gep_group(cohort$biopsy1_gep_raw)
+
+    results <- run_gep_definitive_validation(cohort, n_boot = 20L)
+    out_dir <- withr::local_tempdir()
+    paths <- write_gep_validation_outputs(
+        results, cohort, "uveal_melanoma_full_cohort",
+        output_dirs = list(obj4_mfs = file.path(out_dir, "04_GEP_Validation", "a_metastasis_free_survival")),
+        prefix = "test_"
+    )
+
+    expect_true(all(file.exists(c(paths$primary, paths$diagnostics, paths$figures))))
+    expect_identical(
+        readxl::excel_sheets(paths$primary),
+        c("Group_Table_MFS", "Group_Table_MSS", "Discrimination")
+    )
+    expect_identical(
+        readxl::excel_sheets(paths$diagnostics),
+        c("Specification_Coding", "Denominators_Flow", "Checks", "Warnings_Limitations", "Record_Issues")
+    )
+    # Identifiers live only in the diagnostics workbook.
+    for (sheet in readxl::excel_sheets(paths$primary)) {
+        expect_false("id" %in% names(readxl::read_excel(paths$primary, sheet = sheet)))
+    }
+
+    flow <- readxl::read_excel(paths$diagnostics, sheet = "Denominators_Flow")
+    issues <- readxl::read_excel(paths$diagnostics, sheet = "Record_Issues")
+    total <- flow$n[flow$step == "All patients in cohort"]
+    primary <- flow$n[grepl("^Definitive Class 1/2", flow$step)]
+    expect_identical(total, as.numeric(nrow(cohort)))
+    expect_identical(nrow(issues), as.integer(total - primary))
+    expect_setequal(unique(issues$reason), c(GEP_GROUP_TEST_FAILED, GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_NOT_TESTED))
+    expect_true(all(issues$field == "biopsy1_gep_raw"))
+    expect_true(all(issues$key_source == "id"))
+    expect_true(all(startsWith(issues$record_key, "P")))
+
+    # Without an identifier column the key is the row position, and says so.
+    anonymous <- build_gep_record_issues(cohort[, setdiff(names(cohort), "id")])
+    expect_identical(nrow(anonymous), nrow(issues))
+    expect_true(all(anonymous$key_source == "row position (no identifier column)"))
+
+    # A cohort in which every patient is in the primary set yields an empty, well-formed sheet.
+    complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2"), ]
+    expect_identical(nrow(build_gep_record_issues(complete)), 0L)
+
+    checks <- readxl::read_excel(paths$diagnostics, sheet = "Checks")
+    expect_true(all(checks$status %in% c("no concern", "concern", "not assessed")))
+    expect_false(anyNA(checks$status))
+})
+
+test_that("validation reporting fails clearly when the GEP group column is missing", {
+    cohort <- synthetic_validation_cohort(n_per_group = 10L)
+    results <- run_gep_definitive_validation(cohort, n_boot = 10L)
+    expect_error(
+        write_gep_validation_outputs(
+            results, cohort, "uveal_melanoma_full_cohort",
+            output_dirs = list(obj4_mfs = file.path(withr::local_tempdir(), "a")), prefix = "t_"
+        ),
+        "requires columns: gep_group, biopsy1_gep_raw"
+    )
+})
+
+test_that("curve figures draw groups without melanoma deaths as flat zero curves", {
+    cohort <- synthetic_validation_cohort(n_per_group = 12L)
+    cohort$mss_event_type[cohort$biopsy1_gep_mss > 0.95] <- 0L
+    prepared <- prepare_gep_validation_endpoint(cohort, "MSS")
+    table <- build_gep_group_table(prepared, "MSS", horizon_months = 60)
+    plot <- plot_gep_validation_curves(prepared, table, "MSS", 60, "Synthetic cohort")
+    expect_s3_class(plot, "ggplot")
+    expect_no_error(ggplot2::ggplot_build(plot))
+})

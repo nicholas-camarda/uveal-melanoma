@@ -12,18 +12,15 @@ test_that("Objective 3 PFS-2 endpoint contract is explicit and isolated from Obj
 })
 
 test_that("Objective 4 GEP MFS/MSS endpoints remain separate from Objective 1 PFS", {
-    mfs_text <- paste(
-        readLines(here::here("scripts", "gep", "cores", "gep_evaluation_core_mfs.R"), warn = FALSE),
-        collapse = "\n"
-    )
-    mss_text <- paste(
-        readLines(here::here("scripts", "gep", "cores", "gep_evaluation_core_mss.R"), warn = FALSE),
+    validation_text <- paste(
+        readLines(here::here("scripts", "gep", "validation", "gep_definitive_validation.R"), warn = FALSE),
         collapse = "\n"
     )
 
-    expect_true(grepl('event_var = "mets_event"', mfs_text, fixed = TRUE))
-    expect_true(grepl('melanoma_event_var = "melanoma_death_event"', mss_text, fixed = TRUE))
-    expect_true(grepl('competing_event_var = "competing_death_event"', mss_text, fixed = TRUE))
-    expect_false(grepl("pfs_event|tt_pfs_months", mfs_text))
-    expect_false(grepl("pfs_event|tt_pfs_months", mss_text))
+    # The validation reads the canonical MFS/MSS follow-up and event-type fields.
+    expect_true(grepl('time = "tt_mets_months_analysis"', validation_text, fixed = TRUE))
+    expect_true(grepl('status = "mfs_event_type"', validation_text, fixed = TRUE))
+    expect_true(grepl('time = "tt_death_months"', validation_text, fixed = TRUE))
+    expect_true(grepl('status = "mss_event_type"', validation_text, fixed = TRUE))
+    expect_false(grepl("pfs_event|tt_pfs_months", validation_text))
 })

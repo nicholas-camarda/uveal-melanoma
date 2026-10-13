@@ -159,27 +159,16 @@ source(here("scripts", "subgroup", "subgroup_height.R"))
 source(here("scripts", "subgroup", "subgroup_formatting.R"))
 
 # Source GEP evaluation modules
-source(here("scripts", "gep", "utils", "gep_model_evaluation_metrics.R"))
+source(here("scripts", "gep", "utils", "gep_survival_estimators.R"))
 source(here("scripts", "gep", "utils", "gep_exploratory_internal_validation.R"))
 source(here("scripts", "gep", "utils", "gep_excel_output.R"))
-source(here("scripts", "gep", "utils", "gep_extrapolation_assumptions.R"))
 source(here("scripts", "gep", "validation", "gep_definitive_validation.R"))
-source(here("scripts", "gep", "cores", "gep_evaluation_core_mfs.R"))
-source(here("scripts", "gep", "cores", "gep_evaluation_core_mss.R"))
 source(here("scripts", "gep", "reporting", "gep_mfs_sensitivity_reporting.R"))
 source(here("scripts", "gep", "visualization", "gep_poster_km_plots.R"))
 source(here("scripts", "gep", "visualization", "gep_visuals.R"))
 
 # Source the GEP reporting script
-source(here("scripts", "gep", "reporting", "gep_reporting_core.R"))
-source(here("scripts", "gep", "reporting", "gep_table_creation.R"))
-source(here("scripts", "gep", "reporting", "gep_summary_generation.R"))
-source(here("scripts", "gep", "reporting", "gep_clinical_interpretation.R"))
-source(here("scripts", "gep", "reporting", "gep_output_consolidation.R"))
-# Source the GEP simple validation script
-source(here("scripts", "gep", "reporting", "gep_simple_validation.R"))
-# Source the GEP evaluation orchestration script
-source(here("scripts", "gep", "orchestration", "gep_evaluation_orchestration.R"))
+source(here("scripts", "gep", "reporting", "gep_validation_reporting.R"))
 
 # Source the GEP exploratory analysis script 
 source(here("scripts", "gep", "orchestration", "gep_exploratory_no_gep_report.R"))
@@ -203,7 +192,6 @@ source(here("scripts", "workflow", "objective_3_repeat_radiation.R"))
 source(here("scripts", "workflow", "objective_4_gep_analysis.R"))
 
 # Source the GEP data diagnostics script
-source(here("scripts", "data_helper", "gep_missing_data_analysis.R"))
 
 # Set seed for reproducibility
 set.seed(123)

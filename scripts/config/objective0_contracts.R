@@ -125,17 +125,9 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "mfs_analysis_eligible", "MFS analysis eligibility flag", "logical", "complete", "hard_error",
     "objective4", "mss_analysis_eligible", "MSS analysis eligibility flag", "logical", "complete", "hard_error",
     "objective4", "expected_mfs_5yr", "5-year expected MFS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mfs_7yr", "7-year expected MFS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mfs_10yr", "10-year expected MFS probability", "probability", "optional", "hard_error",
     "objective4", "expected_mss_5yr", "5-year expected MSS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mss_7yr", "7-year expected MSS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mss_10yr", "10-year expected MSS probability", "probability", "optional", "hard_error",
     "objective4", "metastasis_by_5yr", "Metastasis by 5 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "metastasis_by_7yr", "Metastasis by 7 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "metastasis_by_10yr", "Metastasis by 10 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
     "objective4", "melanoma_death_by_5yr", "Melanoma death by 5 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "melanoma_death_by_7yr", "Melanoma death by 7 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "melanoma_death_by_10yr", "Melanoma death by 10 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
     "objective4", "mfs_event_type", "Incident-MFS process: 0=censored (including death before metastasis), 1=metastasis", "event_type_012", "optional", "hard_error",
     "objective4", "mss_event_type", "MSS process: 0=censored, 1=melanoma death, 2=other death including unknown cause", "event_type_012", "optional", "hard_error",
     "objective4", "tt_mets_months_analysis", "Incident-MFS time to metastasis or censoring, including censoring at death before metastasis", "nonnegative_numeric", "optional", "hard_error",
@@ -144,11 +136,7 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "melanoma_death_event", "Melanoma-death indicator: 1 only for recorded Metastatic_Uveal_Melanoma cause", "binary_01", "complete", "hard_error",
     "objective4", "competing_death_event", "Other-death indicator, including death with unknown recorded cause", "binary_01", "complete", "hard_error",
     "objective4", "predicted_mfs_risk_5yr", "5-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mfs_risk_7yr", "7-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mfs_risk_10yr", "10-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
     "objective4", "predicted_mss_risk_5yr", "5-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mss_risk_7yr", "7-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mss_risk_10yr", "10-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error"
 )
 
 # Factor variables that must have proper levels

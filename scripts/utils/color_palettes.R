@@ -64,6 +64,15 @@ get_gep_class_palette <- function(levels) {
         "Class 1 PRAME Positive" = "#20854EFF", # green
         "Class 2 PRAME Negative" = "#E18727FF", # orange
         "Class 2 PRAME Positive" = "#BC3C29FF", # red
+        # Validation groups (Class x PRAME) and GEP availability groups
+        "Class 1, PRAME negative" = "#0072B5FF",
+        "Class 1, PRAME positive" = "#20854EFF",
+        "Class 2, PRAME negative" = "#E18727FF",
+        "Class 2, PRAME positive" = "#BC3C29FF",
+        "Class known, PRAME not reported" = "#7876B1FF",
+        "Discordant result" = "#FFDC91FF",
+        "Failed or unknown result" = "#6F99ADFF",
+        "Not tested" = "#9E9E9EFF",
         "GEP Not Tested" = "#9E9E9EFF", # gray
         "GEP Failed/Indeterminate" = "#6F99ADFF",
         "No" = "#9E9E9EFF" # legacy support

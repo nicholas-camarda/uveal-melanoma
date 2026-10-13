@@ -78,8 +78,8 @@ test_that("derived-variable registry documents canonical MFS and MSS endpoints",
         "tt_mets_months_analysis",
         "mfs_event_type",
         "mss_event_type",
-        paste0("metastasis_by_", c(5, 7, 10), "yr"),
-        paste0("melanoma_death_by_", c(5, 7, 10), "yr")
+        "metastasis_by_5yr",
+        "melanoma_death_by_5yr"
     )
     retired_endpoint_fields <- c(
         paste0("mfs_event_", c(5, 7, 10), "yr"),

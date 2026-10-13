@@ -410,23 +410,7 @@ create_derived_variables <- function(data) {
                 TRUE ~ NA_integer_
             ),
             expected_mfs_5yr = biopsy1_gep_mfs,
-            expected_mfs_7yr = case_when(
-                !is.na(biopsy1_gep_mfs) ~ biopsy1_gep_mfs^(7 / 5),
-                TRUE ~ NA_real_
-            ),
-            expected_mfs_10yr = case_when(
-                !is.na(biopsy1_gep_mfs) ~ biopsy1_gep_mfs^(10 / 5),
-                TRUE ~ NA_real_
-            ),
             expected_mss_5yr = biopsy1_gep_mss,
-            expected_mss_7yr = case_when(
-                !is.na(biopsy1_gep_mss) ~ biopsy1_gep_mss^(7 / 5),
-                TRUE ~ NA_real_
-            ),
-            expected_mss_10yr = case_when(
-                !is.na(biopsy1_gep_mss) ~ biopsy1_gep_mss^(10 / 5),
-                TRUE ~ NA_real_
-            ),
             prame_status = case_when(
                 str_detect(biopsy1_gep, "PRAME_positive") ~ "Positive",
                 str_detect(biopsy1_gep, "PRAME_negative") ~ "Negative",
@@ -456,20 +440,12 @@ create_derived_variables <- function(data) {
             # for melanoma-death risk; death before metastasis is censoring for
             # MFS and therefore remains unknown at later horizons.
             metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
-            metastasis_by_7yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 84),
-            metastasis_by_10yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 120),
             melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
-            melanoma_death_by_7yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 84),
-            melanoma_death_by_10yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 120),
             
             # Pre-calculated risk variables (prevents redundant calculations in analysis)
             predicted_mfs_risk_5yr = 1 - expected_mfs_5yr,
-            predicted_mfs_risk_7yr = 1 - expected_mfs_7yr,
-            predicted_mfs_risk_10yr = 1 - expected_mfs_10yr,
             
             predicted_mss_risk_5yr = 1 - expected_mss_5yr,
-            predicted_mss_risk_7yr = 1 - expected_mss_7yr,
-            predicted_mss_risk_10yr = 1 - expected_mss_10yr,
             
             # Statistical summary variables (prevents analysis-time calculations)
             mfs_analysis_eligible = !is.na(biopsy1_gep) & 

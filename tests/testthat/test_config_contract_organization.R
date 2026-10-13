@@ -38,7 +38,7 @@ test_that("objective-specific configuration definitions live in their named modu
             "OBJECTIVE3_PFS2_DERIVATION_CONTRACT <-"
         ),
         "objective4_policy.R" = c(
-            "GEP_VALIDATION_TIMEPOINTS <-",
+            "GEP_VALIDATION_HORIZON_MONTHS <-",
             "OBJECTIVE4_GEP_GROUPING <-"
         ),
         "objective4_contracts.R" = c("OBJECTIVE4_GEP_DERIVATION_CONTRACT <-")
@@ -80,7 +80,7 @@ test_that("normalized objective contracts remain available through the public lo
         "OBJECTIVE3_PFS2_DERIVATION_CONTRACT",
         "OBJECTIVE4_GEP_GROUPING",
         "OBJECTIVE4_GEP_DERIVATION_CONTRACT",
-        "GEP_VALIDATION_TIMEPOINTS"
+        "GEP_VALIDATION_HORIZON_MONTHS"
     )
     expect_true(all(vapply(required_objects, exists, logical(1), inherits = TRUE)))
     expect_false(exists("OBJECTIVE2_TOXICITY_ENDPOINTS", inherits = TRUE))
