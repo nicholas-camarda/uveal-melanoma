@@ -136,6 +136,11 @@ get_canonical_factor_level_expectations <- function() {
             reference = "Negative",
             critical = FALSE
         ),
+        gep_test_timing = list(
+            levels = GEP_TEST_TIMING_LEVELS,
+            reference = GEP_TEST_TIMING_LEVELS[[1]],
+            critical = FALSE
+        ),
         gep_group = list(
             levels = GEP_GROUP_LEVELS,
             reference = "Class 1",

@@ -106,6 +106,39 @@ GEP_GROUP_LEVELS <- c(
     GEP_GROUP_NOT_TESTED
 )
 
+# Recorded causes of death that do not say whether the death was melanoma-specific.
+# The primary MSS analysis treats them as competing (non-melanoma) deaths; the
+# sensitivity analysis treats them as melanoma-specific deaths.
+GEP_UNKNOWN_CAUSE_OF_DEATH_LEVELS <- c("Unknown", "Unknown_Cancer")
+
+# Timing of the first biopsy (the GEP sample) relative to the primary treatment date.
+# A sample taken long after treatment (for example at local recurrence) describes a
+# different tumor state and starts the GEP-to-outcome clock after follow-up began.
+GEP_TEST_TIMING_WINDOW_DAYS <- 31
+GEP_TEST_TIMING_LATE_DAYS <- 180
+GEP_TEST_TIMING_LEVELS <- c(
+    "More than 31 days before treatment",
+    "Within 31 days of treatment",
+    "31 to 180 days after treatment",
+    "More than 180 days after treatment",
+    "No biopsy date"
+)
+GEP_TEST_TIMING_LATE <- GEP_TEST_TIMING_LEVELS[[4]]
+
+#' Classify the biopsy date relative to treatment
+#'
+#' @param days_from_treatment Numeric days from treatment to biopsy (negative = before).
+#' @return Character vector of timing categories (`GEP_TEST_TIMING_LEVELS`).
+classify_gep_test_timing <- function(days_from_treatment) {
+    dplyr::case_when(
+        is.na(days_from_treatment) ~ GEP_TEST_TIMING_LEVELS[[5]],
+        days_from_treatment < -GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_LEVELS[[1]],
+        days_from_treatment <= GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_LEVELS[[2]],
+        days_from_treatment <= GEP_TEST_TIMING_LATE_DAYS ~ GEP_TEST_TIMING_LEVELS[[3]],
+        TRUE ~ GEP_TEST_TIMING_LEVELS[[4]]
+    )
+}
+
 #' Classify raw GEP source labels into reader-facing availability groups
 #'
 #' Single mapping from the laboratory source string to `GEP_GROUP_LEVELS`.

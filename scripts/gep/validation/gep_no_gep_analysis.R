@@ -54,6 +54,12 @@ prepare_no_gep_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
     prepared <- data[eligible, , drop = FALSE]
     prepared$time_months <- as.numeric(prepared[[spec$time]])
     prepared$status <- as.integer(prepared[[spec$status]])
+    if (identical(endpoint, "MSS")) {
+        if (!"mss_event_type_unknown_cause_melanoma" %in% names(prepared)) {
+            stop("MSS analysis requires column: mss_event_type_unknown_cause_melanoma", call. = FALSE)
+        }
+        prepared$status_unknown_melanoma <- as.integer(prepared$mss_event_type_unknown_cause_melanoma)
+    }
     prepared
 }
 
@@ -527,7 +533,7 @@ build_no_gep_baseline_table <- function(data) {
 #' @param horizon_months Numeric horizon in months (default 60).
 #' @param n_boot Integer bootstrap draws.
 #' @param seed Integer seed for all bootstraps.
-#' @return List: `group_outcomes`, `baseline`, `predictor_screening`, `predictors`,
+#' @return List: `group_outcomes`, `cause_of_death_sensitivity`, `baseline`, `predictor_screening`, `predictors`,
 #'   `model_flow`, `removed_records`, `performance`, and `design_columns`.
 run_no_gep_analysis <- function(data,
                                 horizon_months = GEP_VALIDATION_HORIZON_MONTHS,
@@ -596,6 +602,10 @@ run_no_gep_analysis <- function(data,
         group_outcomes = dplyr::bind_rows(
             build_no_gep_group_outcomes(sets$MFS, "MFS", horizon_months),
             build_no_gep_group_outcomes(sets$MSS, "MSS", horizon_months)
+        ),
+        cause_of_death_sensitivity = compare_unknown_cause_of_death_assumption(
+            transform(sets$MSS, gep_group = factor(as.character(gep_group), levels = GEP_GROUP_LEVELS)),
+            "gep_group", horizon_months
         ),
         baseline = build_no_gep_baseline_table(prepared),
         predictor_screening = screening,

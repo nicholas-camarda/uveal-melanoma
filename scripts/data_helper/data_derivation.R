@@ -363,6 +363,11 @@ create_derived_variables <- function(data) {
                 competing_death_event == 1L ~ 2L,
                 TRUE ~ 0L
             ),
+            # Sensitivity process: deaths with an unknown recorded cause counted as melanoma-specific.
+            mss_event_type_unknown_cause_melanoma = case_when(
+                mss_event_type == 2L & cod %in% GEP_UNKNOWN_CAUSE_OF_DEATH_LEVELS ~ 1L,
+                TRUE ~ mss_event_type
+            ),
             pfs_event = if_else(recurrence_event == 1 | mets_event == 1 | death_event == 1, 1, 0),
             pfs2_event = case_when(
                 pfs2_second_recurrence_observed ~ 1,
@@ -393,6 +398,8 @@ create_derived_variables <- function(data) {
                 TRUE ~ NA_character_
             ),
             gep_group = classify_gep_group(biopsy1_gep),
+            gep_test_days = as.numeric(difftime(as.Date(biopsy1), as.Date(treatment_date), units = "days")),
+            gep_test_timing = classify_gep_test_timing(gep_test_days),
             ciliary_involvement = as.integer(grepl(
                 "cilio|ciliary",
                 as.character(location),

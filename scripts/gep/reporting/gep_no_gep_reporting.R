@@ -262,6 +262,7 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
             Denominators_Flow = summarize_no_gep_flow(data, results),
             Predictor_Screening = results$predictor_screening,
             Checks = checks,
+            Sensitivity_Cause_of_Death = results$cause_of_death_sensitivity,
             Warnings_Limitations = build_no_gep_limitations(results),
             Record_Issues = removed
         ),

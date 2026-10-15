@@ -389,6 +389,27 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
         data_type = "character",
         units = "categorical"
     ),
+    mss_event_type_unknown_cause_melanoma = list(
+        description = "MSS process for the cause-of-death sensitivity: 0 censored, 1 melanoma death, 2 other death",
+        calculation = "mss_event_type, with other-cause deaths whose recorded cause is Unknown or Unknown_Cancer recoded to 1",
+        purpose = "Show how much unknown-cause deaths could change melanoma-specific risk",
+        data_type = "integer",
+        units = "categorical"
+    ),
+    gep_test_days = list(
+        description = "Days from the primary treatment date to the first biopsy (negative = biopsy before treatment)",
+        calculation = "as.Date(biopsy1) - as.Date(treatment_date)",
+        purpose = "Identify GEP samples taken long after treatment, for example at local recurrence",
+        data_type = "numeric",
+        units = "days"
+    ),
+    gep_test_timing = list(
+        description = "Timing category of the first biopsy relative to treatment",
+        calculation = "classify_gep_test_timing() with a 31-day window and a 180-day late cutoff (scripts/config/objective4_policy.R)",
+        purpose = "Describe biopsy timing among validated patients and drive the late-biopsy sensitivity analysis",
+        data_type = "factor",
+        units = "categorical"
+    ),
     gep_group = list(
         description = "GEP availability group: Class 1, Class 2 (PRAME reported), class known with PRAME not reported, discordant, failed or unknown, not tested",
         calculation = "classify_gep_group() applied to the raw laboratory label (scripts/config/objective4_policy.R)",

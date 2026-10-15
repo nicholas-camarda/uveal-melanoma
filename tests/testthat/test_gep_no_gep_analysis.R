@@ -25,6 +25,7 @@ synthetic_no_gep_cohort <- function(n = 200L, seed = 21L) {
             mets_free_at_baseline = c(FALSE, rep(TRUE, n - 1L)),
             tt_mets_months_analysis = time, mfs_event_type = status,
             tt_death_months = time, mss_event_type = status,
+            mss_event_type_unknown_cause_melanoma = status,
             stringsAsFactors = FALSE
         )
     })
@@ -170,7 +171,7 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     )
     expect_identical(
         readxl::excel_sheets(paths$diagnostics),
-        c("Specification_Coding", "Denominators_Flow", "Predictor_Screening", "Checks", "Warnings_Limitations", "Record_Issues")
+        c("Specification_Coding", "Denominators_Flow", "Predictor_Screening", "Checks", "Sensitivity_Cause_of_Death", "Warnings_Limitations", "Record_Issues")
     )
     for (sheet in readxl::excel_sheets(paths$primary)) {
         expect_false("record_key" %in% names(readxl::read_excel(paths$primary, sheet = sheet)))

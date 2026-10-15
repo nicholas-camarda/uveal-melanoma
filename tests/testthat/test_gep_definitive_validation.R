@@ -13,8 +13,11 @@ synthetic_validation_cohort <- function(n_per_group = 10L, seed = 11L) {
             mfs_event_type = as.integer(event_time <= censor_time),
             tt_death_months = pmin(event_time, censor_time),
             mss_event_type = as.integer(event_time <= censor_time),
+            mss_event_type_unknown_cause_melanoma = as.integer(event_time <= censor_time),
             mfs_analysis_eligible = TRUE,
-            mss_analysis_eligible = TRUE
+            mss_analysis_eligible = TRUE,
+            gep_test_timing = GEP_TEST_TIMING_LEVELS[[2]],
+            gep_test_days = 0
         )
     })
 }
@@ -220,7 +223,9 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
         prame_status = "Not Available",
         biopsy1_gep_mfs = NA_real_, biopsy1_gep_mss = NA_real_,
         tt_mets_months_analysis = 30, mfs_event_type = 0L, tt_death_months = 30, mss_event_type = 0L,
-        mfs_analysis_eligible = FALSE, mss_analysis_eligible = FALSE
+        mss_event_type_unknown_cause_melanoma = 0L,
+        mfs_analysis_eligible = FALSE, mss_analysis_eligible = FALSE,
+        gep_test_timing = GEP_TEST_TIMING_LEVELS[[5]], gep_test_days = NA_real_
     )
     cohort <- rbind(cohort, extra)
     cohort$id <- sprintf("P%03d", seq_len(nrow(cohort)))
@@ -229,6 +234,11 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
         "Failed", "Class_2_PRAME_not_reported", NA, NA, NA
     )
     cohort$gep_group <- classify_gep_group(cohort$biopsy1_gep_raw)
+    # One primary patient was sampled at recurrence (late) and one has no biopsy date.
+    cohort$gep_test_days[3] <- 400
+    cohort$gep_test_timing[3] <- GEP_TEST_TIMING_LATE
+    cohort$gep_test_timing[4] <- GEP_TEST_TIMING_LEVELS[[5]]
+    cohort$gep_test_days[4] <- NA_real_
 
     results <- run_gep_definitive_validation(cohort, n_boot = 20L)
     out_dir <- withr::local_tempdir()
@@ -245,7 +255,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     )
     expect_identical(
         readxl::excel_sheets(paths$diagnostics),
-        c("Specification_Coding", "Denominators_Flow", "Checks", "Warnings_Limitations", "Record_Issues")
+        c("Specification_Coding", "Denominators_Flow", "Checks", "Sensitivity_Late_Biopsy", "Sensitivity_Cause_of_Death", "Warnings_Limitations", "Record_Issues")
     )
     # Identifiers live only in the diagnostics workbook.
     for (sheet in readxl::excel_sheets(paths$primary)) {
@@ -257,9 +267,20 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     total <- flow$n[flow$step == "All patients in cohort"]
     primary <- flow$n[grepl("^Definitive Class 1/2", flow$step)]
     expect_identical(total, as.numeric(nrow(cohort)))
-    expect_identical(nrow(issues), as.integer(total - primary))
-    expect_setequal(unique(issues$reason), c(GEP_GROUP_TEST_FAILED, GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_NOT_TESTED))
-    expect_true(all(issues$field == "biopsy1_gep_raw"))
+    # Every patient outside the primary set, plus primary patients flagged for biopsy timing.
+    flagged <- flow$n[grepl("^Biopsy timing in the primary set: (More than 180|No biopsy)", flow$step)]
+    expect_identical(sum(flagged), 2)
+    expect_identical(nrow(issues), as.integer(total - primary + sum(flagged)))
+    outside <- issues[issues$step == "GEP availability group", ]
+    expect_setequal(unique(outside$reason), c(GEP_GROUP_TEST_FAILED, GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_NOT_TESTED))
+    expect_true(all(outside$field == "biopsy1_gep_raw"))
+    timing <- issues[startsWith(issues$step, "Biopsy timing"), ]
+    expect_setequal(timing$reason, c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]]))
+    expect_equal(sum(flow$n[startsWith(flow$step, "Biopsy timing in the primary set")]), primary)
+
+    sensitivity <- readxl::read_excel(paths$diagnostics, sheet = "Sensitivity_Late_Biopsy")
+    expect_true(all(c("endpoint", "quantity", "primary", "excluding_late_biopsy", "difference", "unit") %in% names(sensitivity)))
+    expect_identical(unname(results$late_biopsy_sensitivity$patients_excluded[["MFS"]]), 1L)
     expect_true(all(issues$key_source == "id"))
     expect_true(all(startsWith(issues$record_key, "P")))
 
@@ -269,7 +290,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_true(all(anonymous$key_source == "row position (no identifier column)"))
 
     # A cohort in which every patient is in the primary set yields an empty, well-formed sheet.
-    complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2"), ]
+    complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2") & cohort$gep_test_timing == GEP_TEST_TIMING_LEVELS[[2]], ]
     expect_identical(nrow(build_gep_record_issues(complete)), 0L)
 
     checks <- readxl::read_excel(paths$diagnostics, sheet = "Checks")
@@ -297,4 +318,26 @@ test_that("curve figures draw groups without melanoma deaths as flat zero curves
     plot <- plot_gep_validation_curves(prepared, table, "MSS", 60, "Synthetic cohort")
     expect_s3_class(plot, "ggplot")
     expect_no_error(ggplot2::ggplot_build(plot))
+})
+
+test_that("unknown-cause deaths are recounted as melanoma deaths in the sensitivity only", {
+    endpoint_data <- data.frame(
+        validation_group = factor(rep(GEP_VALIDATION_GROUP_LEVELS[1:2], each = 10), levels = GEP_VALIDATION_GROUP_LEVELS),
+        time_months = rep(c(70, 20), 10),
+        status = c(rep(0L, 10), rep(c(0L, 2L), 5)),
+        stringsAsFactors = FALSE
+    )
+    # Three of the five other-cause deaths in the second group have an unknown cause.
+    endpoint_data$status_unknown_melanoma <- endpoint_data$status
+    endpoint_data$status_unknown_melanoma[c(12, 14, 16)] <- 1L
+
+    comparison <- compare_unknown_cause_of_death_assumption(endpoint_data, "validation_group", 60)
+    first <- comparison[comparison$group == GEP_VALIDATION_GROUP_LEVELS[1], ]
+    second <- comparison[comparison$group == GEP_VALIDATION_GROUP_LEVELS[2], ]
+    expect_identical(first$deaths_reclassified, 0L)
+    expect_equal(first$difference_pct_points, 0)
+    expect_identical(second$deaths_reclassified, 3L)
+    expect_gt(second$unknown_cause_as_melanoma_risk, second$primary_risk)
+    # The primary MSS status is untouched.
+    expect_identical(sum(endpoint_data$status == 1L), 0L)
 })

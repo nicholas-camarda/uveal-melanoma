@@ -42,7 +42,7 @@ prepare_gep_validation_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
         MSS = list(eligible = "mss_analysis_eligible", time = "tt_death_months",
                    status = "mss_event_type", expected = "biopsy1_gep_mss")
     )
-    required <- c(spec$eligible, spec$time, spec$status, spec$expected, "gep_class_simple", "prame_status")
+    required <- c(spec$eligible, spec$time, spec$status, spec$expected, "gep_class_simple", "prame_status", "gep_test_timing")
     missing_cols <- setdiff(required, names(data))
     if (length(missing_cols) > 0L) {
         stop(sprintf("%s validation requires columns: %s", endpoint, paste(missing_cols, collapse = ", ")), call. = FALSE)
@@ -57,6 +57,12 @@ prepare_gep_validation_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
             published_risk = 1 - as.numeric(.data[[spec$expected]])
         ) %>%
         dplyr::filter(!is.na(.data$validation_group), is.finite(.data$time_months), !is.na(.data$status))
+    if (identical(endpoint, "MSS")) {
+        if (!"mss_event_type_unknown_cause_melanoma" %in% names(prepared)) {
+            stop("MSS validation requires column: mss_event_type_unknown_cause_melanoma", call. = FALSE)
+        }
+        prepared$status_unknown_melanoma <- as.integer(prepared$mss_event_type_unknown_cause_melanoma)
+    }
     prepared
 }
 
@@ -418,6 +424,84 @@ check_gep_proportional_hazards <- function(prepared) {
     )
 }
 
+#' Cause-of-death sensitivity for melanoma-specific risk
+#'
+#' The primary analysis counts deaths with an unknown recorded cause as competing
+#' (non-melanoma) deaths. This recomputes the observed melanoma-specific risk in each
+#' group counting them as melanoma deaths, the opposite extreme.
+#'
+#' @param endpoint_data Data frame with `time_months`, `status`, `status_unknown_melanoma`
+#'   and the grouping column.
+#' @param group_var Character name of the grouping column.
+#' @param horizon_months Numeric horizon in months.
+#' @return Data frame per group: patients, deaths reclassified, `primary_risk`,
+#'   `unknown_cause_as_melanoma_risk`, and `difference_pct_points`.
+compare_unknown_cause_of_death_assumption <- function(endpoint_data, group_var, horizon_months) {
+    groups <- levels(endpoint_data[[group_var]])
+    rows <- lapply(groups, function(group_name) {
+        g <- endpoint_data[endpoint_data[[group_var]] %in% group_name, , drop = FALSE]
+        primary <- estimate_cif_risk_at_horizon(g$time_months, g$status, horizon_months)
+        alternative <- estimate_cif_risk_at_horizon(g$time_months, g$status_unknown_melanoma, horizon_months)
+        data.frame(
+            group = group_name, patients = nrow(g),
+            deaths_reclassified = sum(g$status != g$status_unknown_melanoma, na.rm = TRUE),
+            primary_risk = primary$risk, unknown_cause_as_melanoma_risk = alternative$risk,
+            difference_pct_points = 100 * (alternative$risk - primary$risk), stringsAsFactors = FALSE
+        )
+    })
+    dplyr::bind_rows(rows)
+}
+
+#' Sensitivity to GEP samples taken long after treatment
+#'
+#' Recomputes the group tables and discrimination without the patients whose first
+#' biopsy was more than `GEP_TEST_TIMING_LATE_DAYS` after treatment (for example at
+#' local recurrence), whose sample describes a different tumor state.
+#'
+#' @param mfs Prepared MFS endpoint data.
+#' @param mss Prepared MSS endpoint data.
+#' @param horizon_months Numeric horizon in months.
+#' @param n_boot Integer bootstrap replicates.
+#' @param seed Integer seed.
+#' @return List: `patients_excluded` (per endpoint) and `table` with `endpoint`,
+#'   `quantity`, `primary`, `excluding_late_biopsy`, `difference`, `unit`.
+run_gep_late_biopsy_sensitivity <- function(mfs, mss, horizon_months, n_boot, seed) {
+    one_endpoint <- function(prepared, endpoint) {
+        keep <- prepared[!(as.character(prepared$gep_test_timing) %in% GEP_TEST_TIMING_LATE), , drop = FALSE]
+        primary_table <- build_gep_group_table(prepared, endpoint, horizon_months)
+        restricted_table <- build_gep_group_table(keep, endpoint, horizon_months)
+        discrimination <- function(d) {
+            if (identical(endpoint, "MFS")) {
+                r <- calculate_gep_harrell_c(d$time_months, d$status, d$published_risk, horizon_months, n_boot, seed)
+                list(value = r$c_index, label = "Harrell's C")
+            } else {
+                r <- calculate_gep_competing_risk_auc(d$time_months, d$status, d$published_risk, horizon_months, n_boot, seed)
+                list(value = r$auc, label = "Competing-risk AUC")
+            }
+        }
+        primary_disc <- discrimination(prepared)
+        restricted_disc <- discrimination(keep)
+        risk_rows <- data.frame(
+            endpoint = endpoint, quantity = paste("Observed 5-year risk:", primary_table$group),
+            primary = primary_table$observed_risk, excluding_late_biopsy = restricted_table$observed_risk,
+            difference = 100 * (restricted_table$observed_risk - primary_table$observed_risk), unit = "percentage points",
+            stringsAsFactors = FALSE
+        )
+        disc_row <- data.frame(
+            endpoint = endpoint, quantity = primary_disc$label, primary = primary_disc$value,
+            excluding_late_biopsy = restricted_disc$value, difference = restricted_disc$value - primary_disc$value,
+            unit = "absolute", stringsAsFactors = FALSE
+        )
+        list(table = rbind(risk_rows, disc_row), excluded = nrow(prepared) - nrow(keep))
+    }
+    mfs_result <- one_endpoint(mfs, "MFS")
+    mss_result <- one_endpoint(mss, "MSS")
+    list(
+        patients_excluded = c(MFS = mfs_result$excluded, MSS = mss_result$excluded),
+        table = rbind(mfs_result$table, mss_result$table)
+    )
+}
+
 #' Run the definitive-GEP 5-year validation for one cohort
 #'
 #' @param data Cohort data frame from the analytic dataset.
@@ -425,15 +509,19 @@ check_gep_proportional_hazards <- function(prepared) {
 #' @param n_boot Integer bootstrap replicates.
 #' @param seed Integer seed for all bootstraps in this run.
 #' @return List with `horizon_months`, `mfs` and `mss` (each with `prepared`,
-#'   `group_table`, `discrimination`, `proportional_hazards`), and `denominators`.
+#'   `group_table`, `discrimination`, `proportional_hazards`),
+#'   `late_biopsy_sensitivity`, and `cause_of_death_sensitivity`.
 run_gep_definitive_validation <- function(data,
                                           horizon_months = GEP_VALIDATION_HORIZON_MONTHS,
                                           n_boot = GEP_BOOTSTRAP_ITERATIONS,
                                           seed = GEP_VALIDATION_BOOTSTRAP_SEED) {
     mfs <- prepare_gep_validation_endpoint(data, "MFS")
     mss <- prepare_gep_validation_endpoint(data, "MSS")
+    late_biopsy_sensitivity <- run_gep_late_biopsy_sensitivity(mfs, mss, horizon_months, n_boot, seed)
     list(
         horizon_months = horizon_months,
+        late_biopsy_sensitivity = late_biopsy_sensitivity,
+        cause_of_death_sensitivity = compare_unknown_cause_of_death_assumption(mss, "validation_group", horizon_months),
         mfs = list(
             prepared = mfs,
             group_table = build_gep_group_table(mfs, "MFS", horizon_months),

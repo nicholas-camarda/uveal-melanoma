@@ -29,7 +29,7 @@ OBJECTIVE0_DERIVED_OUTPUT_MANIFEST <- c(
     "vision_change", "vision_line_change", "vision_line_change_bucket",
     "last_vision_followup_months_explicit", "last_vision_followup_months_proxy",
     "last_vision_followup_timing_source", "last_vision_followup_months",
-    "gep_group", "ciliary_involvement",
+    "gep_group", "gep_test_days", "gep_test_timing", "mss_event_type_unknown_cause_melanoma", "ciliary_involvement",
     "optic_nerve_involvement", "mets_at_or_before_treatment",
     "mets_free_at_baseline", "mets_event_analysis"
 )
@@ -115,6 +115,7 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "biopsy1_gep_mss", "GEP expected MSS source", "probability", "optional", "hard_error",
     "objective4", "gep_class_simple", "GEP class endpoint", "gep_class_simple", "optional", "hard_error",
     "objective4", "gep_group", "GEP availability group", "gep_group", "optional", "hard_error",
+    "objective4", "gep_test_timing", "Timing of the GEP biopsy relative to treatment", "gep_test_timing", "optional", "warning",
     "objective4", "ciliary_involvement", "ciliary involvement exploratory predictor", "binary_01", "optional", "warning",
     "objective4", "optic_nerve_involvement", "optic-nerve involvement exploratory predictor", "binary_01", "optional", "warning",
     "objective4", "prame_status", "PRAME endpoint", "prame_status", "optional", "hard_error",
@@ -128,6 +129,7 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "melanoma_death_by_5yr", "Melanoma death by 5 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
     "objective4", "mfs_event_type", "Incident-MFS process: 0=censored (including death before metastasis), 1=metastasis", "event_type_012", "optional", "hard_error",
     "objective4", "mss_event_type", "MSS process: 0=censored, 1=melanoma death, 2=other death including unknown cause", "event_type_012", "optional", "hard_error",
+    "objective4", "mss_event_type_unknown_cause_melanoma", "Sensitivity MSS process: unknown-cause deaths counted as melanoma deaths", "event_type_012", "optional", "warning",
     "objective4", "tt_mets_months_analysis", "Incident-MFS time to metastasis or censoring, including censoring at death before metastasis", "nonnegative_numeric", "optional", "hard_error",
     "objective4", "tt_death_months", "death follow-up time", "nonnegative_numeric", "optional", "hard_error",
     "objective4", "tt_death_years", "death follow-up time", "nonnegative_numeric", "optional", "hard_error",

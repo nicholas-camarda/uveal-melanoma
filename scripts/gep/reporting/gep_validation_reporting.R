@@ -16,12 +16,14 @@ summarize_gep_validation_flow <- function(data, results) {
             paste("GEP group:", GEP_GROUP_LEVELS),
             "Definitive Class 1/2 with PRAME reported (primary validation set)",
             "Eligible for the MFS endpoint", "Analysed for MFS",
-            "Eligible for the MSS endpoint", "Analysed for MSS"
+            "Eligible for the MSS endpoint", "Analysed for MSS",
+            paste("Biopsy timing in the primary set:", GEP_TEST_TIMING_LEVELS)
         ),
         n = c(
             nrow(data), as.integer(group_counts), as.integer(primary_n),
             sum(data$mfs_analysis_eligible %in% TRUE), nrow(results$mfs$prepared),
-            sum(data$mss_analysis_eligible %in% TRUE), nrow(results$mss$prepared)
+            sum(data$mss_analysis_eligible %in% TRUE), nrow(results$mss$prepared),
+            as.integer(table(factor(data$gep_test_timing[data$gep_group %in% c("Class 1", "Class 2")], levels = GEP_TEST_TIMING_LEVELS)))
         ),
         note = c(
             "", rep("", length(GEP_GROUP_LEVELS)),
@@ -29,7 +31,8 @@ summarize_gep_validation_flow <- function(data, results) {
             "Definitive call, valid imported prediction, metastasis-free at baseline",
             "Equals eligible unless a record lacks follow-up time or status",
             "Definitive call, valid imported prediction, melanoma-death follow-up available",
-            "Equals eligible unless a record lacks follow-up time or status"
+            "Equals eligible unless a record lacks follow-up time or status",
+            c("", "", "", "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis", "Flagged in Record_Issues")
         ),
         stringsAsFactors = FALSE
     )
@@ -44,23 +47,38 @@ summarize_gep_validation_flow <- function(data, results) {
 #' `key_source` says so. Contains identifiers: keep it in the diagnostics workbook,
 #' which is excluded from publishing.
 #'
-#' @param data Cohort data frame with `gep_group` and `biopsy1_gep_raw`.
+#' @param data Cohort data frame with `gep_group`, `biopsy1_gep_raw`, `gep_test_timing`
+#'   and `gep_test_days`.
 #' @return Data frame with `record_key`, `key_source`, `step`, `reason`, `field`,
 #'   `current_value`.
 build_gep_record_issues <- function(data) {
     id_col <- pick_sparse_level_id_col(data)
     record_key <- if (is.null(id_col)) as.character(seq_len(nrow(data))) else as.character(data[[id_col]])
+    key_source <- if (is.null(id_col)) "row position (no identifier column)" else id_col
     outside <- !(data$gep_group %in% c("Class 1", "Class 2"))
     n_outside <- sum(outside)
-    data.frame(
+    group_rows <- data.frame(
         record_key = record_key[outside],
-        key_source = rep(if (is.null(id_col)) "row position (no identifier column)" else id_col, n_outside),
+        key_source = rep(key_source, n_outside),
         step = rep("GEP availability group", n_outside),
         reason = as.character(data$gep_group[outside]),
         field = rep("biopsy1_gep_raw", n_outside),
         current_value = ifelse(is.na(data$biopsy1_gep_raw[outside]), "(no result recorded)", as.character(data$biopsy1_gep_raw[outside])),
         stringsAsFactors = FALSE
     )
+    # Primary-set patients whose biopsy timing needs a look (kept in the analysis).
+    flagged <- !outside & as.character(data$gep_test_timing) %in% c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]])
+    n_flagged <- sum(flagged)
+    timing_rows <- data.frame(
+        record_key = record_key[flagged],
+        key_source = rep(key_source, n_flagged),
+        step = rep("Biopsy timing (patient kept in the primary set)", n_flagged),
+        reason = as.character(data$gep_test_timing[flagged]),
+        field = rep("gep_test_days", n_flagged),
+        current_value = ifelse(is.na(data$gep_test_days[flagged]), "missing", sprintf("%.0f days from treatment", data$gep_test_days[flagged])),
+        stringsAsFactors = FALSE
+    )
+    rbind(group_rows, timing_rows)
 }
 
 #' Evaluate the quality checks that qualify the validation estimates
@@ -120,6 +138,10 @@ build_gep_validation_checks <- function(results) {
         add(endpoint, "Proportional hazards (Schoenfeld, imported risk)", "All patients",
             if (is.na(ph$p_value)) "not computed" else sprintf("p = %.2f", ph$p_value), ph$status, ph$reason)
     }
+    late_n <- results$late_biopsy_sensitivity$patients_excluded[["MFS"]]
+    add("MFS", "GEP sample taken more than 180 days after treatment", "Primary set",
+        sprintf("%d patients", late_n), if (late_n == 0L) "no concern" else "concern",
+        "Such a sample (for example at local recurrence) describes a different tumor state; see Sensitivity_Late_Biopsy")
     dplyr::bind_rows(rows)
 }
 
@@ -300,7 +322,7 @@ plot_gep_observed_vs_imported <- function(group_tables, panel_label = "Panel") {
 #' @param prefix Character file prefix.
 #' @return Invisibly, a list of written file paths.
 write_gep_validation_outputs <- function(results, data, dataset_name, output_dirs, prefix) {
-    required <- c("gep_group", "biopsy1_gep_raw", "mfs_analysis_eligible", "mss_analysis_eligible")
+    required <- c("gep_group", "biopsy1_gep_raw", "gep_test_timing", "gep_test_days", "mfs_analysis_eligible", "mss_analysis_eligible")
     missing_cols <- setdiff(required, names(data))
     if (length(missing_cols) > 0L) {
         stop(sprintf("GEP validation reporting requires columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
@@ -348,6 +370,8 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
             Specification_Coding = build_gep_validation_specification(horizon),
             Denominators_Flow = summarize_gep_validation_flow(data, results),
             Checks = checks,
+            Sensitivity_Late_Biopsy = results$late_biopsy_sensitivity$table,
+            Sensitivity_Cause_of_Death = results$cause_of_death_sensitivity,
             Warnings_Limitations = build_gep_validation_limitations(checks, dataset_name),
             Record_Issues = build_gep_record_issues(data)
         ),

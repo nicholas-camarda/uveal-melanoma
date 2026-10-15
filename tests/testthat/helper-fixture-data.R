@@ -193,6 +193,7 @@ create_test_dataset <- function() {
     ),
 
     # GEP variables
+    biopsy1 = as.POSIXct("2020-06-01", tz = "UTC") + 86400 * seq_len(20),
     biopsy1_gep = rep(c("Class 1", "Class 2"), each = 10),
     biopsy1_gep_mfs = c(rep(0.2, 10), rep(0.8, 10)),
     biopsy1_gep_mss = c(rep(0.15, 10), rep(0.85, 10)),
@@ -333,6 +334,8 @@ create_pipeline_test_dataset <- function(n = 96L, seed = 20260816L) {
     )
     data$gep_class_simple <- data$biopsy1_gep
     data$gep_group <- as.character(data$biopsy1_gep)
+    data$gep_test_timing <- "Within 31 days of treatment"
+    data$gep_test_days <- 0
     data$prame_status <- factor(rep(c("Negative", "Positive"), length.out = n))
     data$gep12_prame_status <- data$prame_status
     data$retinopathy_burden_event <- rep(c(1L, 0L, 0L, 1L, 0L), length.out = n)
@@ -366,7 +369,7 @@ synthetic_ci_required_columns <- function() {
     "melanoma_death_event", "competing_death_event",
     "expected_mfs_5yr", "expected_mss_5yr",
     "predicted_mfs_risk_5yr", "predicted_mss_risk_5yr",
-    "gep_group", "biopsy1_gep_raw",
+    "gep_group", "gep_test_timing", "gep_test_days", "mss_event_type_unknown_cause_melanoma", "biopsy1_gep_raw",
     "recurrence1_treatment_clean", "missing_gep_group", "has_gep",
     "mfs_analysis_eligible", "mss_analysis_eligible", "initial_tumor_height",
     "age_at_diagnosis", "sex"
@@ -443,6 +446,8 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
       synthetic_cohort = synthetic_cohort,
       gep_class_simple = gep_class,
       gep_group = as.character(gep_class),
+      gep_test_timing = rep("Within 31 days of treatment", n),
+      gep_test_days = rep(0, n),
       biopsy1_gep_raw = ifelse(gep_class == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
       biopsy1_gep = factor(as.character(gep_class), levels = SYNTHETIC_CI_GEP_LEVELS),
       biopsy1_gep_mfs = expected_mfs,
@@ -487,6 +492,7 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
         competing_death_event == 1L ~ 2L,
         TRUE ~ 0L
       ),
+      mss_event_type_unknown_cause_melanoma = mss_event_type,
       metastasis_by_5yr = derive_fixed_horizon_binary_outcome(tt_mets_months_analysis, mfs_event_type, 60),
       melanoma_death_by_5yr = derive_fixed_horizon_binary_outcome(tt_death_months, mss_event_type, 60),
       initial_tumor_diameter = runif(n, 6, 19)

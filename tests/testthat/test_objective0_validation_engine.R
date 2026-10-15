@@ -97,6 +97,9 @@ make_objective0_validation_dataset <- function() {
             c("Class 1", "Class 2", "Class 1"),
             levels = GEP_GROUP_LEVELS
         ),
+        gep_test_days = c(0, 5, -3),
+        gep_test_timing = factor(rep("Within 31 days of treatment", 3), levels = GEP_TEST_TIMING_LEVELS),
+        mss_event_type_unknown_cause_melanoma = c(0L, 0L, 0L),
         ciliary_involvement = c(0L, 1L, 0L),
         optic_nerve_involvement = c(0L, 0L, 0L),
         consort_group = c("eligible_both", "eligible_both", "eligible_both"),

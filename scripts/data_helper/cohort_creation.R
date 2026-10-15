@@ -301,7 +301,10 @@ prepare_factor_levels <- function(data) {
     # The GEP availability group is derived once from the raw laboratory label
     # (classify_gep_group) and stored with fixed levels.
     data <- data %>%
-        mutate(gep_group = factor(as.character(gep_group), levels = GEP_GROUP_LEVELS, ordered = FALSE))
+        mutate(
+            gep_group = factor(as.character(gep_group), levels = GEP_GROUP_LEVELS, ordered = FALSE),
+            gep_test_timing = factor(as.character(gep_test_timing), levels = GEP_TEST_TIMING_LEVELS, ordered = FALSE)
+        )
 
     # Create collapsed T-stage variable (T1..T4) if needed
     data <- data %>% mutate(
