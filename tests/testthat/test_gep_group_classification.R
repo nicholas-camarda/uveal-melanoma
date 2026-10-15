@@ -74,3 +74,35 @@ test_that("definitive GEP groups reproduce the primary validation set definition
     # Class 1/Class 2 in gep_group are exactly the definitive calls with PRAME reported.
     expect_identical(group %in% GEP_DEFINITIVE_SIMPLE_LEVELS, !is.na(simple))
 })
+
+test_that("the discordant source string is normalized once and classified as its own group", {
+    expect_identical(normalize_gep_source_label(GEP_DISCORDANT_SOURCE_LABEL), GEP_DISCORDANT_RAW_LEVELS)
+    expect_identical(normalize_gep_source_label(factor("Class_2_PRAME_negative")), "Class_2_PRAME_negative")
+    expect_true(is.na(classify_gep_group(GEP_DISCORDANT_SOURCE_LABEL)))
+    expect_identical(
+        classify_gep_group(normalize_gep_source_label(GEP_DISCORDANT_SOURCE_LABEL)),
+        GEP_GROUP_DISCORDANT
+    )
+
+    # The derivation and cohort creation both go through the one normalizer.
+    derivation_text <- paste(readLines(here::here("scripts", "data_helper", "data_derivation.R"), warn = FALSE), collapse = "\n")
+    creation_text <- paste(readLines(here::here("scripts", "data_helper", "cohort_creation.R"), warn = FALSE), collapse = "\n")
+    expect_true(grepl("classify_gep_group(normalize_gep_source_label(biopsy1_gep))", derivation_text, fixed = TRUE))
+    expect_true(grepl("normalize_gep_source_label(biopsy1_gep)", creation_text, fixed = TRUE))
+    # The source string is defined once, in the policy, not retyped in the derivation code.
+    expect_false(grepl("DISCORDANT CASTLE RESULTS", paste(derivation_text, creation_text), fixed = TRUE))
+})
+
+test_that("the simple GEP class is derived from the availability group", {
+    expect_identical(
+        derive_gep_class_simple(c("Class 1", "Class 2", GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_DISCORDANT, GEP_GROUP_TEST_FAILED, GEP_GROUP_NOT_TESTED, NA)),
+        c("Class 1", "Class 2", rep("GEP Failed/Indeterminate", 3), "GEP Not Tested", NA_character_)
+    )
+    # Eligibility keys on Class 1/Class 2, so the simple class must never promote another group.
+    groups <- classify_gep_group(c(
+        GEP_CLASS_1_DEFINITIVE_RAW_LEVELS, GEP_CLASS_2_DEFINITIVE_RAW_LEVELS,
+        GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS, GEP_NOT_TESTED_RAW_LEVELS
+    ))
+    simple <- derive_gep_class_simple(groups)
+    expect_identical(simple %in% c("Class 1", "Class 2"), groups %in% c("Class 1", "Class 2"))
+})

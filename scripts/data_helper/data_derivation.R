@@ -390,14 +390,8 @@ create_derived_variables <- function(data) {
             "pfs2_end_date"
         ))) %>%
         mutate(
-            gep_class_simple = case_when(
-                biopsy1_gep %in% GEP_CLASS_1_DEFINITIVE_RAW_LEVELS ~ "Class 1",
-                biopsy1_gep %in% GEP_CLASS_2_DEFINITIVE_RAW_LEVELS ~ "Class 2",
-                biopsy1_gep %in% GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS ~ "GEP Failed/Indeterminate",
-                biopsy1_gep %in% GEP_NOT_TESTED_RAW_LEVELS ~ "GEP Not Tested",
-                TRUE ~ NA_character_
-            ),
-            gep_group = classify_gep_group(biopsy1_gep),
+            gep_group = classify_gep_group(normalize_gep_source_label(biopsy1_gep)),
+            gep_class_simple = derive_gep_class_simple(gep_group),
             gep_test_days = as.numeric(difftime(as.Date(biopsy1), as.Date(treatment_date), units = "days")),
             gep_test_timing = classify_gep_test_timing(gep_test_days),
             ciliary_involvement = as.integer(grepl(

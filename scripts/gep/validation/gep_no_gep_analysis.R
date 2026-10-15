@@ -25,6 +25,9 @@ prepare_no_gep_data <- function(data) {
     reflectivity <- coerce_to_factor_preserving_levels(data$internal_reflectivity)
     reflectivity[as.character(reflectivity) %in% "Unknown"] <- NA
     data$internal_reflectivity <- droplevels(reflectivity)
+    if (anyNA(data$gep_group)) {
+        stop(sprintf("gep_group is missing for %d patient(s); every patient must be classified.", sum(is.na(data$gep_group))), call. = FALSE)
+    }
     data$gep_group <- factor(as.character(data$gep_group), levels = GEP_GROUP_LEVELS)
     data
 }

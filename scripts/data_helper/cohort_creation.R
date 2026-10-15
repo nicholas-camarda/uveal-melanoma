@@ -159,7 +159,7 @@ assert_known_raw_factor_values <- function(data) {
             GEP_DEFINITIVE_RAW_LEVELS,
             GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS,
             GEP_NOT_TESTED_RAW_LEVELS,
-            "DISCORDANT CASTLE RESULTS: Class 1A, PRAME not reported",
+            GEP_DISCORDANT_SOURCE_LABEL,
             "Class 1 PRAME Negative", "Class 1 PRAME Positive",
             "Class 2 PRAME Negative", "Class 2 PRAME Positive",
             "GEP Failed/Indeterminate", "GEP Not Tested", "Class 1", "Class 2"
@@ -250,10 +250,7 @@ prepare_factor_levels <- function(data) {
                 levels = c("Stage I-III", "Stage IV"), ordered = FALSE
             ),
             biopsy1_gep_raw = factor(
-                case_when(
-                    biopsy1_gep == "DISCORDANT CASTLE RESULTS: Class 1A, PRAME not reported" ~ "Class_1A_PRAME_discordant",
-                    TRUE ~ biopsy1_gep
-                ),
+                normalize_gep_source_label(biopsy1_gep),
                 levels = c(
                     "Class_1A_PRAME_negative", "Class_1A_PRAME_positive", "Class_1A_PRAME_not_reported",
                     "Class_1B_PRAME_negative", "Class_1B_PRAME_positive",
@@ -284,15 +281,9 @@ prepare_factor_levels <- function(data) {
                     "GEP Not Tested"
                 ), ordered = FALSE
             ),
-            # Simple GEP class is now binary: Class 1 vs Class 2
+            # gep_class_simple is derived once from gep_group in create_derived_variables().
             gep_class_simple = factor(
-                case_when(
-                    biopsy1_gep_raw %in% GEP_CLASS_1_DEFINITIVE_RAW_LEVELS ~ "Class 1",
-                    biopsy1_gep_raw %in% GEP_CLASS_2_DEFINITIVE_RAW_LEVELS ~ "Class 2",
-                    biopsy1_gep_raw %in% GEP_NOT_TESTED_RAW_LEVELS | is.na(biopsy1_gep_raw) ~ "GEP Not Tested",
-                    biopsy1_gep_raw %in% GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS ~ "GEP Failed/Indeterminate",
-                    TRUE ~ NA_character_
-                ),
+                as.character(gep_class_simple),
                 levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"), ordered = FALSE
             ),
             prame_status = factor(prame_status, levels = c("Negative", "Positive", "Unknown", "Not Available"), ordered = FALSE)

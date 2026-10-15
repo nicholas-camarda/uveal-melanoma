@@ -139,6 +139,23 @@ classify_gep_test_timing <- function(days_from_treatment) {
     )
 }
 
+# The laboratory's discordant-result string as typed in the source spreadsheet.
+GEP_DISCORDANT_SOURCE_LABEL <- "DISCORDANT CASTLE RESULTS: Class 1A, PRAME not reported"
+
+#' Normalize the source GEP label to the raw level names
+#'
+#' The only source string that is not already a raw level is the discordant-result
+#' text; it maps to `GEP_DISCORDANT_RAW_LEVELS`. Every classification of the raw
+#' label goes through this function so the mapping lives in one place.
+#'
+#' @param label Character or factor vector of source GEP labels.
+#' @return Character vector with the discordant source string replaced.
+normalize_gep_source_label <- function(label) {
+    label <- as.character(label)
+    label[label %in% GEP_DISCORDANT_SOURCE_LABEL] <- GEP_DISCORDANT_RAW_LEVELS
+    label
+}
+
 #' Classify raw GEP source labels into reader-facing availability groups
 #'
 #' Single mapping from the laboratory source string to `GEP_GROUP_LEVELS`.
@@ -238,4 +255,18 @@ get_gep_grouping_for_context <- function(outcome, context) {
     }
 
     get_gep_grouping_spec(outcome_grouping[[context]])
+}
+
+#' Collapse GEP availability groups to the simple class label used by eligibility flags
+#'
+#' @param gep_group Character vector from `classify_gep_group()`.
+#' @return Character vector: `Class 1`, `Class 2`, `GEP Not Tested`, or
+#'   `GEP Failed/Indeterminate` (every other group); `NA` stays `NA`.
+derive_gep_class_simple <- function(gep_group) {
+    dplyr::case_when(
+        gep_group %in% c("Class 1", "Class 2") ~ as.character(gep_group),
+        gep_group %in% GEP_GROUP_NOT_TESTED ~ "GEP Not Tested",
+        !is.na(gep_group) ~ "GEP Failed/Indeterminate",
+        TRUE ~ NA_character_
+    )
 }

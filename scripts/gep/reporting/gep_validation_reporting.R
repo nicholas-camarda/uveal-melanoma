@@ -327,6 +327,9 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
     if (length(missing_cols) > 0L) {
         stop(sprintf("GEP validation reporting requires columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
     }
+    if (anyNA(data$gep_group)) {
+        stop(sprintf("gep_group is missing for %d patient(s); every patient must be classified.", sum(is.na(data$gep_group))), call. = FALSE)
+    }
     gep_root <- dirname(output_dirs$obj4_mfs)
     ensure_output_dir(gep_root)
     cohort_label <- switch(

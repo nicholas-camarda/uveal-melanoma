@@ -42,6 +42,10 @@ test_that("no-GEP preparation recodes Unknown reflectivity to missing and requir
     duplicated_ids$id[2] <- duplicated_ids$id[1]
     expect_error(prepare_no_gep_data(duplicated_ids), "unique, observed patient identifier")
     expect_error(prepare_no_gep_data(cohort[, setdiff(names(cohort), "srf")]), "requires columns: srf")
+
+    unclassified <- cohort
+    unclassified$gep_group[1] <- NA
+    expect_error(prepare_no_gep_data(unclassified), "gep_group is missing for 1 patient")
 })
 
 test_that("predictor screening drops incomplete predictors and keeps sparse-level patients out of the model data", {
