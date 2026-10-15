@@ -585,7 +585,6 @@ get_objective0_contract_allowed_values <- function(domain) {
         yn_raw_or_display = c(YN_RAW_LEVELS, YN_DISPLAY_LABELS),
         sex_factor = SEX_FACTOR_LEVELS,
         gep_class_simple = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
-        no_gep_group = c("GEP Failed/Indeterminate", "GEP Not Tested"),
         gep_group = GEP_GROUP_LEVELS,
         vision_line_change_bucket = VISION_LINE_CHANGE_CATEGORY_LEVELS,
         vision_followup_timing_source = c(

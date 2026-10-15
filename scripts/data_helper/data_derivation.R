@@ -393,12 +393,6 @@ create_derived_variables <- function(data) {
                 TRUE ~ NA_character_
             ),
             gep_group = classify_gep_group(biopsy1_gep),
-            exploratory_gep_group = gep_class_simple,
-            no_gep_group = case_when(
-                gep_class_simple == "GEP Failed/Indeterminate" ~ "GEP Failed/Indeterminate",
-                gep_class_simple == "GEP Not Tested" ~ "GEP Not Tested",
-                TRUE ~ NA_character_
-            ),
             ciliary_involvement = as.integer(grepl(
                 "cilio|ciliary",
                 as.character(location),

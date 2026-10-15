@@ -48,7 +48,7 @@ summarize_gep_validation_flow <- function(data, results) {
 #' @return Data frame with `record_key`, `key_source`, `step`, `reason`, `field`,
 #'   `current_value`.
 build_gep_record_issues <- function(data) {
-    id_col <- pick_objective4_row_id_column(data)
+    id_col <- pick_sparse_level_id_col(data)
     record_key <- if (is.null(id_col)) as.character(seq_len(nrow(data))) else as.character(data[[id_col]])
     outside <- !(data$gep_group %in% c("Class 1", "Class 2"))
     n_outside <- sum(outside)

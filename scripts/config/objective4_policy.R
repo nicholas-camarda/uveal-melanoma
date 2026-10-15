@@ -23,6 +23,25 @@ GEP_VALIDATION_GROUP_LEVELS <- c(
     "Class 2, PRAME positive"
 )
 
+# No-GEP analysis: baseline predictors, comparators, screening, and bootstrap settings.
+# Internal reflectivity is excluded because "Unknown" (46% of patients) is recorded as a
+# category; it is recoded to missing and fails the completeness screen.
+GEP_NO_GEP_CANDIDATE_PREDICTORS <- c(
+    "age_at_diagnosis", "sex", "initial_tumor_height", "initial_tumor_diameter", "location",
+    "initial_t_stage_simple", "internal_reflectivity", "srf", "initial_vision", "optic_nerve_involvement"
+)
+GEP_NO_GEP_FACTOR_PREDICTORS <- c("sex", "location", "initial_t_stage_simple", "internal_reflectivity", "srf")
+GEP_NO_GEP_PARSIMONIOUS_PREDICTORS <- c("age_at_diagnosis", "initial_tumor_diameter", "location", "initial_t_stage_simple")
+GEP_NO_GEP_COMPARATOR_PREDICTORS <- c(
+    "T stage alone" = "initial_t_stage_simple",
+    "Tumor diameter alone" = "initial_tumor_diameter"
+)
+GEP_NO_GEP_MIN_COMPLETENESS <- 0.9 # Minimum non-missing share for a candidate predictor
+GEP_NO_GEP_MIN_LEVEL_COUNT <- 5 # Minimum patients per retained factor level
+GEP_NO_GEP_MIN_EVENTS_PER_PARAMETER <- 10 # Fewer events per design column is flagged
+GEP_NO_GEP_MIN_BRIER_SKILL <- 0.05 # Brier skill below this is flagged as little improvement on prevalence
+GEP_NO_GEP_BOOTSTRAP_SEED <- 20261015L
+
 # No-GEP exploratory model settings
 GEP_MIN_CALIBRATION_EVENTS <- 5 # Minimum events and non-events for stable recalibration fits
 GEP_IPCW_WEIGHT_CAP_PROB <- 0.99 # Cap extreme inverse-censoring weights at the 99th percentile

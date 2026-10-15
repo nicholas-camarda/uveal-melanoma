@@ -389,24 +389,10 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
         data_type = "character",
         units = "categorical"
     ),
-    exploratory_gep_group = list(
-        description = "Stable exploratory GEP group retaining definitive and unsupported GEP levels",
-        calculation = "gep_class_simple with Objective 0 fixed factor levels",
-        purpose = "Exploratory GEP comparisons without downstream level reconstruction",
-        data_type = "factor",
-        units = "categorical"
-    ),
     gep_group = list(
         description = "GEP availability group: Class 1, Class 2 (PRAME reported), class known with PRAME not reported, discordant, failed or unknown, not tested",
         calculation = "classify_gep_group() applied to the raw laboratory label (scripts/config/objective4_policy.R)",
         purpose = "Report patients without a definitive Class 1/2 call separately instead of pooling them as failed/indeterminate; no PRAME value is imputed",
-        data_type = "factor",
-        units = "categorical"
-    ),
-    no_gep_group = list(
-        description = "Exploratory grouping of GEP Failed/Indeterminate versus GEP Not Tested",
-        calculation = "case_when(gep_class_simple == 'GEP Failed/Indeterminate' ~ 'GEP Failed/Indeterminate', gep_class_simple == 'GEP Not Tested' ~ 'GEP Not Tested', TRUE ~ NA)",
-        purpose = "No-GEP exploratory comparisons with both fixed levels retained",
         data_type = "factor",
         units = "categorical"
     ),

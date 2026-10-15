@@ -136,12 +136,11 @@ flowchart LR
 - `gep_definitive_validation.R`
 - `gep_excel_output.R`
 - `gep_exploratory_internal_validation.R`
-- `gep_exploratory_no_gep_report.R`
-- `gep_mfs_sensitivity_reporting.R`
+- `gep_no_gep_analysis.R`
+- `gep_no_gep_reporting.R`
 - `gep_poster_km_plots.R`
 - `gep_survival_estimators.R`
 - `gep_validation_reporting.R`
-- `gep_visuals.R`
 - `logging_utilities.R`
 - `markdown_utilities.R`
 - `model_utilities.R`
@@ -151,7 +150,6 @@ flowchart LR
 - `objective_2_safety_toxicity.R`
 - `objective_3_repeat_radiation.R`
 - `objective_4_gep_analysis.R`
-- `orchestration`
 - `output_utilities.R`
 - `plot_utilities.R`
 - `propensity_score_sensitivity.R`

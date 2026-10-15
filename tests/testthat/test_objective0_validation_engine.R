@@ -93,14 +93,6 @@ make_objective0_validation_dataset <- function() {
         last_vision_followup_months_proxy = c(60, 60, 60),
         last_vision_followup_timing_source = rep("explicit_last_followup", 3),
         last_vision_followup_months = c(60, 60, 60),
-        exploratory_gep_group = factor(
-            c("Class 1", "Class 2", "Class 1"),
-            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
-        ),
-        no_gep_group = factor(
-            rep(NA_character_, 3),
-            levels = c("GEP Failed/Indeterminate", "GEP Not Tested")
-        ),
         gep_group = factor(
             c("Class 1", "Class 2", "Class 1"),
             levels = GEP_GROUP_LEVELS

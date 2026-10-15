@@ -16,8 +16,6 @@ test_that("canonical factor expectations cover the core model-facing variables",
         "gep_class_simple",
         "prame_status",
         "gep12_prame_status",
-        "exploratory_gep_group",
-        "no_gep_group",
         "gep_group",
         "vision_line_change_bucket",
         "initial_t_stage_simple"

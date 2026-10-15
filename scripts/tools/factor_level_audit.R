@@ -136,19 +136,9 @@ get_canonical_factor_level_expectations <- function() {
             reference = "Negative",
             critical = FALSE
         ),
-        exploratory_gep_group = list(
-            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
-            reference = "Class 1",
-            critical = FALSE
-        ),
         gep_group = list(
             levels = GEP_GROUP_LEVELS,
             reference = "Class 1",
-            critical = FALSE
-        ),
-        no_gep_group = list(
-            levels = c("GEP Failed/Indeterminate", "GEP Not Tested"),
-            reference = "GEP Failed/Indeterminate",
             critical = FALSE
         ),
         vision_line_change_bucket = list(

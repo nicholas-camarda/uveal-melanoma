@@ -29,7 +29,7 @@ OBJECTIVE0_DERIVED_OUTPUT_MANIFEST <- c(
     "vision_change", "vision_line_change", "vision_line_change_bucket",
     "last_vision_followup_months_explicit", "last_vision_followup_months_proxy",
     "last_vision_followup_timing_source", "last_vision_followup_months",
-    "exploratory_gep_group", "no_gep_group", "gep_group", "ciliary_involvement",
+    "gep_group", "ciliary_involvement",
     "optic_nerve_involvement", "mets_at_or_before_treatment",
     "mets_free_at_baseline", "mets_event_analysis"
 )
@@ -114,8 +114,6 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "biopsy1_gep_mfs", "GEP expected MFS source", "probability", "optional", "hard_error",
     "objective4", "biopsy1_gep_mss", "GEP expected MSS source", "probability", "optional", "hard_error",
     "objective4", "gep_class_simple", "GEP class endpoint", "gep_class_simple", "optional", "hard_error",
-    "objective4", "exploratory_gep_group", "exploratory GEP group", "gep_class_simple", "optional", "warning",
-    "objective4", "no_gep_group", "no-GEP exploratory group", "no_gep_group", "optional", "warning",
     "objective4", "gep_group", "GEP availability group", "gep_group", "optional", "hard_error",
     "objective4", "ciliary_involvement", "ciliary involvement exploratory predictor", "binary_01", "optional", "warning",
     "objective4", "optic_nerve_involvement", "optic-nerve involvement exploratory predictor", "binary_01", "optional", "warning",

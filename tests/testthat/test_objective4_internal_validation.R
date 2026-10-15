@@ -11,31 +11,6 @@ test_that("horizon status distinguishes known competing outcomes from early cens
     expect_identical(status$use_left_limit, c(TRUE, TRUE, FALSE, FALSE))
 })
 
-test_that("direct ridge models fail closed when named horizon outcome disagrees", {
-    fixture <- tibble::tibble(
-        patient_id = sprintf("p%02d", 1:12),
-        exploratory_gep_group = rep(c("Class 1", "Class 2"), 6),
-        age = seq(40, 70, length.out = 12),
-        followup = rep(c(12, 72), 6),
-        event_type = rep(c(1L, 0L), 6),
-        metastasis_by_5yr = rep(0L, 12)
-    )
-
-    expect_error(
-        fit_exploratory_binary_model(
-            data = fixture,
-            outcome_var = "metastasis_by_5yr",
-            predictors = "age",
-            model_name = "Direct 5-Year Metastasis Risk",
-            model_mode = "ipcw_horizon_mfs",
-            time_var = "followup",
-            event_var = "event_type",
-            eval_time_months = 60
-        ),
-        "fixed-horizon outcome contract failed"
-    )
-})
-
 test_that("fold IPCW payload uses only training rows for censoring estimation", {
     training <- tibble::tibble(
         followup = c(10, 20, 70, 80),
@@ -470,36 +445,31 @@ test_that("horizon ridge design failures retain outer-fold and final-fit context
     )
 })
 
+make_surrogate_cv_fixture <- function() {
+    make_nested_cv_fixture() %>%
+        dplyr::mutate(
+            id = .data$patient_id,
+            gep_group = rep(c("Class 1", "Class 2"), length.out = dplyr::n())
+        )
+}
+
 test_that("surrogate nested fit failures retain repeat and outer-fold context", {
-    fixture <- make_nested_cv_fixture() %>%
-        dplyr::mutate(class2 = rep(c(0L, 1L), length.out = dplyr::n()))
+    fixture <- make_surrogate_cv_fixture()
     testthat::local_mocked_bindings(
         cv.glmnet = function(...) stop("forced inner-fit failure"),
         .package = "glmnet"
     )
 
     expect_error(
-        cross_validate_binary_predictions(
-            data = fixture,
-            outcome_var = "class2",
-            predictors = c("age", "diameter"),
-            folds = 3L,
-            seed = GEP_EXPLORATORY_CV_SEED,
-            repeat_id = 2L
-        ),
-        "repeat 2, outer fold 1: forced inner-fit failure"
+        compute_surrogate_oof_predictions(fixture, predictors = c("age", "diameter")),
+        "repeat 1, outer fold 1: forced inner-fit failure"
     )
 })
 
 test_that("surrogate nested prediction failures retain repeat and outer-fold context", {
-    fixture <- make_nested_cv_fixture() %>%
-        dplyr::mutate(class2 = rep(c(0L, 1L), length.out = dplyr::n()))
+    fixture <- make_surrogate_cv_fixture()
     previous_method <- get0("predict.cv.glmnet", envir = .GlobalEnv, inherits = FALSE)
-    assign(
-        "predict.cv.glmnet",
-        function(object, ...) stop("forced prediction failure"),
-        envir = .GlobalEnv
-    )
+    assign("predict.cv.glmnet", function(object, ...) stop("forced prediction failure"), envir = .GlobalEnv)
     on.exit({
         if (is.null(previous_method)) {
             rm("predict.cv.glmnet", envir = .GlobalEnv)
@@ -509,14 +479,21 @@ test_that("surrogate nested prediction failures retain repeat and outer-fold con
     }, add = TRUE)
 
     expect_error(
-        cross_validate_binary_predictions(
-            data = fixture,
-            outcome_var = "class2",
-            predictors = c("age", "diameter"),
-            folds = 3L,
-            seed = GEP_EXPLORATORY_CV_SEED,
-            repeat_id = 7L
-        ),
-        "repeat 7, outer fold 1: forced prediction failure"
+        compute_surrogate_oof_predictions(fixture, predictors = c("age", "diameter")),
+        "repeat 1, outer fold 1: forced prediction failure"
     )
+})
+
+test_that("surrogate design refuses levels that training never saw instead of scoring them as reference", {
+    training <- data.frame(site = factor(c("a", "a", "b", "b")), age = c(40, 50, 60, 70))
+    assessment <- data.frame(site = factor(c("a", "c")), age = c(45, 55))
+    reference <- colnames(build_surrogate_design_matrix(training, c("site", "age")))
+
+    expect_error(
+        build_surrogate_design_matrix(assessment, c("site", "age"), reference),
+        "levels absent from training: sitec"
+    )
+    # A training level absent from the assessment rows is zero-filled.
+    only_a <- data.frame(site = factor("a", levels = c("a", "b")), age = 45)
+    expect_equal(unname(build_surrogate_design_matrix(only_a, c("site", "age"), reference)[1, "siteb"]), 0)
 })

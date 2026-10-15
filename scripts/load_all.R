@@ -163,15 +163,13 @@ source(here("scripts", "gep", "utils", "gep_survival_estimators.R"))
 source(here("scripts", "gep", "utils", "gep_exploratory_internal_validation.R"))
 source(here("scripts", "gep", "utils", "gep_excel_output.R"))
 source(here("scripts", "gep", "validation", "gep_definitive_validation.R"))
-source(here("scripts", "gep", "reporting", "gep_mfs_sensitivity_reporting.R"))
+source(here("scripts", "gep", "validation", "gep_no_gep_analysis.R"))
 source(here("scripts", "gep", "visualization", "gep_poster_km_plots.R"))
-source(here("scripts", "gep", "visualization", "gep_visuals.R"))
 
 # Source the GEP reporting script
 source(here("scripts", "gep", "reporting", "gep_validation_reporting.R"))
+source(here("scripts", "gep", "reporting", "gep_no_gep_reporting.R"))
 
-# Source the GEP exploratory analysis script 
-source(here("scripts", "gep", "orchestration", "gep_exploratory_no_gep_report.R"))
 
 # Source the forest plot script (commented out to use modular version)
 # source(here("scripts", "visualization", "forest_plot.R"))
