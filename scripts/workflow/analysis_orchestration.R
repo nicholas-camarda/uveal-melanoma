@@ -569,6 +569,11 @@ main_execution <- function() {
     initialize_runtime_dirs()
     set_log_context(replace = TRUE)
     log_phase("MAIN EXECUTION PHASE")
+    source_revision <- get_source_revision()
+    logger::log_info(sprintf(
+        "Source revision: %s (uncommitted changes: %s)",
+        source_revision$revision, source_revision$dirty
+    ))
 
     fatal_issues <- character()
     warning_issues <- character()
