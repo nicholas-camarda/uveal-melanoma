@@ -441,138 +441,6 @@ calculate_ipcw_brier <- function(outcome, score, weight) {
     )
 }
 
-#' Extract one stable coefficient from a weighted binomial calibration fit
-#'
-#' @param fit A fitted `stats::glm` object or `NULL` after a failed fit.
-#' @param coefficient_index One-based coefficient index.
-#' @return Estimate, standard error, convergence, and stability fields.
-extract_stable_calibration_coefficient <- function(fit, coefficient_index) {
-    if (is.null(fit) || !isTRUE(fit$converged)) {
-        return(list(
-            estimate = NA_real_,
-            standard_error = NA_real_,
-            converged = FALSE,
-            stable = FALSE
-        ))
-    }
-
-    coefficients <- tryCatch(stats::coef(fit), error = function(e) NULL)
-    coefficient_summary <- tryCatch(summary(fit)$coefficients, error = function(e) NULL)
-    has_standard_error <- !is.null(coefficient_summary) &&
-        nrow(coefficient_summary) >= coefficient_index &&
-        "Std. Error" %in% colnames(coefficient_summary)
-    estimate <- if (!is.null(coefficients) && length(coefficients) >= coefficient_index) {
-        unname(coefficients[[coefficient_index]])
-    } else {
-        NA_real_
-    }
-    standard_error <- if (has_standard_error) {
-        unname(coefficient_summary[coefficient_index, "Std. Error"])
-    } else {
-        NA_real_
-    }
-    stable <- is.finite(estimate) &&
-        is.finite(standard_error) &&
-        abs(estimate) <= GEP_MAX_CALIBRATION_COEF_ABS &&
-        standard_error <= GEP_MAX_CALIBRATION_COEF_SE
-
-    list(
-        estimate = estimate,
-        standard_error = standard_error,
-        converged = TRUE,
-        stable = stable
-    )
-}
-
-#' Summarize IPCW-weighted fixed-horizon calibration
-#'
-#' The intercept is estimated from a binomial logistic model with the prediction
-#' logit as offset; the slope is estimated from a binomial logistic model using
-#' that logit as predictor. Both models use outer-assessment IPCW weights.
-#'
-#' @param outcome Binary fixed-horizon outcome vector.
-#' @param predicted Predicted probabilities strictly between zero and one.
-#' @param weight Non-negative assessment IPCW weight vector.
-#' @return Named list with status, intercept, slope, and weighted support.
-summarize_ipcw_calibration <- function(outcome, predicted, weight) {
-    data <- prepare_positive_ipcw_rows(outcome, predicted, weight)
-    if (any(data$score <= 0 | data$score >= 1)) {
-        stop("Positive-weight calibration predictions must be strictly between 0 and 1.", call. = FALSE)
-    }
-    support <- summarize_ipcw_case_control_support(data)
-    event_rows <- sum(data$outcome == 1L)
-    control_rows <- sum(data$outcome == 0L)
-    unique_prediction_count <- length(unique(data$score))
-
-    sparse_support <- support$status != "ok" ||
-        nrow(data) < GEP_MIN_SAMPLE_SIZE ||
-        event_rows < GEP_MIN_CALIBRATION_EVENTS ||
-        control_rows < GEP_MIN_CALIBRATION_EVENTS ||
-        unique_prediction_count < 2L
-    if (sparse_support) {
-        support$status <- "unsupported_sparse_support"
-        return(c(
-            support,
-            list(
-                intercept = NA_real_,
-                slope = NA_real_,
-                event_rows = event_rows,
-                control_rows = control_rows,
-                unique_prediction_count = unique_prediction_count
-            )
-        ))
-    }
-
-    calibration_data <- data.frame(
-        outcome = data$outcome,
-        logit_predicted = stats::qlogis(data$score),
-        weight = data$weight
-    )
-    intercept_fit <- tryCatch(
-        suppressWarnings(stats::glm(
-            outcome ~ offset(logit_predicted),
-            data = calibration_data,
-            weights = weight,
-            family = stats::binomial()
-        )),
-        error = function(e) NULL
-    )
-    slope_fit <- tryCatch(
-        suppressWarnings(stats::glm(
-            outcome ~ logit_predicted,
-            data = calibration_data,
-            weights = weight,
-            family = stats::binomial()
-        )),
-        error = function(e) NULL
-    )
-    intercept_details <- extract_stable_calibration_coefficient(intercept_fit, 1L)
-    slope_details <- extract_stable_calibration_coefficient(slope_fit, 2L)
-    all_converged <- intercept_details$converged && slope_details$converged
-    all_stable <- intercept_details$stable && slope_details$stable
-    status <- if (!all_converged) {
-        "unsupported_calibration_nonconverged"
-    } else if (!all_stable) {
-        "recalibration_fit_unstable"
-    } else {
-        "ok"
-    }
-    support$status <- status
-
-    c(
-        support,
-        list(
-            intercept = if (status == "ok") intercept_details$estimate else NA_real_,
-            slope = if (status == "ok") slope_details$estimate else NA_real_,
-            intercept_se = intercept_details$standard_error,
-            slope_se = slope_details$standard_error,
-            event_rows = event_rows,
-            control_rows = control_rows,
-            unique_prediction_count = unique_prediction_count
-        )
-    )
-}
-
 #' Build and align a design matrix for nested ridge validation
 #'
 #' @param data Predictor data.
@@ -584,7 +452,24 @@ build_horizon_ridge_design_matrix <- function(data, predictors, reference_column
     design <- stats::model.matrix(formula, data = data)
     design <- design[, colnames(design) != "(Intercept)", drop = FALSE]
 
-    if (!is.null(reference_columns)) {
+    if (is.null(reference_columns)) {
+        # A fitting design column with no non-zero values is a factor level absent from
+        # the fitting rows; rows with that level would later be scored as the reference.
+        empty_columns <- colnames(design)[colSums(design != 0) == 0L]
+        if (length(empty_columns) > 0L) {
+            stop(sprintf(
+                "Fitting rows contain no patients for design column(s): %s",
+                paste(empty_columns, collapse = ", ")
+            ), call. = FALSE)
+        }
+    } else {
+        unseen_columns <- setdiff(colnames(design), reference_columns)
+        if (length(unseen_columns) > 0L) {
+            stop(sprintf(
+                "Assessment rows contain design column(s) absent from training: %s",
+                paste(unseen_columns, collapse = ", ")
+            ), call. = FALSE)
+        }
         missing_columns <- setdiff(reference_columns, colnames(design))
         if (length(missing_columns) > 0L) {
             missing_block <- matrix(
@@ -721,8 +606,7 @@ fit_weighted_horizon_ridge <- function(
 #' @param outer_folds Number of outer folds.
 #' @param inner_folds Number of inner tuning folds.
 #' @return A list with keyed OOF predictions, split metadata, row-level training
-#'   IPCW records, repeated OOF metrics, and a deterministic full-data fit for
-#'   coefficients and future scoring only.
+#'   IPCW records, and the seeds and fold counts used.
 cross_validate_horizon_ridge <- function(
     data,
     predictors,
@@ -904,56 +788,10 @@ cross_validate_horizon_ridge <- function(
     rownames(oof_predictions) <- NULL
     rownames(fold_metadata) <- NULL
     rownames(training_ipcw) <- NULL
-    repeated_metrics <- do.call(rbind, lapply(seq_len(repeats), function(repeat_id) {
-        repeat_data <- oof_predictions[oof_predictions$repeat_id == repeat_id, , drop = FALSE]
-        auc <- calculate_ipcw_auc(repeat_data$horizon_event, repeat_data$prediction, repeat_data$ipcw_weight)
-        brier <- calculate_ipcw_brier(repeat_data$horizon_event, repeat_data$prediction, repeat_data$ipcw_weight)
-        calibration <- summarize_ipcw_calibration(
-            repeat_data$horizon_event,
-            pmin(pmax(repeat_data$prediction, 1e-6), 1 - 1e-6),
-            repeat_data$ipcw_weight
-        )
-        data.frame(
-            repeat_id = as.integer(repeat_id),
-            performance_scope = "Overall",
-            auc_status = auc$status,
-            cv_auc = auc$auc,
-            brier_status = brier$status,
-            cv_brier = brier$brier,
-            calibration_status = calibration$status,
-            cv_calibration_intercept = calibration$intercept,
-            cv_calibration_slope = calibration$slope,
-            n_positive_weight = auc$n_positive_weight,
-            weighted_cases = auc$weighted_cases,
-            weighted_controls = auc$weighted_controls,
-            stringsAsFactors = FALSE
-        )
-    }))
-
-    full_payload <- derive_fold_ipcw_payload(
-        training = model_data,
-        assessment = model_data,
-        time_var = time_var,
-        event_type_var = event_type_var,
-        horizon_months = horizon_months
-    )
-    final_ridge <- fit_weighted_horizon_ridge(
-        training_payload = full_payload$training,
-        predictors = predictors,
-        stable_id_var = stable_id_var,
-        inner_folds = inner_folds,
-        seed = as.integer(seed + repeats * 1000L + outer_folds + 1L)
-    )
-
     list(
         oof_predictions = oof_predictions,
         fold_metadata = fold_metadata,
         training_ipcw = training_ipcw,
-        repeated_metrics = repeated_metrics,
-        final_model = final_ridge$model,
-        final_design_columns = final_ridge$design_columns,
-        final_foldid = final_ridge$foldid,
-        final_stable_id = as.character(final_ridge$fit_data[[stable_id_var]]),
         seed = as.integer(seed),
         repeats = as.integer(repeats),
         outer_folds = as.integer(outer_folds),

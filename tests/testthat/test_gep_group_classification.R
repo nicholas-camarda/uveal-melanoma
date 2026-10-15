@@ -106,3 +106,22 @@ test_that("the simple GEP class is derived from the availability group", {
     simple <- derive_gep_class_simple(groups)
     expect_identical(simple %in% c("Class 1", "Class 2"), groups %in% c("Class 1", "Class 2"))
 })
+
+test_that("biopsy timing categories use the documented windows and sign", {
+    days <- c(-2197, -32, -31, 0, 31, 32, 180, 181, 2627, NA)
+    expect_identical(
+        classify_gep_test_timing(days),
+        c(
+            GEP_TEST_TIMING_LEVELS[[1]], GEP_TEST_TIMING_LEVELS[[1]],
+            GEP_TEST_TIMING_LEVELS[[2]], GEP_TEST_TIMING_LEVELS[[2]], GEP_TEST_TIMING_LEVELS[[2]],
+            GEP_TEST_TIMING_LEVELS[[3]], GEP_TEST_TIMING_LEVELS[[3]],
+            GEP_TEST_TIMING_LEVELS[[4]], GEP_TEST_TIMING_LEVELS[[4]],
+            GEP_TEST_TIMING_LEVELS[[5]]
+        )
+    )
+    # Days are biopsy minus treatment: a biopsy long before treatment is negative and
+    # must not be classified as late.
+    expect_false(identical(classify_gep_test_timing(-400), GEP_TEST_TIMING_LATE))
+    expect_identical(classify_gep_test_timing(400), GEP_TEST_TIMING_LATE)
+    expect_identical(GEP_UNKNOWN_CAUSE_OF_DEATH_LEVELS, c("Unknown", "Unknown_Cancer"))
+})

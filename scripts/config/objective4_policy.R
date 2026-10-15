@@ -39,14 +39,12 @@ GEP_NO_GEP_COMPARATOR_PREDICTORS <- c(
 GEP_NO_GEP_MIN_COMPLETENESS <- 0.9 # Minimum non-missing share for a candidate predictor
 GEP_NO_GEP_MIN_LEVEL_COUNT <- 5 # Minimum patients per retained factor level
 GEP_NO_GEP_MIN_EVENTS_PER_PARAMETER <- 10 # Fewer events per design column is flagged
+GEP_MIN_REPORTED_GROUP_SIZE <- 3 # Groups smaller than this show only their size in published no-GEP tables
 GEP_NO_GEP_MIN_BRIER_SKILL <- 0.05 # Brier skill below this is flagged as little improvement on prevalence
 GEP_NO_GEP_BOOTSTRAP_SEED <- 20261015L
 
 # No-GEP exploratory model settings
-GEP_MIN_CALIBRATION_EVENTS <- 5 # Minimum events and non-events for stable recalibration fits
 GEP_IPCW_WEIGHT_CAP_PROB <- 0.99 # Cap extreme inverse-censoring weights at the 99th percentile
-GEP_MAX_CALIBRATION_COEF_ABS <- 10 # Treat larger recalibration coefficients as unstable/quasi-separated fits
-GEP_MAX_CALIBRATION_COEF_SE <- 5 # Treat larger recalibration coefficient standard errors as unstable fits
 
 # Deterministic nested cross-validation for the Objective 4 no-GEP analysis
 GEP_EXPLORATORY_CV_SEED <- 20260820L

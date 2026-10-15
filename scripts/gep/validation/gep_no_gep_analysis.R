@@ -127,11 +127,17 @@ build_no_gep_model_data <- function(analysis_set, predictors, label) {
     initial_n <- nrow(analysis_set)
     after_sparse <- analysis_set
     if (length(factor_predictors) > 0L) {
-        after_sparse <- apply_sparse_level_exclusions(
-            analysis_set, variables = factor_predictors, analysis_name = label,
-            min_level_count = GEP_NO_GEP_MIN_LEVEL_COUNT, id_col = "id",
-            level_exclusions = MODELING_LEVEL_EXCLUSIONS
-        )$data
+        # Removing patients with one sparse level can leave another level below the
+        # minimum, so the exclusion repeats until no patient is removed.
+        repeat {
+            previous_n <- nrow(after_sparse)
+            after_sparse <- apply_sparse_level_exclusions(
+                after_sparse, variables = factor_predictors, analysis_name = label,
+                min_level_count = GEP_NO_GEP_MIN_LEVEL_COUNT, id_col = "id",
+                level_exclusions = MODELING_LEVEL_EXCLUSIONS
+            )$data
+            if (nrow(after_sparse) == previous_n) break
+        }
     }
     sparse_removed <- setdiff(analysis_set$id, after_sparse$id)
     complete <- stats::complete.cases(after_sparse[, predictors, drop = FALSE])
@@ -279,6 +285,68 @@ t_stage_to_score <- function(stage) {
     as.numeric(sub("^T", "", as.character(stage)))
 }
 
+#' Paired AUC difference between a model and a no-fit comparator
+#'
+#' Each bootstrap draw resamples the in-scope patients once and one partition repeat,
+#' and computes both AUCs on that same resample, so the interval is for the
+#' difference itself and not for two separate AUCs.
+#'
+#' @param oof Out-of-fold rows already restricted to the scope, with `prediction`
+#'   and the comparator covariate.
+#' @param comparator_variable Character name of the comparator column
+#'   (`initial_t_stage_simple` or `initial_tumor_diameter`).
+#' @param n_boot Integer bootstrap draws.
+#' @param seed Integer seed, applied locally.
+#' @return List: `estimate` (model minus comparator), `ci_lower`, `ci_upper`,
+#'   `valid_draws`, `failed_draws`.
+summarize_no_gep_auc_difference <- function(oof, comparator_variable, n_boot, seed) {
+    oof$comparator_score <- if (identical(comparator_variable, "initial_t_stage_simple")) {
+        t_stage_to_score(oof[[comparator_variable]])
+    } else {
+        as.numeric(oof[[comparator_variable]])
+    }
+    by_repeat <- split(oof, oof$repeat_id)
+    difference <- function(rows) {
+        model_auc <- calculate_ipcw_auc(rows$horizon_event, rows$prediction, rows$ipcw_weight)$auc
+        comparator_auc <- calculate_ipcw_auc(rows$horizon_event, rows$comparator_score, rows$ipcw_weight)$auc
+        model_auc - comparator_auc
+    }
+    estimate <- mean(vapply(by_repeat, function(rows) suppressWarnings(as.numeric(difference(rows))), numeric(1)), na.rm = TRUE)
+    draws <- withr::with_seed(seed, {
+        vapply(seq_len(n_boot), function(i) {
+            rows <- by_repeat[[sample.int(length(by_repeat), 1L)]]
+            suppressWarnings(as.numeric(difference(rows[sample.int(nrow(rows), replace = TRUE), , drop = FALSE])))
+        }, numeric(1))
+    })
+    valid <- sum(is.finite(draws))
+    bounds <- if (valid >= 0.9 * n_boot) stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    list(estimate = estimate, ci_lower = bounds[[1]], ci_upper = bounds[[2]], valid_draws = valid, failed_draws = n_boot - valid)
+}
+
+#' AUC differences of the ridge models against each comparator in the no-GEP scope
+#'
+#' @param models Named list of out-of-fold tables, as in `summarize_no_gep_model_performance()`.
+#' @param endpoint Character, `"MFS"` or `"MSS"`.
+#' @param n_boot Integer bootstrap draws.
+#' @param seed Integer seed.
+#' @return Data frame: endpoint, model, comparator, difference with interval, draws.
+summarize_no_gep_auc_differences <- function(models, endpoint, n_boot, seed) {
+    rows <- list()
+    for (model_name in names(models)) {
+        scoped <- filter_no_gep_scope(models[[model_name]], "No GEP")
+        for (label in names(GEP_NO_GEP_COMPARATOR_PREDICTORS)) {
+            d <- summarize_no_gep_auc_difference(scoped, GEP_NO_GEP_COMPARATOR_PREDICTORS[[label]], n_boot, seed)
+            rows[[length(rows) + 1L]] <- data.frame(
+                endpoint = endpoint, performance_scope = "No GEP", model = model_name, comparator = label,
+                auc_difference = d$estimate, ci_lower = d$ci_lower, ci_upper = d$ci_upper,
+                bootstrap_valid_draws = d$valid_draws, bootstrap_failed_draws = d$failed_draws,
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+    dplyr::bind_rows(rows)
+}
+
 #' Performance of the ridge models and no-fit comparators for one endpoint
 #'
 #' @param models Named list: `Full` and `Parsimonious` out-of-fold tables from
@@ -344,33 +412,6 @@ calculate_binary_auc <- function(outcome, score) {
     (sum(ranks[outcome == 1]) - n_positive * (n_positive + 1) / 2) / (n_positive * n_negative)
 }
 
-#' Align assessment design columns with the training design
-#'
-#' Zero-fills a level that is absent from the assessment rows. A level present only in
-#' the assessment rows would be scored as the reference level, so it stops the run
-#' instead.
-#'
-#' @param data Rows to encode.
-#' @param predictors Character predictor names.
-#' @param reference_columns Optional training design columns.
-#' @return Numeric design matrix without an intercept.
-build_surrogate_design_matrix <- function(data, predictors, reference_columns = NULL) {
-    design <- stats::model.matrix(stats::reformulate(predictors), data = data)
-    design <- design[, colnames(design) != "(Intercept)", drop = FALSE]
-    if (!is.null(reference_columns)) {
-        unseen <- setdiff(colnames(design), reference_columns)
-        if (length(unseen) > 0L) {
-            stop(sprintf("Assessment rows contain levels absent from training: %s", paste(unseen, collapse = ", ")), call. = FALSE)
-        }
-        absent <- setdiff(reference_columns, colnames(design))
-        if (length(absent) > 0L) {
-            design <- cbind(design, matrix(0, nrow(design), length(absent), dimnames = list(NULL, absent)))
-        }
-        design <- design[, reference_columns, drop = FALSE]
-    }
-    design
-}
-
 #' Repeated out-of-fold predictions for the Class 2 surrogate
 #'
 #' Ridge logistic regression of `Class 2` versus `Class 1` on the baseline predictors
@@ -392,8 +433,8 @@ compute_surrogate_oof_predictions <- function(model_data, predictors) {
                 {
                     training <- model_data[fold != k, , drop = FALSE]
                     assessment <- model_data[fold == k, , drop = FALSE]
-                    x_training <- build_surrogate_design_matrix(training, predictors)
-                    x_assessment <- build_surrogate_design_matrix(assessment, predictors, colnames(x_training))
+                    x_training <- build_horizon_ridge_design_matrix(training, predictors)
+                    x_assessment <- build_horizon_ridge_design_matrix(assessment, predictors, colnames(x_training))
                     y_training <- outcome[fold != k]
                     inner <- create_deterministic_fold_ids(
                         strata = y_training, folds = GEP_EXPLORATORY_INNER_FOLDS,
@@ -524,7 +565,14 @@ build_no_gep_baseline_table <- function(data) {
         list("Treated in 2013 or later", "n (%)", function(d) count_pct(d$treatment_year >= 2013))
     )
     rows <- lapply(specs, function(spec) {
-        values <- vapply(groups, function(in_group) spec[[3]](data[in_group, , drop = FALSE]), character(1))
+        values <- vapply(groups, function(in_group) {
+            # Groups with fewer than GEP_MIN_REPORTED_GROUP_SIZE patients show only their size, so a
+            # published table cannot describe one or two individuals.
+            if (sum(in_group) < GEP_MIN_REPORTED_GROUP_SIZE && !identical(spec[[1]], "Patients")) {
+                return(sprintf("fewer than %d patients", GEP_MIN_REPORTED_GROUP_SIZE))
+            }
+            spec[[3]](data[in_group, , drop = FALSE])
+        }, character(1))
         data.frame(characteristic = spec[[1]], statistic = spec[[2]], as.list(values), check.names = FALSE, stringsAsFactors = FALSE)
     })
     dplyr::bind_rows(rows)
@@ -537,7 +585,8 @@ build_no_gep_baseline_table <- function(data) {
 #' @param n_boot Integer bootstrap draws.
 #' @param seed Integer seed for all bootstraps.
 #' @return List: `group_outcomes`, `cause_of_death_sensitivity`, `baseline`, `predictor_screening`, `predictors`,
-#'   `model_flow`, `removed_records`, `performance`, and `design_columns`.
+#'   `model_flow`, `removed_records`, `performance`, `auc_differences`, and
+#'   `design_columns`.
 run_no_gep_analysis <- function(data,
                                 horizon_months = GEP_VALIDATION_HORIZON_MONTHS,
                                 n_boot = GEP_BOOTSTRAP_ITERATIONS,
@@ -583,6 +632,7 @@ run_no_gep_analysis <- function(data,
     model_sets$Surrogate$counts$candidates <- sum(prepared$gep_group %in% c("Class 1", "Class 2"))
     model_sets$Surrogate$counts$not_eligible_for_endpoint <- 0L
     performance <- list()
+    auc_differences <- list()
     design_columns <- list()
     for (endpoint in c("MFS", "MSS")) {
         model_data <- model_sets[[endpoint]]$data
@@ -592,6 +642,7 @@ run_no_gep_analysis <- function(data,
         )
         names(oof) <- c("Penalized, all retained predictors", "Penalized, parsimonious predictors")
         performance[[endpoint]] <- summarize_no_gep_model_performance(oof, endpoint, n_boot, seed)
+        auc_differences[[endpoint]] <- summarize_no_gep_auc_differences(oof, endpoint, n_boot, seed)
         design_columns[[endpoint]] <- c(
             full = ncol(build_horizon_ridge_design_matrix(model_data, predictors)),
             parsimonious = ncol(build_horizon_ridge_design_matrix(model_data, parsimonious))
@@ -617,6 +668,7 @@ run_no_gep_analysis <- function(data,
         model_flow = dplyr::bind_rows(lapply(model_sets, function(x) x$counts)),
         removed_records = dplyr::bind_rows(lapply(model_sets, function(x) x$removed)),
         performance = dplyr::bind_rows(performance),
+        auc_differences = dplyr::bind_rows(auc_differences),
         design_columns = design_columns
     )
 }

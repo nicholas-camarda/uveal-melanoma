@@ -171,11 +171,11 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     expect_true(all(file.exists(c(paths$primary, paths$diagnostics, paths$figures))))
     expect_identical(
         readxl::excel_sheets(paths$primary),
-        c("Group_Outcomes_MFS", "Group_Outcomes_MSS", "Baseline_By_Group", "Model_Performance")
+        c("Group_Outcomes_MFS", "Group_Outcomes_MSS", "Baseline_By_Group", "Model_Performance", "AUC_Difference", "Sensitivity_Cause_of_Death")
     )
     expect_identical(
         readxl::excel_sheets(paths$diagnostics),
-        c("Specification_Coding", "Denominators_Flow", "Predictor_Screening", "Checks", "Sensitivity_Cause_of_Death", "Warnings_Limitations", "Record_Issues")
+        c("Specification_Coding", "Denominators_Flow", "Predictor_Screening", "Checks", "Warnings_Limitations", "Record_Issues")
     )
     for (sheet in readxl::excel_sheets(paths$primary)) {
         expect_false("record_key" %in% names(readxl::read_excel(paths$primary, sheet = sheet)))
@@ -198,4 +198,31 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     # One denominator per endpoint: the group outcome counts sum to the model analysis set.
     mfs_group_n <- sum(results$group_outcomes$n[results$group_outcomes$endpoint == "MFS"])
     expect_identical(mfs_group_n, flow$candidates[flow$analysis_set == "MFS"] - flow$not_eligible_for_endpoint[flow$analysis_set == "MFS"])
+})
+
+test_that("the no-information Brier score weights patients by their censoring weights", {
+    rows <- data.frame(
+        horizon_event = c(1L, 0L, 0L, 1L, 0L, 0L),
+        ipcw_weight = c(4, 1, 1, 1, 2, 1),
+        prediction = 0.5
+    )
+    weighted_prevalence <- sum(rows$ipcw_weight * rows$horizon_event) / sum(rows$ipcw_weight)
+    expected <- sum(rows$ipcw_weight * (rows$horizon_event - weighted_prevalence)^2) / sum(rows$ipcw_weight)
+    unweighted <- mean(rows$horizon_event)
+    expect_gt(abs(weighted_prevalence - unweighted), 0.05)
+    expect_equal(no_gep_repeat_metric(rows, rows$prediction, "null_brier"), expected, tolerance = 1e-10)
+})
+
+test_that("reverse Kaplan-Meier follow-up matches a hand calculation", {
+    # Eight patients; censoring (status 0) at 60, 60, 80, 90; events at 10, 20, 30, 40.
+    endpoint_data <- data.frame(
+        gep_group = factor(rep("Not tested", 8), levels = GEP_GROUP_LEVELS),
+        time_months = c(10, 20, 30, 40, 60, 60, 80, 90),
+        status = c(1L, 1L, 1L, 1L, 0L, 0L, 0L, 0L)
+    )
+    outcomes <- build_no_gep_group_outcomes(endpoint_data, "MFS", 60)
+    # Reverse KM: the four censorings are the "events". At 60 months 4 are at risk and 2 are
+    # censored, so S = 0.5 exactly; at 80 months 2 are at risk and 1 is censored, so S = 0.25.
+    # S equals 0.5 from 60 until 80, so by the survfit convention the median is the midpoint, 70.
+    expect_equal(outcomes$median_followup_months[outcomes$group == "Not tested"], 70)
 })

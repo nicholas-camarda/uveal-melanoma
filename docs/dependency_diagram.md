@@ -138,8 +138,6 @@ flowchart LR
 - `gep_exploratory_internal_validation.R`
 - `gep_no_gep_analysis.R`
 - `gep_no_gep_reporting.R`
-- `gep_poster_km_plots.R`
-- `gep_survival_estimators.R`
 - `gep_validation_reporting.R`
 - `logging_utilities.R`
 - `markdown_utilities.R`

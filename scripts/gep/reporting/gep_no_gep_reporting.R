@@ -92,7 +92,7 @@ build_no_gep_checks <- function(results) {
     for (i in seq_len(nrow(dropped))) {
         add("All", "Predictor retained", dropped$predictor[i], "dropped", "concern", dropped$reason[i])
     }
-    dplyr::bind_rows(rows)
+    describe_check_reasons(dplyr::bind_rows(rows))
 }
 
 #' Methods and interpretation for each reported quantity
@@ -101,29 +101,35 @@ build_no_gep_checks <- function(results) {
 #' @return Data frame with method, estimand, units, direction and interpretation.
 build_no_gep_specification <- function(horizon_months) {
     data.frame(
-        quantity = c("Observed risk by group", "Median follow-up", "Out-of-fold AUC", "Comparators", "Brier skill", "Class 2-like score AUC"),
+        quantity = c("Observed risk by group", "Median follow-up", "Out-of-fold AUC", "Comparators", "Brier skill", "Class 2-like score AUC", "AUC difference vs T stage", "Unknown-cause-of-death sensitivity"),
         method = c(
             sprintf("Kaplan-Meier risk (MFS) or Aalen-Johansen cumulative incidence (MSS) at %d months; no value is carried past a group's last follow-up", horizon_months),
             "Reverse Kaplan-Meier from treatment (censoring treated as the event)",
             sprintf("Repeated nested cross-validation of a ridge model; censoring weights estimated inside each training fold; cumulative/dynamic AUC at %d months; patient-level bootstrap with one random partition repeat per draw", horizon_months),
             "T stage (1 to 4) and tumor diameter used directly as the risk score, with no fitting, on the same out-of-fold patients and weights",
             "1 minus model Brier score divided by the Brier score of the overall weighted prevalence",
-            "Ridge logistic model of Class 2 versus Class 1 among definitive patients; out-of-fold AUC with bootstrap interval"
+            "Ridge logistic model of Class 2 versus Class 1 among definitive patients; out-of-fold AUC with bootstrap interval",
+            "Model AUC minus T-stage-alone AUC on the same resampled patients and the same partition repeat in each bootstrap draw",
+            "Observed melanoma-specific risk per group with deaths of unknown recorded cause counted as melanoma deaths instead of competing deaths"
         ),
         estimand = c(
             sprintf("Probability of the event by %.0f years", horizon_months / 12), "Typical follow-up of patients still under observation",
             "Probability that a patient with the event by the horizon has a higher score than one without",
-            "Same as the model AUC", "Proportional reduction in squared error versus no information", "Probability that a Class 2 patient scores higher than a Class 1 patient"
+            "Same as the model AUC", "Proportional reduction in squared error versus no information", "Probability that a Class 2 patient scores higher than a Class 1 patient",
+            "Change in ranking ability relative to a single baseline measurement",
+            "Probability of melanoma death by 5 years under the alternative cause-of-death assumption"
         ),
-        units = c("proportion", "months", "0.5 = chance, 1 = perfect", "0.5 = chance, 1 = perfect", "0 = no better than prevalence", "0.5 = chance, 1 = perfect"),
-        direction = c("Higher = more events", "Longer = more complete follow-up", "Higher = better ranking", "Higher = better ranking", "Higher = better", "Higher = better ranking"),
+        units = c("proportion", "months", "0.5 = chance, 1 = perfect", "0.5 = chance, 1 = perfect", "0 = no better than prevalence", "0.5 = chance, 1 = perfect", "AUC difference (positive = model ranks better)", "proportion"),
+        direction = c("Higher = more events", "Longer = more complete follow-up", "Higher = better ranking", "Higher = better ranking", "Higher = better", "Higher = better ranking", "Positive = model better than T stage", "Higher = more melanoma deaths"),
         interpretation = c(
             "Compare groups only where the estimate is present; groups not followed to the horizon have no estimate",
             "Short follow-up means a group's 5-year risk cannot be assessed",
             "Interval includes 0.5 when the data do not separate the model from chance",
             "A fitted model that does not exceed these has not added information beyond one baseline measurement",
             "Zero or negative: predicted risks do not improve on the overall prevalence",
-            "Baseline clinical features and molecular class are related only weakly if the interval includes 0.5"
+            "Baseline clinical features and molecular class are related only weakly if the interval includes 0.5",
+            "An interval that includes 0 means the model is not shown to rank better than T stage alone",
+            "Compare with the primary risk in the same row"
         ),
         stringsAsFactors = FALSE
     )
@@ -163,14 +169,15 @@ wrap_plot_text <- function(text, width = 95L) {
 #' @param group_outcomes Data frame from `build_no_gep_group_outcomes()` for both endpoints.
 #' @return A `ggplot` object.
 plot_no_gep_group_risk <- function(group_outcomes) {
-    plot_data <- group_outcomes[group_outcomes$n > 0L, , drop = FALSE]
+    plot_data <- group_outcomes[group_outcomes$n >= GEP_MIN_REPORTED_GROUP_SIZE, , drop = FALSE]
+    plot_data$no_events <- plot_data$events_by_horizon == 0
     plot_data$label <- factor(
         sprintf("%s (n = %d)", plot_data$group, plot_data$n),
         levels = unique(sprintf("%s (n = %d)", plot_data$group, plot_data$n)[order(match(plot_data$group, rev(GEP_GROUP_LEVELS)))])
     )
     plot_data$support <- ifelse(
         plot_data$estimable,
-        sprintf("%d known event-free", plot_data$event_free_through_horizon),
+        sprintf("%s%d known event-free", ifelse(plot_data$no_events, "0 events; ", ""), plot_data$event_free_through_horizon),
         sprintf("no 5-year estimate; %d event-free", plot_data$event_free_through_horizon)
     )
     colors <- get_gep_class_palette(unique(as.character(plot_data$group)))
@@ -179,7 +186,8 @@ plot_no_gep_group_risk <- function(group_outcomes) {
             ggplot2::aes(xmin = .data$observed_ci_lower, xmax = .data$observed_ci_upper, color = .data$group),
             width = 0.25, linewidth = 0.9, orientation = "y", na.rm = TRUE
         ) +
-        ggplot2::geom_point(ggplot2::aes(x = .data$observed_risk, color = .data$group), size = 3.4, na.rm = TRUE) +
+        ggplot2::geom_point(ggplot2::aes(x = .data$observed_risk, color = .data$group, shape = .data$no_events), size = 3.4, stroke = 1.2, na.rm = TRUE) +
+        ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
         ggplot2::geom_text(ggplot2::aes(x = 1.04, label = .data$support), hjust = 0, size = 3.4, color = "grey30") +
         ggplot2::facet_wrap(~endpoint, scales = "free_y", labeller = ggplot2::as_labeller(c(MFS = "Metastasis", MSS = "Melanoma death"))) +
         ggplot2::scale_color_manual(values = stats::setNames(unname(colors), names(colors)), guide = "none") +
@@ -188,7 +196,7 @@ plot_no_gep_group_risk <- function(group_outcomes) {
             x = "Observed 5-year risk (95% interval)", y = NULL,
             title = "5-year risk by GEP availability group",
             subtitle = wrap_plot_text("Kaplan-Meier (metastasis) and Aalen-Johansen (melanoma death). No interval is shown when no events occurred.", 110),
-            caption = wrap_plot_text("Known event-free: patients observed event-free through 60 months. Groups not followed to 60 months have no estimate.", 110)
+            caption = wrap_plot_text("Known event-free: patients observed event-free through 60 months. Open circles: no events occurred. Groups not followed to 60 months have no estimate; groups with fewer than 3 patients are not shown.", 110)
         ) +
         ggplot2::theme_minimal(base_size = 12) +
         ggplot2::theme(panel.grid.minor = ggplot2::element_blank(), panel.grid.major.x = ggplot2::element_line(color = "grey92"), plot.title.position = "plot", plot.caption.position = "plot")
@@ -227,6 +235,25 @@ plot_no_gep_model_auc <- function(performance) {
         ggplot2::theme(legend.position = "bottom", panel.grid.minor = ggplot2::element_blank(), plot.title.position = "plot", plot.caption.position = "plot")
 }
 
+#' Blank the results of groups too small to describe without identifying a patient
+#'
+#' @param table Data frame with a patient-count column.
+#' @param count_col Character name of the patient-count column.
+#' @param keep_cols Character vector of columns kept as they are (labels and the count).
+#' @return `table` with all other columns set to `NA` and a `note` for groups smaller
+#'   than `GEP_MIN_REPORTED_GROUP_SIZE`.
+suppress_small_groups <- function(table, count_col, keep_cols) {
+    small <- table[[count_col]] < GEP_MIN_REPORTED_GROUP_SIZE
+    if (!"note" %in% names(table)) {
+        table$note <- ""
+    }
+    for (column in setdiff(names(table), c(keep_cols, "note"))) {
+        table[[column]][small] <- NA
+    }
+    table$note[small] <- sprintf("Fewer than %d patients: results not shown", GEP_MIN_REPORTED_GROUP_SIZE)
+    table
+}
+
 #' Write the no-GEP workbooks and figures
 #'
 #' Primary workbook (publishable): group outcomes, baseline table, performance.
@@ -243,10 +270,12 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
     primary_path <- file.path(output_dir, paste0(prefix, "no_gep_5yr.xlsx"))
     write_gep_workbook(
         list(
-            Group_Outcomes_MFS = results$group_outcomes[results$group_outcomes$endpoint == "MFS", ],
-            Group_Outcomes_MSS = results$group_outcomes[results$group_outcomes$endpoint == "MSS", ],
+            Group_Outcomes_MFS = suppress_small_groups(results$group_outcomes[results$group_outcomes$endpoint == "MFS", ], "n", c("endpoint", "group", "n")),
+            Group_Outcomes_MSS = suppress_small_groups(results$group_outcomes[results$group_outcomes$endpoint == "MSS", ], "n", c("endpoint", "group", "n")),
             Baseline_By_Group = results$baseline,
-            Model_Performance = results$performance
+            Model_Performance = results$performance,
+            AUC_Difference = results$auc_differences,
+            Sensitivity_Cause_of_Death = suppress_small_groups(results$cause_of_death_sensitivity, "patients", c("group", "patients"))
         ),
         primary_path
     )
@@ -262,7 +291,6 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
             Denominators_Flow = summarize_no_gep_flow(data, results),
             Predictor_Screening = results$predictor_screening,
             Checks = checks,
-            Sensitivity_Cause_of_Death = results$cause_of_death_sensitivity,
             Warnings_Limitations = build_no_gep_limitations(results),
             Record_Issues = removed
         ),

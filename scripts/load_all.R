@@ -88,7 +88,6 @@ load_project_package("testthat") # For testing
 # Advanced GEP validation (Objective 4)
 load_project_package("rms") # Advanced regression modeling and validation
 load_project_package("pec") # Prediction-error curves & validation metrics
-load_project_package("survcomp") # Survival model comparison and validation (Bioconductor)
 load_project_package("riskRegression") # Risk regression & competing risks
 load_project_package("cmprsk") # Competing-risk analysis (Fine-Gray models)
 load_project_package("timeROC") # Time-dependent ROC analysis
@@ -159,12 +158,10 @@ source(here("scripts", "subgroup", "subgroup_height.R"))
 source(here("scripts", "subgroup", "subgroup_formatting.R"))
 
 # Source GEP evaluation modules
-source(here("scripts", "gep", "utils", "gep_survival_estimators.R"))
 source(here("scripts", "gep", "utils", "gep_exploratory_internal_validation.R"))
 source(here("scripts", "gep", "utils", "gep_excel_output.R"))
 source(here("scripts", "gep", "validation", "gep_definitive_validation.R"))
 source(here("scripts", "gep", "validation", "gep_no_gep_analysis.R"))
-source(here("scripts", "gep", "visualization", "gep_poster_km_plots.R"))
 
 # Source the GEP reporting script
 source(here("scripts", "gep", "reporting", "gep_validation_reporting.R"))

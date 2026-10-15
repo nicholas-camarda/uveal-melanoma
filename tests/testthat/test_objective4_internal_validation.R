@@ -225,62 +225,6 @@ test_that("IPCW metrics explicitly report missing weighted case or control suppo
     expect_true(is.na(no_cases$brier))
 })
 
-test_that("IPCW calibration uses assessment weights and rejects sparse support", {
-    # At each prediction value, the weighted event rate equals the prediction:
-    # 1 / (4 + 1) = 0.2 and 4 / (1 + 4) = 0.8.  The weighted offset
-    # intercept and logit slope are therefore both 0 and 1, respectively.
-    outcome <- rep(c(0L, 1L, 0L, 1L), 5)
-    predicted <- rep(c(0.2, 0.2, 0.8, 0.8), 5)
-    weight <- rep(c(4, 1, 1, 4), 5)
-
-    calibration <- summarize_ipcw_calibration(outcome, predicted, weight)
-    sparse <- summarize_ipcw_calibration(
-        outcome = c(0L, 1L, NA_integer_),
-        predicted = c(0.2, 0.8, NA_real_),
-        weight = c(1, 1, 0)
-    )
-
-    expect_identical(calibration$status, "ok")
-    expect_equal(calibration$intercept, 0, tolerance = 1e-7)
-    expect_equal(calibration$slope, 1, tolerance = 1e-7)
-    expect_equal(calibration$weighted_cases, 25)
-    expect_equal(calibration$weighted_controls, 25)
-    expect_identical(sparse$status, "unsupported_sparse_support")
-    expect_true(is.na(sparse$intercept))
-    expect_true(is.na(sparse$slope))
-})
-
-test_that("IPCW calibration rejects complete separation despite adequate support", {
-    separated <- summarize_ipcw_calibration(
-        outcome = c(rep(0L, 10), rep(1L, 10)),
-        predicted = c(rep(0.1, 10), rep(0.9, 10)),
-        weight = rep(1, 20)
-    )
-
-    expect_identical(separated$status, "recalibration_fit_unstable")
-    expect_true(is.na(separated$intercept))
-    expect_true(is.na(separated$slope))
-})
-
-test_that("zero-weight unknown rows cannot alter IPCW calibration", {
-    outcome <- rep(c(0L, 1L, 0L, 1L), 5)
-    predicted <- rep(c(0.2, 0.2, 0.8, 0.8), 5)
-    weight <- rep(c(4, 1, 1, 4), 5)
-
-    baseline <- summarize_ipcw_calibration(outcome, predicted, weight)
-    with_unknown <- summarize_ipcw_calibration(
-        outcome = c(outcome, NA_integer_),
-        predicted = c(predicted, NA_real_),
-        weight = c(weight, 0)
-    )
-
-    expect_identical(with_unknown$status, baseline$status)
-    expect_equal(with_unknown$intercept, baseline$intercept)
-    expect_equal(with_unknown$slope, baseline$slope)
-    expect_equal(with_unknown$weighted_cases, baseline$weighted_cases)
-    expect_equal(with_unknown$weighted_controls, baseline$weighted_controls)
-})
-
 make_nested_cv_fixture <- function() {
     n <- 60L
     tibble::tibble(
@@ -317,7 +261,7 @@ test_that("nested horizon ridge is deterministic and keyed independently of row 
     order_predictions <- function(x) x[do.call(order, x[prediction_key]), , drop = FALSE]
     expect_equal(order_predictions(first$oof_predictions), order_predictions(second$oof_predictions))
     expect_equal(order_predictions(first$oof_predictions), order_predictions(reordered$oof_predictions))
-    expect_identical(first$final_foldid[order(first$final_stable_id)], reordered$final_foldid[order(reordered$final_stable_id)])
+    expect_equal(order_predictions(first$oof_predictions)$ipcw_weight, order_predictions(reordered$oof_predictions)$ipcw_weight)
     expect_true(all(stats::complete.cases(first$oof_predictions$prediction)))
 })
 
@@ -484,16 +428,23 @@ test_that("surrogate nested prediction failures retain repeat and outer-fold con
     )
 })
 
-test_that("surrogate design refuses levels that training never saw instead of scoring them as reference", {
-    training <- data.frame(site = factor(c("a", "a", "b", "b")), age = c(40, 50, 60, 70))
-    assessment <- data.frame(site = factor(c("a", "c")), age = c(45, 55))
-    reference <- colnames(build_surrogate_design_matrix(training, c("site", "age")))
-
+test_that("ridge design builder stops instead of scoring an absent level as the reference", {
+    fitting <- data.frame(site = factor(c("a", "a", "b", "b"), levels = c("a", "b", "c")), age = c(40, 50, 60, 70))
+    # Level "c" has no fitting patient: its design column is all zero.
     expect_error(
-        build_surrogate_design_matrix(assessment, c("site", "age"), reference),
-        "levels absent from training: sitec"
+        build_horizon_ridge_design_matrix(fitting, c("site", "age")),
+        "no patients for design column\\(s\\): sitec"
     )
-    # A training level absent from the assessment rows is zero-filled.
+
+    fitting <- droplevels(fitting)
+    reference <- colnames(build_horizon_ridge_design_matrix(fitting, c("site", "age")))
+    # A training level missing from the assessment rows is zero-filled.
     only_a <- data.frame(site = factor("a", levels = c("a", "b")), age = 45)
-    expect_equal(unname(build_surrogate_design_matrix(only_a, c("site", "age"), reference)[1, "siteb"]), 0)
+    expect_equal(unname(build_horizon_ridge_design_matrix(only_a, c("site", "age"), reference)[1, "siteb"]), 0)
+    # A level only the assessment rows have is refused.
+    assessment <- data.frame(site = factor(c("a", "c")), age = c(45, 55))
+    expect_error(
+        build_horizon_ridge_design_matrix(assessment, c("site", "age"), reference),
+        "absent from training: sitec"
+    )
 })

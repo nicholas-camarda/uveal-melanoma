@@ -277,3 +277,20 @@ test_that("iris optic nerve N/A helper records only explicit non-applicability c
     expect_equal(special_cases$special_case, IRIS_OPTIC_NERVE_SPECIAL_CASE)
     expect_match(special_cases$interpretation, "full cohort only")
 })
+
+test_that("unknown-cause deaths are recoded to melanoma deaths only in the sensitivity process", {
+    test_data <- create_test_dataset()
+    test_data$cod <- "Metastatic_Uveal_Melanoma"
+    dead <- which(!is.na(test_data$dod))
+    expect_gte(length(dead), 4L)
+    test_data$cod[dead[1:4]] <- c("Unknown", "Cardiac_Arrest", "Metastatic_Uveal_Melanoma", "Unknown_Cancer")
+    derived <- create_derived_variables(test_data)
+
+    primary <- derived$mss_event_type[dead[1:4]]
+    sensitivity <- derived$mss_event_type_unknown_cause_melanoma[dead[1:4]]
+    expect_identical(primary, c(2L, 2L, 1L, 2L))
+    expect_identical(sensitivity, c(1L, 2L, 1L, 1L))
+    # Everyone else is unchanged.
+    others <- setdiff(seq_len(nrow(derived)), dead[1:4])
+    expect_identical(derived$mss_event_type_unknown_cause_melanoma[others], derived$mss_event_type[others])
+})

@@ -142,7 +142,16 @@ build_gep_validation_checks <- function(results) {
     add("MFS", "GEP sample taken more than 180 days after treatment", "Primary set",
         sprintf("%d patients", late_n), if (late_n == 0L) "no concern" else "concern",
         "Such a sample (for example at local recurrence) describes a different tumor state; see Sensitivity_Late_Biopsy")
-    dplyr::bind_rows(rows)
+    describe_check_reasons(dplyr::bind_rows(rows))
+}
+
+#' Keep the reason text only for checks that raise a concern or were not assessed
+#'
+#' @param checks Data frame with `status` and `reason`.
+#' @return `checks` with `reason` set to "No issue found" where the status is `no concern`.
+describe_check_reasons <- function(checks) {
+    checks$reason <- ifelse(checks$status == "no concern", "No issue found", checks$reason)
+    checks
 }
 
 #' Describe the methods behind each reported quantity
@@ -156,7 +165,7 @@ build_gep_validation_specification <- function(horizon_months) {
         quantity = c(
             "Observed MFS risk", "Observed MSS risk", "Imported risk",
             "Difference", "Overall row", "Harrell's C (MFS)", "Competing-risk AUC (MSS)",
-            "Proportional-hazards check"
+            "Proportional-hazards check", "Late-biopsy sensitivity", "Unknown-cause-of-death sensitivity"
         ),
         method = c(
             sprintf("Kaplan-Meier risk (1 - survival) at %d months, log-log 95%% interval", horizon_months),
@@ -166,21 +175,26 @@ build_gep_validation_specification <- function(horizon_months) {
             "Group risks weighted by group size",
             sprintf("Concordance of imported risk with follow-up censored at %d months; ties count one half; patient-level bootstrap interval", horizon_months),
             sprintf("Cumulative/dynamic time-dependent AUC at %d months, inverse-probability-of-censoring weights, non-melanoma deaths as controls; patient-level bootstrap interval", horizon_months),
-            "Schoenfeld residual test of imported risk in a Cox model (cause-specific for MSS)"
+            "Schoenfeld residual test of imported risk in a Cox model (cause-specific for MSS)",
+            sprintf("Group tables and discrimination recomputed without patients whose first biopsy was more than %d days after treatment", GEP_TEST_TIMING_LATE_DAYS),
+            "Observed melanoma-specific risk recomputed counting deaths with an unknown recorded cause (Unknown, Unknown_Cancer) as melanoma deaths"
         ),
         estimand = c(
-            sprintf("Probability of metastasis by %.0f years", years),
+            sprintf("Probability of metastasis by %.0f years (death before metastasis is censored)", years),
             sprintf("Probability of melanoma death by %.0f years in the presence of competing death", years),
             "Published risk for the Class x PRAME group",
             "Observed risk minus imported risk", "Group-size-weighted observed risk",
             "Probability that a patient with an earlier event has the higher imported risk",
             "Probability that a patient with melanoma death by the horizon has a higher imported risk than a patient without",
-            "Whether the effect of imported risk is constant over time"
+            "Whether the effect of imported risk is constant over time",
+            "Whether the results depend on patients sampled long after treatment",
+            "Whether the results depend on how deaths of unknown cause are counted"
         ),
-        units = c("proportion", "proportion", "proportion", "percentage points", "proportion", "0.5 = chance, 1 = perfect", "0.5 = chance, 1 = perfect", "p-value"),
+        units = c("proportion", "proportion", "proportion", "percentage points", "proportion", "0.5 = chance, 1 = perfect", "0.5 = chance, 1 = perfect", "p-value", "as the quantity", "proportion"),
         direction = c(
             "Higher = more metastasis", "Higher = more melanoma deaths", "Higher = worse", "Positive = observed worse than imported",
-            "Higher = worse", "Higher imported risk = earlier event", "Higher imported risk = melanoma death", "p < 0.05 flagged as concern"
+            "Higher = worse", "Higher imported risk = earlier event", "Higher imported risk = melanoma death", "p < 0.05 flagged as concern",
+            "Difference = value without late samples minus primary value", "Difference = sensitivity risk minus primary risk"
         ),
         interpretation = c(
             "Compare with the imported risk in the same row; wide intervals reflect few patients and events",
@@ -190,7 +204,9 @@ build_gep_validation_specification <- function(horizon_months) {
             "No interval is reported; see group rows",
             "Because the predictor has four values, C describes how well the groups are ordered, not individual-level prediction",
             "Based on few melanoma deaths; see events and interval",
-            "A concern would mean the imported risk's effect changes with follow-up time"
+            "A concern would mean the imported risk's effect changes with follow-up time",
+            "Small differences mean the late samples do not drive the results (see the sheet for each group)",
+            "The primary analysis counts these deaths as competing; this sheet shows the opposite extreme"
         ),
         stringsAsFactors = FALSE
     )
@@ -249,7 +265,8 @@ plot_gep_validation_curves <- function(prepared, group_table, endpoint, horizon_
         steps <- steps[steps$time <= horizon_months, , drop = FALSE]
         last_time <- min(max(g$time_months), horizon_months)
         steps <- rbind(steps, data.frame(time = last_time, risk = steps$risk[nrow(steps)]))
-        steps$group <- sprintf("%s (n = %d)", group_name, nrow(g))
+        event_free <- group_table$event_free_through_horizon[match(group_name, group_table$group)]
+        steps$group <- sprintf("%s (n = %d; %d event-free at 5 y)", group_name, nrow(g), event_free)
         steps$group_name <- group_name
         steps
     })
@@ -282,31 +299,35 @@ plot_gep_validation_curves <- function(prepared, group_table, endpoint, horizon_
 #' Plot observed against imported 5-year risk for each group
 #'
 #' @param group_tables Named list of group tables (one per panel, for example per
-#'   cohort or endpoint) as produced by `build_gep_group_table()`.
-#' @param panel_label Character name of the faceting variable shown above panels.
+#'   cohort or endpoint) as produced by `build_gep_group_table()`; panels keep list order.
+#' @param title Character plot title.
 #' @return A `ggplot` object.
-plot_gep_observed_vs_imported <- function(group_tables, panel_label = "Panel") {
+plot_gep_observed_vs_imported <- function(group_tables, title = "Observed vs imported 5-year risk") {
     plot_data <- dplyr::bind_rows(group_tables, .id = "panel") %>%
         dplyr::filter(!grepl("^Overall", .data$group)) %>%
-        dplyr::mutate(group = factor(.data$group, levels = rev(GEP_VALIDATION_GROUP_LEVELS)))
+        dplyr::mutate(
+            panel = factor(.data$panel, levels = names(group_tables)),
+            group = factor(.data$group, levels = rev(GEP_VALIDATION_GROUP_LEVELS)),
+            no_events = .data$events_by_horizon == 0
+        )
     colors <- get_gep_class_palette(levels(plot_data$group))
     ggplot2::ggplot(plot_data, ggplot2::aes(y = .data$group)) +
         ggplot2::geom_errorbar(
             ggplot2::aes(xmin = .data$observed_ci_lower, xmax = .data$observed_ci_upper, color = .data$group),
             width = 0.2, linewidth = 0.9, orientation = "y", na.rm = TRUE
         ) +
-        ggplot2::geom_point(ggplot2::aes(x = .data$observed_risk, color = .data$group), size = 3.2, na.rm = TRUE) +
+        ggplot2::geom_point(ggplot2::aes(x = .data$observed_risk, color = .data$group, shape = .data$no_events), size = 3.4, stroke = 1.2, na.rm = TRUE) +
         ggplot2::geom_point(ggplot2::aes(x = .data$imported_risk), shape = 5, size = 3.6, stroke = 1.1, color = "grey20") +
         ggplot2::facet_wrap(~panel) +
+        ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
         ggplot2::scale_color_manual(values = colors, guide = "none") +
         ggplot2::scale_x_continuous(limits = c(0, 1), labels = scales::percent_format(accuracy = 1)) +
         ggplot2::labs(
-            x = "5-year risk", y = NULL,
-            title = "Observed vs imported 5-year risk",
-            caption = "Filled points: observed (95% interval; none when no events). Open diamonds: imported risk."
+            x = "5-year risk", y = NULL, title = title,
+            caption = wrap_plot_text("Filled points: observed risk with 95% interval. Open circles: no events occurred, so no interval can be estimated. Open diamonds: imported risk.", 100)
         ) +
         ggplot2::theme_minimal(base_size = 13) +
-        ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
+        ggplot2::theme(panel.grid.minor = ggplot2::element_blank(), plot.title.position = "plot", plot.caption.position = "plot")
 }
 
 #' Write the validation workbooks and figures for one cohort
@@ -363,7 +384,9 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
         list(
             Group_Table_MFS = results$mfs$group_table,
             Group_Table_MSS = results$mss$group_table,
-            Discrimination = discrimination
+            Discrimination = discrimination,
+            Sensitivity_Late_Biopsy = results$late_biopsy_sensitivity$table,
+            Sensitivity_Cause_of_Death = results$cause_of_death_sensitivity
         ),
         primary_path
     )
@@ -373,8 +396,6 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
             Specification_Coding = build_gep_validation_specification(horizon),
             Denominators_Flow = summarize_gep_validation_flow(data, results),
             Checks = checks,
-            Sensitivity_Late_Biopsy = results$late_biopsy_sensitivity$table,
-            Sensitivity_Cause_of_Death = results$cause_of_death_sensitivity,
             Warnings_Limitations = build_gep_validation_limitations(checks, dataset_name),
             Record_Issues = build_gep_record_issues(data)
         ),
@@ -394,7 +415,10 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
     comparison_path <- file.path(gep_root, paste0(prefix, "gep_validation_observed_vs_imported.png"))
     ggplot2::ggsave(
         comparison_path,
-        plot_gep_observed_vs_imported(list(MFS = results$mfs$group_table, MSS = results$mss$group_table)),
+        plot_gep_observed_vs_imported(
+            list(`Metastasis (MFS)` = results$mfs$group_table, `Melanoma death (MSS)` = results$mss$group_table),
+            title = sprintf("%s: observed vs imported 5-year risk", cohort_label)
+        ),
         width = 10, height = 4.5, dpi = 300, bg = "white"
     )
     invisible(list(primary = primary_path, diagnostics = diagnostics_path, figures = c(figure_paths, comparison_path)))
@@ -428,7 +452,7 @@ create_gep_observed_vs_imported_panel_report <- function(output_dir = file.path(
     figure_path <- file.path(output_dir, "objective4_gep_observed_vs_imported_mfs.png")
     ggplot2::ggsave(
         figure_path,
-        plot_gep_observed_vs_imported(tables) + ggplot2::labs(title = "Observed vs imported 5-year metastasis risk"),
+        plot_gep_observed_vs_imported(tables, title = "Observed vs imported 5-year metastasis risk (MFS), by cohort"),
         width = 12, height = 4.5, dpi = 300, bg = "white"
     )
     invisible(figure_path)

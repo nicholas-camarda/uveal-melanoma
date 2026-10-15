@@ -251,11 +251,11 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_true(all(file.exists(c(paths$primary, paths$diagnostics, paths$figures))))
     expect_identical(
         readxl::excel_sheets(paths$primary),
-        c("Group_Table_MFS", "Group_Table_MSS", "Discrimination")
+        c("Group_Table_MFS", "Group_Table_MSS", "Discrimination", "Sensitivity_Late_Biopsy", "Sensitivity_Cause_of_Death")
     )
     expect_identical(
         readxl::excel_sheets(paths$diagnostics),
-        c("Specification_Coding", "Denominators_Flow", "Checks", "Sensitivity_Late_Biopsy", "Sensitivity_Cause_of_Death", "Warnings_Limitations", "Record_Issues")
+        c("Specification_Coding", "Denominators_Flow", "Checks", "Warnings_Limitations", "Record_Issues")
     )
     # Identifiers live only in the diagnostics workbook.
     for (sheet in readxl::excel_sheets(paths$primary)) {
@@ -278,7 +278,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_setequal(timing$reason, c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]]))
     expect_equal(sum(flow$n[startsWith(flow$step, "Biopsy timing in the primary set")]), primary)
 
-    sensitivity <- readxl::read_excel(paths$diagnostics, sheet = "Sensitivity_Late_Biopsy")
+    sensitivity <- readxl::read_excel(paths$primary, sheet = "Sensitivity_Late_Biopsy")
     expect_true(all(c("endpoint", "quantity", "primary", "excluding_late_biopsy", "difference", "unit") %in% names(sensitivity)))
     expect_identical(unname(results$late_biopsy_sensitivity$patients_excluded[["MFS"]]), 1L)
     expect_true(all(issues$key_source == "id"))
@@ -340,4 +340,24 @@ test_that("unknown-cause deaths are recounted as melanoma deaths in the sensitiv
     expect_gt(second$unknown_cause_as_melanoma_risk, second$primary_risk)
     # The primary MSS status is untouched.
     expect_identical(sum(endpoint_data$status == 1L), 0L)
+})
+
+test_that("the MSS AUC treats competing deaths as controls (AUC_2), not as excluded patients (AUC_1)", {
+    n <- 60L
+    risk <- seq(0.05, 0.95, length.out = n)
+    status <- rep(0L, n)
+    time <- rep(100, n)
+    # Melanoma deaths among high-risk patients; competing deaths among low-risk patients.
+    status[c(55, 52, 49, 45, 40, 36)] <- 1L
+    time[c(55, 52, 49, 45, 40, 36)] <- c(12, 20, 25, 30, 41, 50)
+    status[c(3, 8, 14, 20, 26, 31)] <- 2L
+    time[c(3, 8, 14, 20, 26, 31)] <- c(10, 15, 22, 28, 35, 44)
+    fit <- timeROC::timeROC(T = time, delta = status, marker = risk, cause = 1, weighting = "marginal", times = 60, iid = FALSE)
+    auc_1 <- fit$AUC_1[[length(fit$AUC_1)]]
+    auc_2 <- fit$AUC_2[[length(fit$AUC_2)]]
+    expect_gt(abs(auc_1 - auc_2), 1e-4)
+
+    result <- calculate_gep_competing_risk_auc(time, status, risk, 60, n_boot = 10L, seed = 4L)
+    expect_equal(result$auc, auc_2, tolerance = 1e-10)
+    expect_gt(abs(result$auc - auc_1), 1e-4)
 })

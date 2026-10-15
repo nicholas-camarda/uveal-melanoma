@@ -6,6 +6,7 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
     old_run_objective_0 <- run_objective_0
     old_run_my_analysis <- run_my_analysis
     old_merge_baseline_tables_with_data <- merge_baseline_tables_with_data
+    old_cross_cohort_figure <- create_gep_observed_vs_imported_panel_report
 
     analyzed_datasets <- character()
 
@@ -14,6 +15,7 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
         assign("run_objective_0", old_run_objective_0, envir = .GlobalEnv)
         assign("run_my_analysis", old_run_my_analysis, envir = .GlobalEnv)
         assign("merge_baseline_tables_with_data", old_merge_baseline_tables_with_data, envir = .GlobalEnv)
+        assign("create_gep_observed_vs_imported_panel_report", old_cross_cohort_figure, envir = .GlobalEnv)
         unlink(temp_processed_dir, recursive = TRUE, force = TRUE)
     }, add = TRUE)
 
@@ -41,6 +43,7 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
     assign("merge_baseline_tables_with_data", function(full_data, restricted_data, gksrs_only_data = NULL) {
         invisible(NULL)
     }, envir = .GlobalEnv)
+    assign("create_gep_observed_vs_imported_panel_report", function(...) invisible(NULL), envir = .GlobalEnv)
 
     expect_no_error(main_execution())
     expect_setequal(
