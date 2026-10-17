@@ -3,29 +3,6 @@
 # To run:
 # Rscript scripts/tools/export_gep_objective4_to_downloads.R
 
-#' Resolve the repository root for this exporter
-#'
-#' @return Character scalar absolute path to the repository root.
-resolve_repo_root <- function() {
-    cmd_args <- commandArgs(trailingOnly = FALSE)
-    file_arg <- grep("^--file=", cmd_args, value = TRUE)
-
-    if (length(file_arg) > 0) {
-        script_path <- sub("^--file=", "", file_arg[[1]])
-        return(normalizePath(file.path(dirname(script_path), "..", ".."), winslash = "/", mustWork = FALSE))
-    }
-
-    cwd <- normalizePath(getwd(), winslash = "/", mustWork = FALSE)
-    if (file.exists(file.path(cwd, "scripts", "load_all.R"))) {
-        return(cwd)
-    }
-
-    stop(
-        "Unable to resolve the repository root. Run this script from the project root or via Rscript.",
-        call. = FALSE
-    )
-}
-
 #' Resolve the runtime analysis root for this project
 #'
 #' @param project_slug Character scalar analysis slug.
@@ -132,8 +109,7 @@ export_gep_objective4_to_downloads <- function(
     destination_dir = NULL,
     dry_run = identical(Sys.getenv("GEP_OBJECTIVE4_DRY_RUN", unset = "0"), "1")
 ) {
-    repo_root <- resolve_repo_root()
-    project_slug <- basename(repo_root)
+    project_slug <- "uveal-melanoma"
     runtime_analysis_root <- resolve_runtime_analysis_root(project_slug)
 
     if (is.null(destination_dir) || !nzchar(trimws(destination_dir))) {
