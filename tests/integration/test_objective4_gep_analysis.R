@@ -34,8 +34,8 @@ test_that("survival helper can separate KM display groups from Cox model groups"
     test_data <- tibble::tibble(
         tt_mets_months = c(12, 24, 18, 30),
         mets_event = c(0, 1, 0, 1),
-        biopsy1_gep = factor(c("Class 1", "Class 1", "GEP Failed/Indeterminate", "GEP Failed/Indeterminate")),
-        biopsy1_gep_model = factor(c("Class 1", "Class 1", "GEP Failed/Indeterminate", "GEP Failed/Indeterminate"))
+        biopsy1_gep = factor(c("Class 1", "Class 1", GEP_GROUP_TEST_FAILED, GEP_GROUP_TEST_FAILED)),
+        biopsy1_gep_model = factor(c("Class 1", "Class 1", GEP_GROUP_TEST_FAILED, GEP_GROUP_TEST_FAILED))
     )
 
     convergence_warnings <- character()
@@ -68,22 +68,15 @@ test_that("survival helper can separate KM display groups from Cox model groups"
         convergence_warnings,
         fixed = TRUE
     )))
-    expect_true(any(grepl("GEP Failed/Indeterminate", names(result$fit$strata))))
+    expect_true(any(grepl(GEP_GROUP_TEST_FAILED, names(result$fit$strata), fixed = TRUE)))
     expect_null(result$cox_model)
     expect_match(result$diagnostics$raw_model_output, "After sparse-level exclusions")
     expect_match(result$diagnostics$raw_model_output, "requires at least two non-missing")
 })
 
 test_that("risk table keeps displayed row labels aligned with their counts when legend order differs from fit order", {
-    desired_order <- c(
-        "Class 1 PRAME Negative",
-        "Class 1 PRAME Positive",
-        "Class 2 PRAME Negative",
-        "Class 2 PRAME Positive",
-        "GEP Failed/Indeterminate",
-        "GEP Not Tested"
-    )
-    baseline_counts <- c(5, 4, 3, 2, 6, 7)
+    desired_order <- GEP_DETAIL_LEVELS
+    baseline_counts <- c(5, 4, 3, 2, 1, 1, 6, 7)
     names(baseline_counts) <- desired_order
 
     test_data <- tibble::tibble(
@@ -115,19 +108,9 @@ test_that("risk table keeps displayed row labels aligned with their counts when 
 })
 
 test_that("risk table preserves requested row order for a subset of present strata", {
-    desired_order <- c(
-        "Class 1 PRAME Negative",
-        "Class 1 PRAME Positive",
-        "Class 2 PRAME Negative",
-        "Class 2 PRAME Positive",
-        "GEP Failed/Indeterminate",
-        "GEP Not Tested"
-    )
-    baseline_counts <- c(
-        "Class 1 PRAME Negative" = 5,
-        "Class 2 PRAME Positive" = 2,
-        "GEP Not Tested" = 7
-    )
+    desired_order <- GEP_DETAIL_LEVELS
+    baseline_counts <- c(5, 2, 7)
+    names(baseline_counts) <- desired_order[c(1, 4, 8)]
     present_order <- desired_order[desired_order %in% names(baseline_counts)]
 
     test_data <- tibble::tibble(
@@ -156,59 +139,6 @@ test_that("risk table preserves requested row order for a subset of present stra
 
     expect_equal(rev(extract_risk_table_y_limits(result$plot$table)), present_order)
     expect_equal(extract_displayed_risk_counts(result$plot$table, time_point = 0), unname(baseline_counts[present_order]))
-})
-
-test_that("four-group collapsed MFS KM retains both no-GEP strata as separate rows", {
-    test_output_dir <- tempfile("objective4_four_group_km_")
-    dir.create(test_output_dir, recursive = TRUE, showWarnings = FALSE)
-    on.exit(unlink(test_output_dir, recursive = TRUE), add = TRUE)
-
-    test_data <- tibble::tibble(
-        id = seq_len(8),
-        tt_mets_months = c(12, 24, 18, 36, 6, 30, 9, 42),
-        mets_event = c(0, 1, 0, 1, 1, 0, 1, 0),
-        mets_free_at_baseline = TRUE,
-        tt_mets_months_analysis = c(12, 24, 18, 36, 6, 30, 9, 42),
-        mets_event_analysis = c(0, 1, 0, 1, 1, 0, 1, 0),
-        biopsy1_gep = c(
-            "Class 1 PRAME Negative",
-            "Class 1 PRAME Positive",
-            "Class 2 PRAME Negative",
-            "Class 2 PRAME Positive",
-            "GEP Not Tested",
-            "GEP Not Tested",
-            "GEP Failed/Indeterminate",
-            "GEP Failed/Indeterminate"
-        ),
-        gep_class_simple = c("Class 1", "Class 1", "Class 2", "Class 2", NA, NA, NA, NA)
-    )
-
-    result <- suppressWarnings(
-        create_mfs_four_group_survival_curves(
-            data = test_data,
-            output_dir = test_output_dir,
-            km_output_dir = test_output_dir,
-            prefix = "unit_",
-            dataset_name = "unit_test_four_group_km",
-            return_plot = TRUE,
-            save_plot = TRUE
-        )
-    )
-
-    expect_equal(
-        result$present_levels,
-        c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")
-    )
-    expect_true(all(
-        c("GEP Not Tested", "GEP Failed/Indeterminate") %in%
-            unique(as.character(stats::na.omit(result$plot_data$gep_km_simple)))
-    ))
-    expect_equal(
-        rev(extract_risk_table_y_limits(result$plot$table)),
-        c("Class 1", "Class 2", "GEP Not Tested", "GEP Failed/Indeterminate")
-    )
-    expect_equal(extract_displayed_risk_counts(result$plot$table, time_point = 0), c(2L, 2L, 2L, 2L))
-    expect_true(file.exists(file.path(test_output_dir, "unit_mfs_four_group_gep_km.png")))
 })
 
 test_that("Cox diagnostics keep group counts and event rates in Raw_model_output", {
@@ -273,24 +203,10 @@ test_that("Cox diagnostics keep group counts and event rates in Raw_model_output
 
 # Test 4c: Competing risk analysis produces valid statistical results
 # Test 4d: Time-specific analysis produces valid statistical results
-# Test that eligibility filters properly exclude invalid data
+# Eligibility keys on the Class 1/Class 2 availability group and the endpoint fields.
 test_that("Eligibility filters properly exclude invalid data", {
     test_data <- tibble::tibble(
-        biopsy1_gep = c(
-            "Class 1 PRAME Negative",
-            "Class 2 PRAME Positive",
-            "GEP Failed/Indeterminate",
-            "GEP Failed/Indeterminate",
-            "GEP Not Tested"
-        ),
-        biopsy1_gep_raw = c(
-            "Class_1A_PRAME_negative",
-            "Class_2_PRAME_positive",
-            "Class_1A_PRAME_not_reported",
-            "Unknown",
-            "No"
-        ),
-        gep_class_simple = c("Class 1", "Class 2", "Class 1", "GEP Failed/Indeterminate", "GEP Not Tested"),
+        gep_group = c("Class 1", "Class 2", GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_TEST_FAILED, GEP_GROUP_NOT_TESTED),
         biopsy1_gep_mfs = c(0.8, 0.4, 0.6, 0.5, 0.7),
         biopsy1_gep_mss = c(0.9, 0.6, 0.7, 0.8, 0.8),
         mets_free_at_baseline = rep(TRUE, 5),
@@ -302,42 +218,14 @@ test_that("Eligibility filters properly exclude invalid data", {
         prame_status = c("Negative", "Positive", "Unknown", "Not Available", "Not Available")
     )
 
-    refreshed_data <- refresh_gep_analysis_flags(test_data)
+    flagged <- derive_gep_analysis_flags(test_data)
 
-    expect_true(refreshed_data$mfs_analysis_eligible[1],
-        info = "Definitive Class 1 should be included in MFS analysis"
-    )
-    expect_true(refreshed_data$mfs_analysis_eligible[2],
-        info = "Definitive Class 2 should be included in MFS analysis"
-    )
-    expect_false(refreshed_data$mfs_analysis_eligible[3],
-        info = "Class 1 not reported should be excluded from MFS analysis"
-    )
-    expect_false(refreshed_data$mfs_analysis_eligible[4],
-        info = "Unknown raw GEP rows should be excluded from MFS analysis"
-    )
-    expect_false(refreshed_data$mfs_analysis_eligible[5],
-        info = "GEP not tested rows should be excluded from MFS analysis"
-    )
-
-    expect_true(refreshed_data$mss_analysis_eligible[1],
-        info = "Definitive Class 1 should be included in MSS analysis"
-    )
-    expect_true(refreshed_data$mss_analysis_eligible[2],
-        info = "Definitive Class 2 should be included in MSS analysis"
-    )
-    expect_false(refreshed_data$mss_analysis_eligible[3],
-        info = "Class 1 not reported should be excluded from MSS analysis"
-    )
-    expect_false(refreshed_data$mss_analysis_eligible[4],
-        info = "Unknown raw GEP rows should be excluded from MSS analysis"
-    )
-    expect_false(refreshed_data$mss_analysis_eligible[5],
-        info = "GEP not tested rows should be excluded from MSS analysis"
-    )
+    expect_identical(flagged$mfs_analysis_eligible, c(TRUE, TRUE, FALSE, FALSE, FALSE))
+    expect_identical(flagged$mss_analysis_eligible, c(TRUE, TRUE, FALSE, FALSE, FALSE))
+    expect_identical(flagged$gep_validation_set, c("Eligible", "Eligible", "No GEP Data", "No GEP Data", "No GEP Data"))
 })
 
-test_that("Objective 4 eligibility refresh removes failed rows from cohort analyses", {
+test_that("Eligibility removes every non-definitive group from the cohort analyses", {
     cohort_names <- c(
         "uveal_melanoma_full_cohort",
         "uveal_melanoma_restricted_cohort",
@@ -346,21 +234,18 @@ test_that("Objective 4 eligibility refresh removes failed rows from cohort analy
 
     for (dataset_name in cohort_names) {
         actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, paste0(dataset_name, ".rds")))
-        refreshed_data <- refresh_gep_analysis_flags(actual_data)
-        mfs_data <- refreshed_data %>% filter(mfs_analysis_eligible)
-        mss_data <- refreshed_data %>% filter(mss_analysis_eligible)
+        flagged <- derive_gep_analysis_flags(actual_data)
+        mfs_data <- flagged %>% filter(mfs_analysis_eligible)
+        mss_data <- flagged %>% filter(mss_analysis_eligible)
 
-        expect_false(any(as.character(mfs_data$biopsy1_gep) %in% c("GEP Failed/Indeterminate", "GEP Not Tested")),
-            info = sprintf("MFS-eligible rows should exclude failed and not-tested labels for %s", dataset_name)
+        expect_true(all(as.character(mfs_data$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS),
+            info = sprintf("MFS-eligible rows should retain only Class 1/Class 2 for %s", dataset_name)
         )
-        expect_false(any(as.character(mss_data$biopsy1_gep) %in% c("GEP Failed/Indeterminate", "GEP Not Tested")),
-            info = sprintf("MSS-eligible rows should exclude failed and not-tested labels for %s", dataset_name)
+        expect_true(all(as.character(mss_data$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS),
+            info = sprintf("MSS-eligible rows should retain only Class 1/Class 2 for %s", dataset_name)
         )
-        expect_true(all(as.character(mfs_data$gep_class_simple) %in% GEP_DEFINITIVE_SIMPLE_LEVELS),
-            info = sprintf("MFS-eligible rows should retain only definitive simple classes for %s", dataset_name)
-        )
-        expect_true(all(as.character(mss_data$gep_class_simple) %in% GEP_DEFINITIVE_SIMPLE_LEVELS),
-            info = sprintf("MSS-eligible rows should retain only definitive simple classes for %s", dataset_name)
+        expect_true(all(as.character(mfs_data$biopsy1_gep) %in% GEP_VALIDATION_GROUP_LEVELS),
+            info = sprintf("MFS-eligible rows should carry a Class x PRAME label for %s", dataset_name)
         )
     }
 })
@@ -368,44 +253,19 @@ test_that("Objective 4 eligibility refresh removes failed rows from cohort analy
 test_that("Canonical GEP variables retain original levels without cohort-wide collapse", {
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
     expect_false(file.exists(file.path(PROCESSED_DATA_DIR, "other_map.rds")))
-    expect_true(all(c("biopsy1_gep_raw", GEP_DISPLAY_VARIABLES, "location") %in% names(actual_data)))
+    expect_true(all(c("biopsy1_gep_raw", "biopsy1_gep", "gep_group", "prame_status", "gep12_prame_status", "location") %in% names(actual_data)))
     expect_false("Other" %in% levels(actual_data$location))
     expect_false("Other" %in% levels(actual_data$biopsy1_gep_raw))
     expect_false(any(as.character(actual_data$biopsy1_gep_raw) == "Other", na.rm = TRUE))
     expect_true(any(as.character(actual_data$location) == "Cilio-Choroidal"))
-    expect_true(any(as.character(actual_data$biopsy1_gep) == "GEP Not Tested"))
-})
-
-test_that("Eligibility depends on definitive raw labels even when text raw retains definitive class", {
-    test_data <- tibble::tibble(
-        biopsy1_gep = factor(c("Class 1 PRAME Positive", "Class 1 PRAME Positive")),
-        biopsy1_gep_raw = factor(c("Unknown", "Class_1A_PRAME_positive")),
-        biopsy1_gep_text_raw = c("Class_1A_PRAME_positive", "Class_1A_PRAME_positive"),
-        gep_class_simple = factor(c("Class 1", "Class 1")),
-        biopsy1_gep_mfs = c(0.80, 0.80),
-        biopsy1_gep_mss = c(0.85, 0.85),
-        mets_free_at_baseline = c(TRUE, TRUE),
-        tt_mets_months_analysis = c(36, 36),
-        mets_event_analysis = c(0L, 0L),
-        tt_death_years = c(3, 3),
-        melanoma_death_event = c(0, 0),
-        competing_death_event = c(0, 0),
-        prame_status = factor(c("Positive", "Positive"))
-    )
-
-    refreshed_data <- refresh_gep_analysis_flags(test_data)
-
-    expect_false(refreshed_data$mfs_analysis_eligible[1])
-    expect_true(refreshed_data$mfs_analysis_eligible[2])
-    expect_false(refreshed_data$mss_analysis_eligible[1])
-    expect_true(refreshed_data$mss_analysis_eligible[2])
+    expect_identical(levels(actual_data$biopsy1_gep), GEP_DETAIL_LEVELS)
+    expect_identical(levels(actual_data$gep_group), GEP_GROUP_LEVELS)
+    expect_true(any(as.character(actual_data$gep_group) == GEP_GROUP_NOT_TESTED))
 })
 
 test_that("MFS eligibility excludes metastasis present at baseline", {
     test_data <- tibble::tibble(
-        biopsy1_gep = c("Class 1 PRAME Positive", "Class 1 PRAME Positive"),
-        biopsy1_gep_raw = c("Class_1A_PRAME_positive", "Class_1A_PRAME_positive"),
-        gep_class_simple = c("Class 1", "Class 1"),
+        gep_group = c("Class 1", "Class 1"),
         biopsy1_gep_mfs = c(0.80, 0.80),
         biopsy1_gep_mss = c(0.85, 0.85),
         mets_free_at_baseline = c(FALSE, TRUE),
@@ -417,9 +277,16 @@ test_that("MFS eligibility excludes metastasis present at baseline", {
         prame_status = c("Positive", "Positive")
     )
 
-    refreshed_data <- refresh_gep_analysis_flags(test_data)
+    flagged <- derive_gep_analysis_flags(test_data)
 
-    expect_false(refreshed_data$mfs_analysis_eligible[1])
-    expect_true(refreshed_data$mfs_analysis_eligible[2])
-    expect_true(all(refreshed_data$mss_analysis_eligible))
+    expect_false(flagged$mfs_analysis_eligible[1])
+    expect_true(flagged$mfs_analysis_eligible[2])
+    expect_true(all(flagged$mss_analysis_eligible))
+})
+
+test_that("Eligibility derivation fails when a required column is missing", {
+    expect_error(
+        derive_gep_analysis_flags(tibble::tibble(gep_group = "Class 1")),
+        "GEP analysis flags require columns"
+    )
 })

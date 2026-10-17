@@ -584,7 +584,6 @@ get_objective0_contract_allowed_values <- function(domain) {
         yn_raw = YN_RAW_LEVELS,
         yn_raw_or_display = c(YN_RAW_LEVELS, YN_DISPLAY_LABELS),
         sex_factor = SEX_FACTOR_LEVELS,
-        gep_class_simple = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
         gep_group = GEP_GROUP_LEVELS,
         gep_test_timing = GEP_TEST_TIMING_LEVELS,
         vision_line_change_bucket = VISION_LINE_CHANGE_CATEGORY_LEVELS,
@@ -861,7 +860,7 @@ validate_objective4_gep_derivation_contract <- function(data, cohort_name) {
     findings <- empty_validation_findings()
     details <- empty_validation_detail_table()
     required_fields <- unique(c(
-        "biopsy1_gep", "gep_class_simple", "biopsy1_gep_mfs", "biopsy1_gep_mss",
+        "biopsy1_gep", "gep_group", "biopsy1_gep_mfs", "biopsy1_gep_mss",
         "mets_event_analysis", "tt_mets_months_analysis", "mets_free_at_baseline",
         "death_event", "tt_death_years",
         "melanoma_death_event", "competing_death_event", "gep_validation_set",
@@ -894,10 +893,7 @@ validate_objective4_gep_derivation_contract <- function(data, cohort_name) {
         return(list(findings = findings, details = details))
     }
 
-    simple_values <- as.character(data$gep_class_simple)
-    biopsy_values <- as.character(data$biopsy1_gep)
-    definitive_gep <- !is.na(simple_values) & simple_values %in% GEP_DEFINITIVE_SIMPLE_LEVELS &
-        !is.na(biopsy_values) & !biopsy_values %in% GEP_INVALID_ANALYSIS_LABELS
+    definitive_gep <- as.character(data$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS
     valid_mfs <- !is.na(data$biopsy1_gep_mfs) & data$biopsy1_gep_mfs >= 0 & data$biopsy1_gep_mfs <= 1
     valid_mss <- !is.na(data$biopsy1_gep_mss) & data$biopsy1_gep_mss >= 0 & data$biopsy1_gep_mss <= 1
     expected_gep_set <- ifelse(definitive_gep & valid_mfs & valid_mss, "Eligible", "No GEP Data")

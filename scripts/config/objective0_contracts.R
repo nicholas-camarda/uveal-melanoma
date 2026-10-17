@@ -24,7 +24,7 @@ OBJECTIVE0_DERIVED_OUTPUT_MANIFEST <- c(
     "treatment_year",
     "initial_tumor_height_binned",
     "initial_tumor_diameter_binned", "initial_stage_binary",
-    "gep_class_simple", "prame_status", "gep12_prame_status", "recurrence1_treatment_clean",
+    "prame_status", "gep12_prame_status", "recurrence1_treatment_clean",
     "retinopathy_burden_event", "nvg_burden_event", "srd_burden_event",
     "vision_change", "vision_line_change", "vision_line_change_bucket",
     "last_vision_followup_months_explicit", "last_vision_followup_months_proxy",
@@ -113,7 +113,6 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "biopsy1_gep", "GEP class display endpoint", "present", "optional", "hard_error",
     "objective4", "biopsy1_gep_mfs", "GEP expected MFS source", "probability", "optional", "hard_error",
     "objective4", "biopsy1_gep_mss", "GEP expected MSS source", "probability", "optional", "hard_error",
-    "objective4", "gep_class_simple", "GEP class endpoint", "gep_class_simple", "optional", "hard_error",
     "objective4", "gep_group", "GEP availability group", "gep_group", "optional", "hard_error",
     "objective4", "gep_test_timing", "Timing of the GEP biopsy relative to treatment", "gep_test_timing", "optional", "warning",
     "objective4", "ciliary_involvement", "ciliary involvement exploratory predictor", "binary_01", "optional", "warning",
@@ -142,7 +141,7 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
 # Factor variables that must have proper levels
 CRITICAL_FACTORS <- c(
     "treatment_group", "sex", "location",
-    "biopsy1_gep", "gep_class_simple", "prame_status", "gep12_prame_status"
+    "biopsy1_gep", "gep_group", "prame_status", "gep12_prame_status"
 )
 
 # Variables to check for missing data

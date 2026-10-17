@@ -28,20 +28,12 @@ make_objective0_validation_dataset <- function() {
         initial_tumor_height_binned = factor(c("<=10", "<=10", "<=10")),
         initial_tumor_diameter_binned = factor(c("<=20", "<=20", "<=20")),
         initial_stage_binary = factor(c("Stage I-III", "Stage I-III", "Stage I-III"), levels = c("Stage I-III", "Stage IV")),
-        gep_class_simple = factor(c("Class 1", "Class 2", "Class 1"), levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")),
         prame_status = factor(c("Negative", "Positive", "Negative"), levels = c("Negative", "Positive", "Unknown", "Not Available")),
         gep12_prame_status = factor(c("Negative", "Positive", "Negative"), levels = c("Negative", "Positive")),
         recurrence1_treatment_clean = factor(c(NA, "GKSRS", NA), levels = c("GKSRS", "Enucleation", "TTT")),
         biopsy1_gep = factor(
-            c("Class 1 PRAME Negative", "Class 2 PRAME Positive", "Class 1 PRAME Negative"),
-            levels = c(
-                "Class 1 PRAME Negative",
-                "Class 1 PRAME Positive",
-                "Class 2 PRAME Negative",
-                "Class 2 PRAME Positive",
-                "GEP Failed/Indeterminate",
-                "GEP Not Tested"
-            )
+            GEP_VALIDATION_GROUP_LEVELS[c(1, 4, 1)],
+            levels = GEP_DETAIL_LEVELS
         ),
         biopsy1_gep_mfs = c(0.95, 0.55, 0.90),
         biopsy1_gep_mss = c(0.96, 0.60, 0.92),

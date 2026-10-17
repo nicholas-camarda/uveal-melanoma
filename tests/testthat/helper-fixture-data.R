@@ -199,7 +199,7 @@ create_test_dataset <- function() {
     biopsy1_gep_mss = c(rep(0.15, 10), rep(0.85, 10)),
 
     # Derived GEP variables (created by create_derived_variables)
-    gep_class_simple = rep(c("Class 1", "Class 2"), each = 10),
+    gep_group = rep(c("Class 1", "Class 2"), each = 10),
     prame_status = rep(c("Negative", "Positive"), each = 10),
     gep12_prame_status = factor(
       rep(c("Negative", "Positive"), each = 10),
@@ -329,14 +329,17 @@ create_pipeline_test_dataset <- function(n = 96L, seed = 20260816L) {
     data$tt_pfs_months <- pmin(data$tt_mets_months, data$tt_death_months)
     data$pfs_event <- as.integer(data$mets_event == 1L | data$death_event == 1L)
 
-    data$biopsy1_gep <- factor(
-      rep(c("Class 1", "Class 2", "Class 1", "Class 2"), length.out = n)
+    data$prame_status <- factor(rep(c("Negative", "Positive"), length.out = n))
+    data$gep_group <- factor(
+      rep(c("Class 1", "Class 2", "Class 1", "Class 2"), length.out = n),
+      levels = GEP_GROUP_LEVELS
     )
-    data$gep_class_simple <- data$biopsy1_gep
-    data$gep_group <- as.character(data$biopsy1_gep)
+    data$biopsy1_gep <- factor(
+      classify_gep_detail(data$gep_group, data$prame_status),
+      levels = GEP_DETAIL_LEVELS
+    )
     data$gep_test_timing <- "Within 31 days of treatment"
     data$gep_test_days <- 0
-    data$prame_status <- factor(rep(c("Negative", "Positive"), length.out = n))
     data$gep12_prame_status <- data$prame_status
     data$retinopathy_burden_event <- rep(c(1L, 0L, 0L, 1L, 0L), length.out = n)
     data$srd_burden_event <- rep(c(0L, 1L, 0L, 0L, 1L), length.out = n)
@@ -363,7 +366,7 @@ SYNTHETIC_CI_GEP_LEVELS <- c("Class 1", "Class 2")
 synthetic_ci_required_columns <- function() {
   c(
     "treatment_group", "consort_group", "synthetic_cohort",
-    "gep_class_simple", "biopsy1_gep", "biopsy1_gep_mfs", "biopsy1_gep_mss", "prame_status",
+    "biopsy1_gep", "biopsy1_gep_mfs", "biopsy1_gep_mss", "prame_status",
     "gep12_prame_status", "gep_validation_set", "tt_mets_months",
     "mets_event", "tt_death_months", "tt_death_years",
     "melanoma_death_event", "competing_death_event",
@@ -439,22 +442,30 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
 
     prame_status <- sample(c("Negative", "Positive"), n, replace = TRUE, prob = c(0.55, 0.45))
     prame_status[c(9L, min(27L, n))] <- NA_character_
+    # A patient whose PRAME result is not reported is outside the definitive set.
+    gep_group <- as.character(gep_class)
+    gep_group[is.na(prame_status)] <- GEP_GROUP_CLASS_PRAME_MISSING
+    gep_definitive <- gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS
+    gep_raw <- ifelse(
+      gep_definitive,
+      ifelse(gep_class == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
+      ifelse(gep_class == "Class 1", "Class_1A_PRAME_not_reported", "Class_2_PRAME_not_reported")
+    )
 
     tibble::tibble(
       treatment_group = treatment_group,
       consort_group = treatment_group,
       synthetic_cohort = synthetic_cohort,
-      gep_class_simple = gep_class,
-      gep_group = as.character(gep_class),
+      gep_group = factor(gep_group, levels = GEP_GROUP_LEVELS),
       gep_test_timing = rep("Within 31 days of treatment", n),
       gep_test_days = rep(0, n),
-      biopsy1_gep_raw = ifelse(gep_class == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
-      biopsy1_gep = factor(as.character(gep_class), levels = SYNTHETIC_CI_GEP_LEVELS),
+      biopsy1_gep_raw = gep_raw,
+      biopsy1_gep = factor(classify_gep_detail(gep_group, prame_status), levels = GEP_DETAIL_LEVELS),
       biopsy1_gep_mfs = expected_mfs,
       biopsy1_gep_mss = expected_mss,
       prame_status = factor(prame_status, levels = c("Negative", "Positive")),
       gep12_prame_status = factor(prame_status, levels = c("Negative", "Positive")),
-      gep_validation_set = rep("Eligible", n),
+      gep_validation_set = ifelse(gep_definitive, "Eligible", "No GEP Data"),
       tt_mets_months = as.numeric(tt_mets_months),
       mets_event = as.integer(mets_event),
       mets_at_or_before_treatment = rep(FALSE, n),
@@ -465,8 +476,8 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
       tt_death_years = as.numeric(tt_death_months / 12),
       melanoma_death_event = as.integer(death_event),
       competing_death_event = as.integer(rep(0L, n)),
-      missing_gep_group = rep("Complete GEP", n),
-      has_gep = TRUE,
+      missing_gep_group = ifelse(gep_definitive, "Complete GEP", "No GEP"),
+      has_gep = gep_definitive,
       has_gep_mfs = TRUE,
       has_gep_mss = TRUE,
       has_prame = !is.na(prame_status),
@@ -478,8 +489,8 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
         rep(c("GKSRS", "Plaque", NA_character_), length.out = n),
         levels = c("GKSRS", "Plaque")
       ),
-      mfs_analysis_eligible = TRUE,
-      mss_analysis_eligible = TRUE,
+      mfs_analysis_eligible = gep_definitive,
+      mss_analysis_eligible = gep_definitive,
       initial_tumor_height = round(rlnorm(n, meanlog = log(3.8), sdlog = 0.28), 1),
       age_at_diagnosis = round(rnorm(n, mean = 65, sd = 8), 0),
       sex = factor(

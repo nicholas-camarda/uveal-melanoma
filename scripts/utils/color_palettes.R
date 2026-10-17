@@ -46,25 +46,16 @@ fill_unknown_palette_levels <- function(out, mapping) {
     out
 }
 
-#' Consistent colors for GEP classes
-#' Supports legacy (Class 1A/1B/2), binary (Class 1/2), and 4-class PRAME system
-#' @param levels Character vector of class levels (e.g., c("Class 1 PRAME Negative","Class 1 PRAME Positive", ...))
+#' Consistent colors for GEP groups
+#'
+#' One color per GEP group, shared by every figure: the Class x PRAME detail groups
+#' (`GEP_DETAIL_LEVELS`) and the Class 1 / Class 2 availability groups.
+#' @param levels Character vector of GEP group or detail labels
 #' @return Named vector mapping levels to colors
 get_gep_class_palette <- function(levels) {
     mapping <- c(
-        # Legacy 3-class
-        "Class 1A" = "#0072B5FF", # blue
-        "Class 1B" = "#E18727FF", # orange
-        "Class 2"  = "#BC3C29FF", # red
-        # Binary simple
-        "Class 1"  = "#0072B5FF",
-        # keep Class 2 same red
-        # 4-class PRAME system
-        "Class 1 PRAME Negative" = "#0072B5FF", # blue
-        "Class 1 PRAME Positive" = "#20854EFF", # green
-        "Class 2 PRAME Negative" = "#E18727FF", # orange
-        "Class 2 PRAME Positive" = "#BC3C29FF", # red
-        # Validation groups (Class x PRAME) and GEP availability groups
+        "Class 1" = "#0072B5FF", # blue
+        "Class 2" = "#BC3C29FF", # red
         "Class 1, PRAME negative" = "#0072B5FF",
         "Class 1, PRAME positive" = "#20854EFF",
         "Class 2, PRAME negative" = "#E18727FF",
@@ -72,10 +63,7 @@ get_gep_class_palette <- function(levels) {
         "Class known, PRAME not reported" = "#7876B1FF",
         "Discordant result" = "#FFDC91FF",
         "Failed or unknown result" = "#6F99ADFF",
-        "Not tested" = "#9E9E9EFF",
-        "GEP Not Tested" = "#9E9E9EFF", # gray
-        "GEP Failed/Indeterminate" = "#6F99ADFF",
-        "No" = "#9E9E9EFF" # legacy support
+        "Not tested" = "#9E9E9EFF"
     )
     lv <- unique(as.character(levels))
     out <- mapping[lv]
@@ -134,7 +122,7 @@ get_recurrence_palette <- function(levels) {
 }
 
 #' Dispatcher to choose palette based on variable semantics
-#' @param variable_name Name of the variable being visualized (e.g., 'gep_class_simple','prame_status','treatment_group')
+#' @param variable_name Name of the variable being visualized (e.g., 'gep_group','prame_status','treatment_group')
 #' @param levels Character vector of factor levels in plotting order
 #' @return Character vector of colors in the same order as levels
 get_palette_by_variable <- function(variable_name, levels) {
@@ -144,7 +132,7 @@ get_palette_by_variable <- function(variable_name, levels) {
         unique(as.character(levels))
     }
     pal <- switch(variable_name,
-        "gep_class_simple" = get_gep_class_palette(lv),
+        "gep_group" = get_gep_class_palette(lv),
         "biopsy1_gep" = get_gep_class_palette(lv),
         "prame_status" = get_prame_palette(lv),
         "treatment_group" = get_treatment_palette(lv),

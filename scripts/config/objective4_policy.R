@@ -55,7 +55,7 @@ GEP_EXPLORATORY_INNER_FOLDS <- 5L
 # Sample size requirement for any analysis
 GEP_MIN_SAMPLE_SIZE <- 20
 
-GEP_DEFINITIVE_SIMPLE_LEVELS <- c("Class 1", "Class 2")
+GEP_DEFINITIVE_GROUP_LEVELS <- c("Class 1", "Class 2")
 GEP_CLASS_1_DEFINITIVE_RAW_LEVELS <- c(
     "Class_1A_PRAME_negative",
     "Class_1A_PRAME_positive",
@@ -80,11 +80,6 @@ GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS <- c(
 )
 GEP_DISCORDANT_RAW_LEVELS <- "Class_1A_PRAME_discordant"
 GEP_TEST_FAILED_RAW_LEVELS <- c("Failed", "Unknown")
-GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS <- c(
-    GEP_TEST_FAILED_RAW_LEVELS,
-    GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS,
-    GEP_DISCORDANT_RAW_LEVELS
-)
 GEP_NOT_TESTED_RAW_LEVELS <- c("No", "N/A")
 
 # Reader-facing GEP availability groups. Class 1 / Class 2 are definitive calls
@@ -102,6 +97,19 @@ GEP_GROUP_LEVELS <- c(
     GEP_GROUP_DISCORDANT,
     GEP_GROUP_TEST_FAILED,
     GEP_GROUP_NOT_TESTED
+)
+# Groups with a laboratory result that is not a definitive Class 1/2 call with PRAME
+# reported; they are drawn de-emphasised in survival figures.
+GEP_GROUPS_WITHOUT_DEFINITIVE_CALL <- c(
+    GEP_GROUP_CLASS_PRAME_MISSING,
+    GEP_GROUP_DISCORDANT,
+    GEP_GROUP_TEST_FAILED
+)
+# Class x PRAME detail used for the `biopsy1_gep` display factor: the four validation
+# groups, then every other availability group under its own label.
+GEP_DETAIL_LEVELS <- c(
+    GEP_VALIDATION_GROUP_LEVELS,
+    setdiff(GEP_GROUP_LEVELS, GEP_DEFINITIVE_GROUP_LEVELS)
 )
 
 # Recorded causes of death that do not say whether the death was melanoma-specific.
@@ -122,6 +130,10 @@ GEP_TEST_TIMING_LEVELS <- c(
     "No biopsy date"
 )
 GEP_TEST_TIMING_LATE <- GEP_TEST_TIMING_LEVELS[[4]]
+# A biopsy this many days before treatment (or earlier) may be a date-entry error or a
+# long-standing earlier sample; the patient stays in the analysis and is listed for review.
+GEP_TEST_REVIEW_BEFORE_DAYS <- 365
+GEP_TEST_REVIEW_BEFORE_REASON <- sprintf("More than %d days before treatment: confirm the biopsy date", GEP_TEST_REVIEW_BEFORE_DAYS)
 
 #' Classify the biopsy date relative to treatment
 #'
@@ -175,96 +187,28 @@ classify_gep_group <- function(raw_label) {
         TRUE ~ NA_character_
     )
 }
-GEP_INVALID_ANALYSIS_LABELS <- c(
-    GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS,
-    GEP_NOT_TESTED_RAW_LEVELS,
-    "GEP Failed/Indeterminate",
-    "GEP Not Tested"
-)
 
-# GEP-specific derived variables
-GEP_DERIVED_VARIABLES <- c(
-    "gep_class_simple", "prame_status", "expected_mfs_5yr", "expected_mss_5yr"
-)
-
-GEP_DISPLAY_VARIABLES <- c(
-    "biopsy1_gep", "gep_class_simple", "prame_status", "gep12_prame_status"
-)
-
-# Objective 4 grouping specs and per-context defaults.
-# Change these mappings when reader-facing or technical GEP groupings need to move together.
-GEP_GROUPING_SPECS <- list(
-    biopsy1_gep = list(
-        key = "biopsy1_gep",
-        var = "biopsy1_gep",
-        label = "GEP Class",
-        legend_title = "GEP Class",
-        allowed_levels = NULL,
-        reader_facing = FALSE
-    ),
-    biopsy1_gep_model = list(
-        key = "biopsy1_gep_model",
-        var = "biopsy1_gep_model",
-        label = "GEP Class",
-        legend_title = "GEP Class",
-        allowed_levels = NULL,
-        reader_facing = FALSE
-    ),
-    gep_class_simple = list(
-        key = "gep_class_simple",
-        var = "gep_class_simple",
-        label = "Simplified GEP Class",
-        legend_title = "GEP Class (Simple)",
-        allowed_levels = c("Class 1", "Class 2"),
-        reader_facing = TRUE
-    )
-)
-
-OBJECTIVE4_GEP_GROUPING <- list(
-    mfs = list(
-        observed_expected = "biopsy1_gep",
-        visuals = "biopsy1_gep",
-        visuals_model = "biopsy1_gep_model"
-    ),
-    mss = list(
-        observed_expected = "biopsy1_gep",
-        competing_risk = "biopsy1_gep",
-        reporting = "biopsy1_gep",
-        visuals = "gep_class_simple"
-    )
-)
-
-get_gep_grouping_spec <- function(grouping_key) {
-    if (!grouping_key %in% names(GEP_GROUPING_SPECS)) {
-        stop(sprintf("Unknown Objective 4 grouping key: %s", grouping_key))
-    }
-
-    GEP_GROUPING_SPECS[[grouping_key]]
-}
-
-get_gep_grouping_for_context <- function(outcome, context) {
-    if (!outcome %in% names(OBJECTIVE4_GEP_GROUPING)) {
-        stop(sprintf("Unknown Objective 4 outcome grouping scope: %s", outcome))
-    }
-
-    outcome_grouping <- OBJECTIVE4_GEP_GROUPING[[outcome]]
-    if (!context %in% names(outcome_grouping)) {
-        stop(sprintf("Unknown Objective 4 grouping context '%s' for outcome '%s'", context, outcome))
-    }
-
-    get_gep_grouping_spec(outcome_grouping[[context]])
-}
-
-#' Collapse GEP availability groups to the simple class label used by eligibility flags
+#' Classify availability group and PRAME status into the Class x PRAME detail label
 #'
-#' @param gep_group Character vector from `classify_gep_group()`.
-#' @return Character vector: `Class 1`, `Class 2`, `GEP Not Tested`, or
-#'   `GEP Failed/Indeterminate` (every other group); `NA` stays `NA`.
-derive_gep_class_simple <- function(gep_group) {
+#' Single mapping behind the `biopsy1_gep` display factor and the four validation
+#' groups. Class 1 and Class 2 patients carry PRAME by definition of the group, so
+#' they split into `GEP_VALIDATION_GROUP_LEVELS`; every other group keeps its own
+#' label.
+#'
+#' @param gep_group Character or factor vector from `classify_gep_group()`.
+#' @param prame_status Character or factor vector with `Negative`/`Positive` for
+#'   Class 1/2 patients.
+#' @return Character vector of `GEP_DETAIL_LEVELS`. A Class 1/2 patient without a
+#'   `Negative`/`Positive` PRAME status returns `NA` so it surfaces in validation.
+classify_gep_detail <- function(gep_group, prame_status) {
+    gep_group <- as.character(gep_group)
+    prame_status <- as.character(prame_status)
     dplyr::case_when(
-        gep_group %in% c("Class 1", "Class 2") ~ as.character(gep_group),
-        gep_group %in% GEP_GROUP_NOT_TESTED ~ "GEP Not Tested",
-        !is.na(gep_group) ~ "GEP Failed/Indeterminate",
+        gep_group == "Class 1" & prame_status %in% "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[1]],
+        gep_group == "Class 1" & prame_status %in% "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[2]],
+        gep_group == "Class 2" & prame_status %in% "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[3]],
+        gep_group == "Class 2" & prame_status %in% "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[4]],
+        gep_group %in% setdiff(GEP_GROUP_LEVELS, GEP_DEFINITIVE_GROUP_LEVELS) ~ gep_group,
         TRUE ~ NA_character_
     )
 }

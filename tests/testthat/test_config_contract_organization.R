@@ -39,7 +39,7 @@ test_that("objective-specific configuration definitions live in their named modu
         ),
         "objective4_policy.R" = c(
             "GEP_VALIDATION_HORIZON_MONTHS <-",
-            "OBJECTIVE4_GEP_GROUPING <-"
+            "GEP_GROUP_LEVELS <-"
         ),
         "objective4_contracts.R" = c("OBJECTIVE4_GEP_DERIVATION_CONTRACT <-")
     )
@@ -78,13 +78,15 @@ test_that("normalized objective contracts remain available through the public lo
         "OBJECTIVE2_SIMULATED_FISHER_SEED",
         "OBJECTIVE3_MINIMUM_PFS2_PATIENTS",
         "OBJECTIVE3_PFS2_DERIVATION_CONTRACT",
-        "OBJECTIVE4_GEP_GROUPING",
+        "GEP_GROUP_LEVELS",
+        "GEP_DETAIL_LEVELS",
         "OBJECTIVE4_GEP_DERIVATION_CONTRACT",
         "GEP_VALIDATION_HORIZON_MONTHS"
     )
     expect_true(all(vapply(required_objects, exists, logical(1), inherits = TRUE)))
     expect_false(exists("OBJECTIVE2_TOXICITY_ENDPOINTS", inherits = TRUE))
     expect_false(exists("GEP_OBJECTIVE4_GROUPING", inherits = TRUE))
+    expect_false(exists("OBJECTIVE4_GEP_GROUPING", inherits = TRUE))
 })
 
 test_that("Objective 3 thresholds retain their established values", {

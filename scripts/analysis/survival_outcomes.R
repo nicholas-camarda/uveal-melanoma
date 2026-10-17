@@ -1597,7 +1597,7 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         unique(c(display_strata_order, legend_labels_for_fit))
     )
     # Identify strata requiring de-emphasis (thinner line/partial transparency)
-    deemphasised_levels <- intersect(display_strata_order, c("GEP Failed/Indeterminate"))
+    deemphasised_levels <- intersect(display_strata_order, GEP_GROUPS_WITHOUT_DEFINITIVE_CALL)
 
     # Get plot scaling factor from config (allows global adjustment via SURVIVAL_PLOT_SCALE)
     plot_scale <- SURVIVAL_PLOT_SCALE

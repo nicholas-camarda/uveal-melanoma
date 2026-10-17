@@ -10,14 +10,6 @@ test_that("every raw GEP source level maps to exactly one availability group", {
 
     # The named vectors partition the raw levels: no level is listed twice.
     expect_false(anyDuplicated(raw_levels) > 0)
-    expect_setequal(
-        GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS,
-        c(
-            GEP_TEST_FAILED_RAW_LEVELS,
-            GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS,
-            GEP_DISCORDANT_RAW_LEVELS
-        )
-    )
 
     groups <- classify_gep_group(raw_levels)
     expect_false(anyNA(groups))
@@ -58,21 +50,17 @@ test_that("reader-facing GEP group labels use current Class 1/Class 2 terminolog
     expect_false(any(grepl("1A|1B", unlist(get_objective0_contract_allowed_values("gep_group")))))
 })
 
-test_that("definitive GEP groups reproduce the primary validation set definition", {
+test_that("definitive GEP groups are exactly the Class 1/Class 2 calls with PRAME reported", {
     raw <- c(
         GEP_CLASS_1_DEFINITIVE_RAW_LEVELS,
         GEP_CLASS_2_DEFINITIVE_RAW_LEVELS,
-        GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS,
+        GEP_CLASS_KNOWN_PRAME_MISSING_RAW_LEVELS,
+        GEP_DISCORDANT_RAW_LEVELS,
+        GEP_TEST_FAILED_RAW_LEVELS,
         GEP_NOT_TESTED_RAW_LEVELS
     )
-    simple <- dplyr::case_when(
-        raw %in% GEP_CLASS_1_DEFINITIVE_RAW_LEVELS ~ "Class 1",
-        raw %in% GEP_CLASS_2_DEFINITIVE_RAW_LEVELS ~ "Class 2",
-        TRUE ~ NA_character_
-    )
     group <- classify_gep_group(raw)
-    # Class 1/Class 2 in gep_group are exactly the definitive calls with PRAME reported.
-    expect_identical(group %in% GEP_DEFINITIVE_SIMPLE_LEVELS, !is.na(simple))
+    expect_identical(group %in% GEP_DEFINITIVE_GROUP_LEVELS, raw %in% GEP_DEFINITIVE_RAW_LEVELS)
 })
 
 test_that("the discordant source string is normalized once and classified as its own group", {
@@ -93,18 +81,43 @@ test_that("the discordant source string is normalized once and classified as its
     expect_false(grepl("DISCORDANT CASTLE RESULTS", paste(derivation_text, creation_text), fixed = TRUE))
 })
 
-test_that("the simple GEP class is derived from the availability group", {
+test_that("the Class x PRAME detail label splits only the definitive groups", {
     expect_identical(
-        derive_gep_class_simple(c("Class 1", "Class 2", GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_DISCORDANT, GEP_GROUP_TEST_FAILED, GEP_GROUP_NOT_TESTED, NA)),
-        c("Class 1", "Class 2", rep("GEP Failed/Indeterminate", 3), "GEP Not Tested", NA_character_)
+        classify_gep_detail(
+            c("Class 1", "Class 1", "Class 2", "Class 2", GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_DISCORDANT, GEP_GROUP_TEST_FAILED, GEP_GROUP_NOT_TESTED),
+            c("Negative", "Positive", "Negative", "Positive", "Unknown", "Not Available", "Not Available", "Not Available")
+        ),
+        GEP_DETAIL_LEVELS
     )
-    # Eligibility keys on Class 1/Class 2, so the simple class must never promote another group.
-    groups <- classify_gep_group(c(
-        GEP_CLASS_1_DEFINITIVE_RAW_LEVELS, GEP_CLASS_2_DEFINITIVE_RAW_LEVELS,
-        GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS, GEP_NOT_TESTED_RAW_LEVELS
-    ))
-    simple <- derive_gep_class_simple(groups)
-    expect_identical(simple %in% c("Class 1", "Class 2"), groups %in% c("Class 1", "Class 2"))
+    # A definitive class without a reported PRAME status surfaces as NA, never as a group.
+    expect_true(is.na(classify_gep_detail("Class 1", "Unknown")))
+    expect_true(is.na(classify_gep_detail(NA_character_, "Negative")))
+
+    # The detail levels are the validation groups plus every non-definitive availability group.
+    expect_identical(GEP_DETAIL_LEVELS[seq_along(GEP_VALIDATION_GROUP_LEVELS)], GEP_VALIDATION_GROUP_LEVELS)
+    expect_setequal(
+        GEP_DETAIL_LEVELS[-seq_along(GEP_VALIDATION_GROUP_LEVELS)],
+        setdiff(GEP_GROUP_LEVELS, GEP_DEFINITIVE_GROUP_LEVELS)
+    )
+    expect_identical(
+        GEP_GROUPS_WITHOUT_DEFINITIVE_CALL,
+        setdiff(GEP_GROUP_LEVELS, c(GEP_DEFINITIVE_GROUP_LEVELS, GEP_GROUP_NOT_TESTED))
+    )
+})
+
+test_that("live code carries one GEP label set: no pooled failed/indeterminate label or retired variables", {
+    script_files <- list.files(here::here("scripts"), pattern = "\\.R$", recursive = TRUE, full.names = TRUE)
+    script_text <- vapply(script_files, function(path) paste(readLines(path, warn = FALSE), collapse = "\n"), character(1))
+    retired <- c(
+        "GEP Failed/Indeterminate", "GEP Not Tested", "gep_class_simple", "derive_gep_class_simple",
+        "GEP_FAILED_OR_INDETERMINATE_RAW_LEVELS", "GEP_INVALID_ANALYSIS_LABELS", "GEP_DEFINITIVE_SIMPLE_LEVELS",
+        "GEP_GROUPING_SPECS", "OBJECTIVE4_GEP_GROUPING", "refresh_gep_analysis_flags",
+        "Class 1 PRAME Negative", "Class 2 PRAME Positive"
+    )
+    for (term in retired) {
+        offenders <- basename(script_files)[vapply(script_text, grepl, logical(1), pattern = term, fixed = TRUE)]
+        expect_identical(offenders, character(0), info = term)
+    }
 })
 
 test_that("biopsy timing categories use the documented windows and sign", {

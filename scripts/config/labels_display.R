@@ -77,7 +77,7 @@ STANDARD_TABLE_LABELS <- list(
 
     # GEP variables
     biopsy1_gep = "Gene Expression Profile",
-    gep_class_simple = "GEP Class (Simple)",
+    gep_group = "GEP Result",
     prame_status = "PRAME Status",
 
     # Follow-up
@@ -101,12 +101,6 @@ STANDARD_LEVEL_LABELS <- list(
     ),
     unstaged = c(
         "Yes_Inappropriate_Scan" = "Yes Inappropriate Scan"
-    ),
-    gep_class_simple = c(
-        "Class 1" = "Class 1",
-        "Class 2" = "Class 2",
-        "GEP Failed/Indeterminate" = "Failed or Indeterminate",
-        "GEP Not Tested" = "Not Tested"
     ),
     gep12_prame_status = c(
         "Negative" = "Negative",
@@ -189,7 +183,7 @@ SURVIVAL_PLOT_SCALE <- 1.4 # Scale factor for survival plots
 FOREST_PLOT_VARIABLE_ORDER <- c(
     OBJECTIVE1_AGE_SUBGROUP_VAR, "sex", "location",
     "initial_t_stage_simple", # "initial_t_stage",
-    "gep_class_simple", # gep_class_simple is just Class 1 vs Class 2
+    "gep_group",
     "gep12_prame_status",
     # "initial_tumor_height", "initial_tumor_diameter", 
     # "biopsy1_gep", 
@@ -209,7 +203,7 @@ FORESTPLOT_NAME_MAPPING <- list(
     "initial_tumor_height" = "Initial Tumor Height",
     "initial_tumor_diameter" = "Initial Tumor Diameter",
     "biopsy1_gep" = "GEP Class",
-    "gep_class_simple" = "GEP Class",
+    "gep_group" = "GEP Result",
     "gep12_prame_status" = "PRAME Status",
     "optic_nerve" = "Optic Nerve Abutment"
 )
@@ -217,12 +211,7 @@ FORESTPLOT_NAME_MAPPING <- list(
 # Canonical subgroup levels that should remain visible in forest plots even when
 # a level is not estimable in the fitted model.
 FOREST_PLOT_REQUIRED_LEVELS <- list(
-    gep_class_simple = c(
-        "Class 1",
-        "Class 2",
-        "GEP Failed/Indeterminate",
-        "GEP Not Tested"
-    ),
+    gep_group = GEP_GROUP_LEVELS,
     gep12_prame_status = c(
         "Negative",
         "Positive"

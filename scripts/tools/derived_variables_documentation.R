@@ -382,13 +382,6 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
     ),
 
     # ===== GEP VALIDATION VARIABLES (OBJECTIVE 4) =====
-    gep_class_simple = list(
-        description = "Simplified GEP classification for analysis",
-        calculation = "case_when(str_detect(biopsy1_gep_raw, 'Class_1') ~ 'Class 1', str_detect(biopsy1_gep_raw, 'Class_2') ~ 'Class 2', str_detect(biopsy1_gep_raw, 'No') ~ 'No', TRUE ~ NA)",
-        purpose = "Primary GEP variable for survival analysis and validation",
-        data_type = "character",
-        units = "categorical"
-    ),
     mss_event_type_unknown_cause_melanoma = list(
         description = "MSS process for the cause-of-death sensitivity: 0 censored, 1 melanoma death, 2 other death",
         calculation = "mss_event_type, with other-cause deaths whose recorded cause is Unknown or Unknown_Cancer recoded to 1",
@@ -454,7 +447,7 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
     ),
     gep12_prame_status = list(
         description = "PRAME status restricted to tumors with Class 1 or Class 2 DecisionDx results",
-        calculation = "case_when(gep_class_simple %in% c('Class 1', 'Class 2') & prame_status %in% c('Positive', 'Negative') ~ prame_status, TRUE ~ NA)",
+        calculation = "case_when(gep_group %in% c('Class 1', 'Class 2') & prame_status %in% c('Positive', 'Negative') ~ prame_status, TRUE ~ NA)",
         purpose = "Supports subgrouping on PRAME expression while implicitly filtering to definitive GEP classes",
         data_type = "factor",
         units = "categorical"
@@ -463,7 +456,7 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
     # ===== GEP VALIDATION SET =====
     gep_validation_set = list(
         description = "Objective 4 eligibility status for imported GEP validation",
-        calculation = "Label rows with non-missing biopsy1_gep_mfs, non-missing biopsy1_gep_mss, and a definitive simplified GEP class as 'Eligible'; mark all other rows as 'No GEP Data'",
+        calculation = "Label rows with non-missing biopsy1_gep_mfs, non-missing biopsy1_gep_mss, and a Class 1/Class 2 gep_group as 'Eligible'; mark all other rows as 'No GEP Data'",
         purpose = "Identifies rows with analyzable imported GEP probabilities without creating a model-training partition",
         data_type = "character",
         units = "categorical"

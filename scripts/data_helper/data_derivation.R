@@ -391,7 +391,6 @@ create_derived_variables <- function(data) {
         ))) %>%
         mutate(
             gep_group = classify_gep_group(normalize_gep_source_label(biopsy1_gep)),
-            gep_class_simple = derive_gep_class_simple(gep_group),
             gep_test_days = as.numeric(difftime(as.Date(biopsy1), as.Date(treatment_date), units = "days")),
             gep_test_timing = classify_gep_test_timing(gep_test_days),
             ciliary_involvement = as.integer(grepl(
@@ -415,18 +414,10 @@ create_derived_variables <- function(data) {
             # Limit PRAME subgrouping to tumors with definitive Class 1/2 results
             gep12_prame_status = factor(
                 case_when(
-                    gep_class_simple %in% c("Class 1", "Class 2") & prame_status %in% c("Positive", "Negative") ~ prame_status,
+                    gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS & prame_status %in% c("Positive", "Negative") ~ prame_status,
                     TRUE ~ NA_character_
                 ),
                 levels = c("Negative", "Positive")
-            ),
-            # Preserve only Objective 4 eligibility status; imported GEP
-            # predictions are validated directly rather than training a model.
-            gep_validation_set = if_else(
-                !is.na(biopsy1_gep_mfs) & !is.na(biopsy1_gep_mss) &
-                    !is.na(gep_class_simple) & gep_class_simple %in% GEP_DEFINITIVE_SIMPLE_LEVELS,
-                "Eligible",
-                "No GEP Data"
             )
         ) %>%
         mutate(
@@ -440,42 +431,11 @@ create_derived_variables <- function(data) {
             # Pre-calculated risk variables (prevents redundant calculations in analysis)
             predicted_mfs_risk_5yr = 1 - expected_mfs_5yr,
             
-            predicted_mss_risk_5yr = 1 - expected_mss_5yr,
-            
-            # Statistical summary variables (prevents analysis-time calculations)
-            mfs_analysis_eligible = !is.na(biopsy1_gep) & 
-                                   !biopsy1_gep %in% c("GEP Failed/Indeterminate", "GEP Not Tested") &
-                                   mets_free_at_baseline &
-                                   !is.na(tt_mets_months_analysis) &
-                                   !is.na(mets_event_analysis) &
-                                   tt_mets_months_analysis >= 0 &
-                                   biopsy1_gep_mfs >= 0 & biopsy1_gep_mfs <= 1,
-
-            mss_analysis_eligible = !is.na(biopsy1_gep) & 
-                                   !biopsy1_gep %in% c("GEP Failed/Indeterminate", "GEP Not Tested") &
-                                   !is.na(tt_death_years) & 
-                                   !is.na(melanoma_death_event) &
-                                   !is.na(competing_death_event) &
-                                   tt_death_years >= 0 &
-                                   biopsy1_gep_mss >= 0 & biopsy1_gep_mss <= 1
-        ) %>%
-        mutate(
-            # Create missing data indicator variables
-            has_gep = !is.na(biopsy1_gep) & !biopsy1_gep %in% c("GEP Failed/Indeterminate", "GEP Not Tested"),
-            has_gep_mfs = !is.na(biopsy1_gep_mfs),
-            has_gep_mss = !is.na(biopsy1_gep_mss),
-            has_prame = !is.na(prame_status) &
-                prame_status %in% c("Positive", "Negative"),
-            missing_gep_group = case_when(
-                has_gep & has_gep_mfs & has_gep_mss ~ "Complete GEP",
-                has_gep & (has_gep_mfs | has_gep_mss) ~ "Partial GEP",
-                TRUE ~ "No GEP"
-            )
-        ) %>%
-        mutate()
+            predicted_mss_risk_5yr = 1 - expected_mss_5yr
+        )
 
     new_data <- derive_last_vision_followup_fields(new_data)
-    new_data <- refresh_gep_analysis_flags(new_data)
+    new_data <- derive_gep_analysis_flags(new_data)
 
     new_variables <- setdiff(colnames(new_data), old_variables)
     if (length(new_variables) > 0) {
@@ -488,64 +448,31 @@ create_derived_variables <- function(data) {
     return(new_data)
 }
 
-refresh_gep_analysis_flags <- function(data) {
-    if (!"gep_class_simple" %in% names(data)) {
-        return(data)
+#' Derive the Objective 4 eligibility flags and GEP availability indicators
+#'
+#' The one definition of who enters the definitive-GEP validation: a Class 1/Class 2
+#' group (PRAME reported), an imported prediction in [0, 1], and the endpoint's own
+#' follow-up fields. Everything is keyed on `gep_group`, so no other label set is involved.
+#'
+#' @param data Data frame with `gep_group`, `biopsy1_gep_mfs`, `biopsy1_gep_mss`,
+#'   `prame_status`, and the MFS/MSS follow-up and event fields.
+#' @return `data` with `gep_validation_set`, `mfs_analysis_eligible`,
+#'   `mss_analysis_eligible`, `has_gep`, `has_gep_mfs`, `has_gep_mss`, `has_prame`
+#'   and `missing_gep_group`.
+derive_gep_analysis_flags <- function(data) {
+    required <- c(
+        "gep_group", "biopsy1_gep_mfs", "biopsy1_gep_mss", "prame_status",
+        "mets_free_at_baseline", "tt_mets_months_analysis", "mets_event_analysis",
+        "tt_death_years", "melanoma_death_event", "competing_death_event"
+    )
+    missing_cols <- setdiff(required, names(data))
+    if (length(missing_cols) > 0L) {
+        stop(sprintf("GEP analysis flags require columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
     }
 
-    n_rows <- nrow(data)
-    simple_values <- as.character(data$gep_class_simple)
-    definitive_simple_flag <- !is.na(simple_values) & simple_values %in% GEP_DEFINITIVE_SIMPLE_LEVELS
-
-    if ("biopsy1_gep" %in% names(data)) {
-        biopsy_values <- as.character(data$biopsy1_gep)
-        definitive_biopsy_flag <- !is.na(biopsy_values) & !biopsy_values %in% GEP_INVALID_ANALYSIS_LABELS
-    } else {
-        definitive_biopsy_flag <- rep(TRUE, n_rows)
-    }
-
-    if ("biopsy1_gep_raw" %in% names(data)) {
-        raw_values <- as.character(data$biopsy1_gep_raw)
-        definitive_raw_flag <- !is.na(raw_values) & raw_values %in% GEP_DEFINITIVE_RAW_LEVELS
-
-        if ("biopsy1_gep_text_raw" %in% names(data)) {
-            text_raw_values <- as.character(data$biopsy1_gep_text_raw)
-            collapsed_definitive_rows <- !is.na(raw_values) &
-                raw_values == "Other" &
-                !is.na(text_raw_values) &
-                text_raw_values %in% GEP_DEFINITIVE_RAW_LEVELS
-
-            if (any(collapsed_definitive_rows)) {
-                logger::log_warn(formatted(sprintf(
-                    "Detected %d rows with definitive raw GEP labels collapsed to 'Other'; regenerate Objective 0 analytic artifacts to restore canonical GEP classifications.",
-                    sum(collapsed_definitive_rows)
-                )))
-            }
-        }
-    } else {
-        definitive_raw_flag <- rep(TRUE, n_rows)
-    }
-
-    definitive_gep_flag <- definitive_simple_flag & definitive_biopsy_flag & definitive_raw_flag
-
-    valid_mfs_prediction_flag <- if ("biopsy1_gep_mfs" %in% names(data)) {
-        !is.na(data$biopsy1_gep_mfs) & data$biopsy1_gep_mfs >= 0 & data$biopsy1_gep_mfs <= 1
-    } else {
-        rep(FALSE, n_rows)
-    }
-
-    valid_mss_prediction_flag <- if ("biopsy1_gep_mss" %in% names(data)) {
-        !is.na(data$biopsy1_gep_mss) & data$biopsy1_gep_mss >= 0 & data$biopsy1_gep_mss <= 1
-    } else {
-        rep(FALSE, n_rows)
-    }
-
-    has_prame_flag <- if ("prame_status" %in% names(data)) {
-        prame_values <- as.character(data$prame_status)
-        !is.na(prame_values) & prame_values %in% c("Positive", "Negative")
-    } else {
-        rep(FALSE, n_rows)
-    }
+    definitive_gep_flag <- as.character(data$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS
+    valid_mfs_prediction_flag <- !is.na(data$biopsy1_gep_mfs) & data$biopsy1_gep_mfs >= 0 & data$biopsy1_gep_mfs <= 1
+    valid_mss_prediction_flag <- !is.na(data$biopsy1_gep_mss) & data$biopsy1_gep_mss >= 0 & data$biopsy1_gep_mss <= 1
 
     data %>%
         mutate(
@@ -569,7 +496,7 @@ refresh_gep_analysis_flags <- function(data) {
             has_gep = definitive_gep_flag,
             has_gep_mfs = valid_mfs_prediction_flag,
             has_gep_mss = valid_mss_prediction_flag,
-            has_prame = has_prame_flag,
+            has_prame = as.character(prame_status) %in% c("Positive", "Negative"),
             missing_gep_group = case_when(
                 definitive_gep_flag & valid_mfs_prediction_flag & valid_mss_prediction_flag ~ "Complete GEP",
                 definitive_gep_flag & (valid_mfs_prediction_flag | valid_mss_prediction_flag) ~ "Partial GEP",

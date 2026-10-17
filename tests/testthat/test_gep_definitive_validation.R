@@ -5,7 +5,7 @@ synthetic_validation_cohort <- function(n_per_group = 10L, seed = 11L) {
         event_time <- stats::rexp(length(groups), rate = -log(imported_survival) / 60)
         censor_time <- stats::runif(length(groups), 20, 120)
         data.frame(
-            gep_class_simple = ifelse(grepl("Class 1", groups), "Class 1", "Class 2"),
+            gep_group = ifelse(grepl("Class 1", groups), "Class 1", "Class 2"),
             prame_status = ifelse(grepl("positive", groups), "Positive", "Negative"),
             biopsy1_gep_mfs = imported_survival,
             biopsy1_gep_mss = pmin(0.99, imported_survival + 0.03),
@@ -24,7 +24,7 @@ synthetic_validation_cohort <- function(n_per_group = 10L, seed = 11L) {
 
 test_that("validation groups cover exactly the four Class x PRAME cells", {
     grouped <- assign_gep_validation_group(data.frame(
-        gep_class_simple = c("Class 1", "Class 1", "Class 2", "Class 2", "Class 2", "GEP Not Tested"),
+        gep_group = c("Class 1", "Class 1", "Class 2", "Class 2", "Class 2", GEP_GROUP_NOT_TESTED),
         prame_status = c("Negative", "Positive", "Negative", "Positive", "Unknown", "Not Available")
     ))
     expect_identical(
@@ -219,7 +219,7 @@ test_that("the definitive validation module reports no 7- or 10-year horizons", 
 test_that("validation outputs reconcile flow counts with Record_Issues and keep identifiers out of the primary workbook", {
     cohort <- synthetic_validation_cohort(n_per_group = 12L)
     extra <- data.frame(
-        gep_class_simple = c("GEP Failed/Indeterminate", "GEP Failed/Indeterminate", "GEP Not Tested", "GEP Not Tested", "GEP Not Tested"),
+        gep_group = c(GEP_GROUP_TEST_FAILED, GEP_GROUP_TEST_FAILED, rep(GEP_GROUP_NOT_TESTED, 3)),
         prame_status = "Not Available",
         biopsy1_gep_mfs = NA_real_, biopsy1_gep_mss = NA_real_,
         tt_mets_months_analysis = 30, mfs_event_type = 0L, tt_death_months = 30, mss_event_type = 0L,
@@ -230,7 +230,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     cohort <- rbind(cohort, extra)
     cohort$id <- sprintf("P%03d", seq_len(nrow(cohort)))
     cohort$biopsy1_gep_raw <- c(
-        ifelse(cohort$gep_class_simple[1:48] == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
+        ifelse(cohort$gep_group[1:48] == "Class 1", "Class_1A_PRAME_negative", "Class_2_PRAME_negative"),
         "Failed", "Class_2_PRAME_not_reported", NA, NA, NA
     )
     cohort$gep_group <- classify_gep_group(cohort$biopsy1_gep_raw)
@@ -239,6 +239,9 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     cohort$gep_test_timing[3] <- GEP_TEST_TIMING_LATE
     cohort$gep_test_timing[4] <- GEP_TEST_TIMING_LEVELS[[5]]
     cohort$gep_test_days[4] <- NA_real_
+    # One primary patient has a biopsy about six years before treatment (date review).
+    cohort$gep_test_timing[5] <- GEP_TEST_TIMING_LEVELS[[1]]
+    cohort$gep_test_days[5] <- -2197
 
     results <- run_gep_definitive_validation(cohort, n_boot = 20L)
     out_dir <- withr::local_tempdir()
@@ -270,12 +273,15 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     # Every patient outside the primary set, plus primary patients flagged for biopsy timing.
     flagged <- flow$n[grepl("^Biopsy timing in the primary set: (More than 180|No biopsy)", flow$step)]
     expect_identical(sum(flagged), 2)
-    expect_identical(nrow(issues), as.integer(total - primary + sum(flagged)))
+    review <- flow$n[grepl("date review", flow$step)]
+    expect_identical(review, 1)
+    expect_identical(nrow(issues), as.integer(total - primary + sum(flagged) + review))
     outside <- issues[issues$step == "GEP availability group", ]
     expect_setequal(unique(outside$reason), c(GEP_GROUP_TEST_FAILED, GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_NOT_TESTED))
     expect_true(all(outside$field == "biopsy1_gep_raw"))
     timing <- issues[startsWith(issues$step, "Biopsy timing"), ]
-    expect_setequal(timing$reason, c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]]))
+    expect_setequal(timing$reason, c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]], GEP_TEST_REVIEW_BEFORE_REASON))
+    expect_identical(timing$current_value[timing$reason == GEP_TEST_REVIEW_BEFORE_REASON], "-2197 days from treatment")
     expect_equal(sum(flow$n[startsWith(flow$step, "Biopsy timing in the primary set")]), primary)
 
     sensitivity <- readxl::read_excel(paths$primary, sheet = "Sensitivity_Late_Biopsy")
@@ -301,6 +307,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
 test_that("validation reporting fails clearly when the GEP group column is missing", {
     cohort <- synthetic_validation_cohort(n_per_group = 10L)
     results <- run_gep_definitive_validation(cohort, n_boot = 10L)
+    cohort$gep_group <- NULL
     expect_error(
         write_gep_validation_outputs(
             results, cohort, "uveal_melanoma_full_cohort",

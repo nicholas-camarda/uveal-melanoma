@@ -8,18 +8,15 @@
 
 #' Assign the Class x PRAME validation group
 #'
-#' @param data Data frame with `gep_class_simple` and `prame_status`.
+#' @param data Data frame with `gep_group` and `prame_status`.
 #' @return `data` with a factor column `validation_group` (levels
 #'   `GEP_VALIDATION_GROUP_LEVELS`); rows outside the four groups get `NA`.
 assign_gep_validation_group <- function(data) {
-    group_label <- dplyr::case_when(
-        data$gep_class_simple == "Class 1" & data$prame_status == "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[1]],
-        data$gep_class_simple == "Class 1" & data$prame_status == "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[2]],
-        data$gep_class_simple == "Class 2" & data$prame_status == "Negative" ~ GEP_VALIDATION_GROUP_LEVELS[[3]],
-        data$gep_class_simple == "Class 2" & data$prame_status == "Positive" ~ GEP_VALIDATION_GROUP_LEVELS[[4]],
-        TRUE ~ NA_character_
+    detail <- classify_gep_detail(data$gep_group, data$prame_status)
+    data$validation_group <- factor(
+        ifelse(detail %in% GEP_VALIDATION_GROUP_LEVELS, detail, NA_character_),
+        levels = GEP_VALIDATION_GROUP_LEVELS
     )
-    data$validation_group <- factor(group_label, levels = GEP_VALIDATION_GROUP_LEVELS)
     data
 }
 
@@ -42,7 +39,7 @@ prepare_gep_validation_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
         MSS = list(eligible = "mss_analysis_eligible", time = "tt_death_months",
                    status = "mss_event_type", expected = "biopsy1_gep_mss")
     )
-    required <- c(spec$eligible, spec$time, spec$status, spec$expected, "gep_class_simple", "prame_status", "gep_test_timing")
+    required <- c(spec$eligible, spec$time, spec$status, spec$expected, "gep_group", "prame_status", "gep_test_timing")
     missing_cols <- setdiff(required, names(data))
     if (length(missing_cols) > 0L) {
         stop(sprintf("%s validation requires columns: %s", endpoint, paste(missing_cols, collapse = ", ")), call. = FALSE)

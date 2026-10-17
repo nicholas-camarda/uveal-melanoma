@@ -238,7 +238,7 @@ test_that("representative survival and CIF plots do not emit duplicate-scale mes
         mets_event = rep(c(0, 1), length.out = 12),
         biopsy1_gep = factor(
             rep(
-                c("Class 1 PRAME Negative", "Class 1 PRAME Positive", "Class 2 PRAME Negative"),
+                GEP_VALIDATION_GROUP_LEVELS[1:3],
                 each = 4
             )
         )

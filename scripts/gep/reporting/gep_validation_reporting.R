@@ -17,13 +17,15 @@ summarize_gep_validation_flow <- function(data, results) {
             "Definitive Class 1/2 with PRAME reported (primary validation set)",
             "Eligible for the MFS endpoint", "Analysed for MFS",
             "Eligible for the MSS endpoint", "Analysed for MSS",
-            paste("Biopsy timing in the primary set:", GEP_TEST_TIMING_LEVELS)
+            paste("Biopsy timing in the primary set:", GEP_TEST_TIMING_LEVELS),
+            sprintf("Biopsy more than %d days before treatment in the primary set (date review)", GEP_TEST_REVIEW_BEFORE_DAYS)
         ),
         n = c(
             nrow(data), as.integer(group_counts), as.integer(primary_n),
             sum(data$mfs_analysis_eligible %in% TRUE), nrow(results$mfs$prepared),
             sum(data$mss_analysis_eligible %in% TRUE), nrow(results$mss$prepared),
-            as.integer(table(factor(data$gep_test_timing[data$gep_group %in% c("Class 1", "Class 2")], levels = GEP_TEST_TIMING_LEVELS)))
+            as.integer(table(factor(data$gep_test_timing[data$gep_group %in% c("Class 1", "Class 2")], levels = GEP_TEST_TIMING_LEVELS))),
+            sum(data$gep_group %in% c("Class 1", "Class 2") & data$gep_test_days < -GEP_TEST_REVIEW_BEFORE_DAYS, na.rm = TRUE)
         ),
         note = c(
             "", rep("", length(GEP_GROUP_LEVELS)),
@@ -32,7 +34,8 @@ summarize_gep_validation_flow <- function(data, results) {
             "Equals eligible unless a record lacks follow-up time or status",
             "Definitive call, valid imported prediction, melanoma-death follow-up available",
             "Equals eligible unless a record lacks follow-up time or status",
-            c("", "", "", "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis", "Flagged in Record_Issues")
+            c("", "", "", "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis", "Flagged in Record_Issues"),
+            "Counted in the timing row above; flagged in Record_Issues and kept in the analysis"
         ),
         stringsAsFactors = FALSE
     )
@@ -67,13 +70,14 @@ build_gep_record_issues <- function(data) {
         stringsAsFactors = FALSE
     )
     # Primary-set patients whose biopsy timing needs a look (kept in the analysis).
-    flagged <- !outside & as.character(data$gep_test_timing) %in% c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]])
+    review_before <- !is.na(data$gep_test_days) & data$gep_test_days < -GEP_TEST_REVIEW_BEFORE_DAYS
+    flagged <- !outside & (as.character(data$gep_test_timing) %in% c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]]) | review_before)
     n_flagged <- sum(flagged)
     timing_rows <- data.frame(
         record_key = record_key[flagged],
         key_source = rep(key_source, n_flagged),
         step = rep("Biopsy timing (patient kept in the primary set)", n_flagged),
-        reason = as.character(data$gep_test_timing[flagged]),
+        reason = ifelse(review_before[flagged], GEP_TEST_REVIEW_BEFORE_REASON, as.character(data$gep_test_timing[flagged])),
         field = rep("gep_test_days", n_flagged),
         current_value = ifelse(is.na(data$gep_test_days[flagged]), "missing", sprintf("%.0f days from treatment", data$gep_test_days[flagged])),
         stringsAsFactors = FALSE
