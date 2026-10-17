@@ -211,9 +211,7 @@ Runtime output root (see the [README path model](../README.md#path-model))
 │   │   │   └── d_serous_retinal_detachment/
 │   │   ├── 03_Repeat_Radiation/
 │   │   │   └── a_pfs2/                    # 01_cohort_support … 06_ph_diagnostics (conditional)
-│   │   └── 04_GEP_Validation/
-│   │       ├── a_metastasis_free_survival/
-│   │       └── b_melanoma_specific_survival/
+│   │   └── 04_GEP_Validation/          # *_gep_validation_5yr.xlsx, figures, d_no_gep/
 │   ├── uveal_restricted/           # Restricted cohort runtime outputs
 │   ├── gksrs/                      # GKSRS-only cohort runtime outputs
 │   └── merged_tables/              # Cross-cohort comparisons
@@ -250,14 +248,11 @@ scripts/
 │   ├── data_derivation.R
 │   ├── data_loading.R
 │   ├── data_summaries.R
-│   ├── data_utilities.R
-│   └── gep_missing_data_analysis.R
-├── gep/                            # Objective 4 evaluation, reporting, visuals
-│   ├── cores/
-│   ├── orchestration/
+│   └── data_utilities.R
+├── gep/                            # Objective 4 validation, no-GEP analysis, reporting
 │   ├── reporting/
 │   ├── utils/
-│   └── visualization/
+│   └── validation/
 ├── subgroup/                       # Subgroup data prep, modeling, formatting
 │   ├── subgroup_data_prep.R
 │   ├── subgroup_formatting.R
@@ -412,9 +407,9 @@ The analysis pipeline includes robust error handling for situations where data l
 
 #### Objective 4 (GEP Validation) Denominator Constraints
 
-- Main MFS/MSS validation subsets include only definitive raw DecisionDx Class 1 / Class 2 labels with valid endpoint-specific imported GEP probabilities.
-- Nondefinitive labels (`Failed`, `Unknown`, discordant, and not-reported patterns) are intentionally excluded from primary Objective 4 denominators.
-- Sparse definitive-label distributions can limit some horizon-specific summary metrics or PRAME comparisons in smaller cohorts; the pipeline writes explanatory outputs rather than silently dropping sections.
+- The primary MFS/MSS validation set is the patients in the `Class 1` and `Class 2` GEP groups (definitive call, PRAME reported) with a valid imported prediction and the endpoint's follow-up fields.
+- Every other patient belongs to one of four groups (`Class known, PRAME not reported`, `Discordant result`, `Failed or unknown result`, `Not tested`) and is reported separately.
+- Sparse groups limit the 5-year estimates in smaller cohorts: a group with no patient followed to 60 months has no 5-year estimate, a group with no events has no interval, and each case is recorded in the diagnostics workbook `Checks` sheet.
 
 ### Automatic Error Handling
 
@@ -507,55 +502,44 @@ Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the 
 
 **Note:** Analysis automatically skips survival modeling when insufficient events present (minimum: 5 total events across 2+ treatment groups)
 
-### Objective 4: GEP Predictive Accuracy
+### Objective 4: GEP Validation
 
-**Purpose:** Validate externally supplied lab-reported GEP survival probabilities against real outcomes for metastasis-free survival (MFS) and melanoma-specific survival (MSS)
+**Purpose:** Compare the laboratory's imported group-level 5-year GEP estimates with observed 5-year outcomes (metastasis-free survival, MFS; melanoma-specific survival, MSS), describe outcomes in every GEP availability group, and evaluate baseline clinical features against T stage and tumor diameter in patients without a definitive call.
 
-**Location:** `{cohort}/04_GEP_Validation/a_metastasis_free_survival/` and `b_melanoma_specific_survival/`
+**Location:** `{cohort}/04_GEP_Validation/` (the full cohort also writes `d_no_gep/`).
 
-**Implementation:** `scripts/workflow/objective_4_gep_analysis.R`
+**Implementation:** `scripts/workflow/objective_4_gep_analysis.R` calls `run_gep_definitive_validation()` and `write_gep_validation_outputs()` for every cohort, and `run_no_gep_analysis()` and `write_no_gep_outputs()` for the full cohort. A failing component stops the run.
+
+| Module | Role |
+|--------|------|
+| `scripts/config/objective4_policy.R` | GEP groups and their raw source labels, horizon, seeds, thresholds, biopsy-timing windows |
+| `scripts/config/objective4_contracts.R` | Row-wise contract between the imported values, the 5-year fields and the eligibility flags |
+| `scripts/data_helper/data_derivation.R` | `gep_group`, biopsy timing, `derive_gep_analysis_flags()` (the one definition of eligibility) |
+| `scripts/data_helper/cohort_creation.R` | `biopsy1_gep` display factor built by `classify_gep_detail()` |
+| `scripts/gep/validation/gep_definitive_validation.R` | Group risks, Harrell's C, competing-risk AUC, proportional-hazards check, sensitivities |
+| `scripts/gep/validation/gep_no_gep_analysis.R` | Group outcomes, predictor screening, out-of-fold models, comparators, AUC differences |
+| `scripts/gep/utils/gep_exploratory_internal_validation.R` | Nested cross-validation and inverse-probability-of-censoring weights for the ridge models |
+| `scripts/gep/reporting/` | Primary and diagnostics workbooks, figures |
 
 **Implementation contract:**
-- Objective 4 validates imported lab-reported predictions; it does not fit a new base prognostic model.
-- The 5-year predictions come from `biopsy1_gep_mfs` / `biopsy1_gep_mss`, and preprocessing derives 7-year and 10-year expected survival from the same 5-year values.
-- Primary validation denominators are restricted to definitive raw DecisionDx labels with valid endpoint-specific prediction fields.
-- Main endpoints are metastasis events (MFS) and melanoma-specific death (MSS); companion MSS competing-risk analyses handle non-melanoma death explicitly.
-- Reader-facing 5-year MFS "actual" values are now censoring-aware Kaplan-Meier estimates at 60 months; raw by-60-month event counts remain available only as descriptive sensitivity outputs.
-- MSS observed-versus-expected summaries use censoring-aware Aalen-Johansen CIF pseudo-event counts at the horizon (melanoma death with non-melanoma death treated as a competing event).
-- Integrated AUC is no longer silently replaced when not estimable; status, method, and NA-reason fields are carried into the consolidated and unified workbooks.
-- The full-cohort exploratory no-GEP workflow now reuses the Objective 0-prepared cohort contract, derives expected group counts from the prepared snapshot, and prefers IPCW horizon direct-risk models with censoring-aware observed summaries.
+- Group names, order and raw source labels are defined once, in `objective4_policy.R`; `gep_group` is the only availability variable and `biopsy1_gep` is derived from it. Every objective, table, figure and palette uses the same labels.
+- The 5-year imported values come from `biopsy1_gep_mfs` / `biopsy1_gep_mss`; the pipeline copies them to `expected_mfs_5yr` / `expected_mss_5yr` and converts them to risk. Only the 5-year horizon is analyzed.
+- Observed 5-year risk is Kaplan-Meier (MFS) or Aalen-Johansen (MSS), computed within each group and never carried past the group's last follow-up.
+- Discrimination counts tied pairs as one half; the bootstrap uses fixed local seeds and reports valid and failed draws.
+- Each analysis uses one prepared dataset per endpoint, so every table in a workbook shares its denominators.
 
-**Artifact hierarchy:**
-- Outcome-specific consolidated workbooks:
-   - `a_metastasis_free_survival/05_summary_tables/*_MFS_consolidated_summary.xlsx`
-   - `b_melanoma_specific_survival/03_summary_tables/*_MSS_consolidated_summary.xlsx`
-- Outcome-specific technical detail workbooks:
-   - `a_metastasis_free_survival/05_summary_tables/*mfs_validation_technical_details.xlsx`
-   - `b_melanoma_specific_survival/03_summary_tables/*mss_validation_technical_details.xlsx`
-- Outcome-specific narrative summaries:
-   - `a_metastasis_free_survival/05_summary_tables/*mfs_validation_narrative_summary.md`
-   - `b_melanoma_specific_survival/03_summary_tables/*mss_validation_narrative_summary.md`
-- Cross-outcome workbook at the root of `04_GEP_Validation/`:
-   - `*unified_gep_validation_summary.xlsx`
-   - For the full cohort, this workbook now also includes `No_GEP_Overview`, `No_GEP_Model_Comparison`, and `No_GEP_Risk_Strata`
-- Simple QC workbook under `04_GEP_Validation/unified_summary/`:
-   - `*simple_gep_validation.xlsx`
-   - For MFS, this workbook reports KM-observed 5-year MFS rather than a naive `1 - metastasis_by_5yr` average.
-- Limited visuals: KM curves for MFS, CIF curves for MSS, and optional outcome-specific PRAME delta-C PNGs (`*mfs_prame_delta_c.png`, `*mss_prame_delta_c.png`)
+**Artifacts (per cohort, in `04_GEP_Validation/`):**
+- `<prefix>gep_validation_5yr.xlsx`: `Group_Table_MFS`, `Group_Table_MSS`, `Discrimination`, `Sensitivity_Late_Biopsy`, `Sensitivity_Cause_of_Death`
+- `<prefix>gep_validation_mfs_curves.png`, `<prefix>gep_validation_mss_curves.png`, `<prefix>gep_validation_observed_vs_imported.png`
+- `<prefix>gep_validation_diagnostics.xlsx`: `Specification_Coding`, `Denominators_Flow`, `Checks`, `Warnings_Limitations`, `Record_Issues`
+- Full cohort, `d_no_gep/`: `<prefix>no_gep_5yr.xlsx` (`Group_Outcomes_MFS`, `Group_Outcomes_MSS`, `Baseline_By_Group`, `Model_Performance`, `AUC_Difference`, `Sensitivity_Cause_of_Death`), `<prefix>no_gep_group_risk.png`, `<prefix>no_gep_model_auc.png`, and `<prefix>no_gep_diagnostics.xlsx` (adds `Predictor_Screening`)
+- `merged_tables/objective4_cross_cohort_figures/`: the observed-vs-imported MFS figure across the three cohorts
 
-**Workbook contract:** the consolidated outcome workbook is the primary review artifact. Technical workbooks retain lower-level detail, and the root unified workbook is comparison-only (`*_Comparison` sheet naming). For full cohort runs, the unified workbook may append compact `No_GEP_*` summary tabs.
-
-**No-GEP reporting contract:** the no-GEP appendix and compact unified-workbook tabs use a documented 0-to-1 probability scale for threshold fields and now include overlap diagnostics comparing `GEP Failed/Indeterminate` with `GEP Not Tested`.
-
-**Display contract:** reader-facing outputs use the canonical labels stored in each analytic cohort. Objective 4 entry points refresh eligibility flags from stored raw labels before analysis, preventing stale eligibility flags from admitting nondefinitive rows into definitive Class 1 / Class 2 denominators.
-
-For readability, the reader-facing MSS CIF PNG now uses `gep_class_simple` and shows only definitive `Class 1` versus `Class 2` strata. This does not change the technical MSS competing-risk tables or model fits, which still use the more granular `biopsy1_gep` grouping in the companion outputs.
-
-The grouping choices for Objective 4 are centralized in `scripts/config/objective4_policy.R` via `GEP_GROUPING_SPECS` and `OBJECTIVE4_GEP_GROUPING`, loaded through `scripts/utils/config_constants.R`. Change grouping there first so updates propagate through orchestration, reporting, and visualization.
+**Diagnostics contract:** the diagnostics workbooks contain record identifiers (`Record_Issues`). The publish artifact registry excludes `*_diagnostics.xlsx`, and the collaborator export (`scripts/tools/export_gep_objective4_to_downloads.R`) ships only the primary workbooks and figures. A test checks that the exporter and the registry select the same files.
 
 **Important layout note:** cross-cutting cohort outputs such as baseline characteristics and treatment-duration summaries belong in `00_General/` inside each cohort folder, not in a shared top-level `Analysis/General/` directory.
 
-See [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#gep-validation-metrics) for formal metric definitions and assumptions, and [INTERPRETATION_GUIDE.md](INTERPRETATION_GUIDE.md#understanding-gep-analysis) for workbook-reading guidance.
+See [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#gep-validation) for formal metric definitions and assumptions, and [INTERPRETATION_GUIDE.md](INTERPRETATION_GUIDE.md#understanding-gep-analysis) for workbook-reading guidance.
 
 ---
 
@@ -618,7 +602,7 @@ Private config modules under `scripts/config/`:
 - `objective1_contracts.R`: Objective 1 population fingerprints, propensity-overlap settings, subgroup policy, and subgroup outcome contracts
 - `objective2_contracts.R`: Objective 2 toxicity source-to-burden mapping and reproducibility seed
 - `objective3_contracts.R`: Objective 3 PFS-2 derivation contract and PFS-2 feasibility/censoring thresholds
-- `objective4_policy.R`: Objective 4 GEP settings, definitive-label policy, and grouping specifications
+- `objective4_policy.R`: Objective 4 GEP settings, availability groups and their source labels, and biopsy-timing windows
 - `objective4_contracts.R`: Objective 4 imported-probability and horizon-field derivation contract
 - `labels_display.R`: table labels, display labels, baseline table variables, plot dimensions, and vision line-change display policy
 

@@ -60,7 +60,7 @@ The current runtime audit establishes that the old collapsed-variable `Other` de
 - **WHEN** Objective 0 writes analytic and pre-collapse cohort `.rds` files
 - **THEN** no observed row values are produced by the retired collapsed-variable `Other` mechanism
 - **AND** `biopsy1_gep_raw` does not include `"Other"` as an observed value or unused factor level
-- **AND** GEP invalid-label constants do not list `"Other"` as a current raw GEP label
+- **AND** the raw GEP label constants do not list `"Other"` as a current raw GEP label
 
 #### Scenario: Other-map documentation drift is rejected
 - **WHEN** committed current documentation describes runtime support artifacts
@@ -111,17 +111,17 @@ The contract MUST validate row-wise source-to-derived consistency before Objecti
 ### Requirement: Objective 4 GEP SHALL have a compact derivation contract
 The Objective 4 contract module MUST maintain a compact GEP derivation contract for imported GEP probabilities and horizon endpoints. Objective 0 MUST consume and centrally enforce that contract because general presence/domain registry checks are necessary but insufficient for Objective 4 endpoint validity.
 
-The contract MUST cover 5-, 7-, and 10-year MFS and MSS expected survival probabilities, predicted risk complements, horizon event indicators, competing-risk event types, clipped horizon times, endpoint-specific eligibility flags, and `gep_validation_set`. Its definition belongs in the Objective 4 contract module while Objective 0 consumes it during centralized validation.
+The contract MUST cover the 5-year MFS and MSS expected survival probabilities, predicted risk complements, horizon event indicators, competing-risk event types, horizon times, endpoint-specific eligibility flags, and `gep_validation_set`. The 5-year horizon is the only horizon analyzed. Its definition belongs in the Objective 4 contract module while Objective 0 consumes it during centralized validation.
 
 #### Scenario: GEP expected survival and predicted risks match source probabilities
 - **WHEN** Objective 0 derives GEP expected survival and predicted risk fields
-- **THEN** `expected_mfs_5yr` equals `biopsy1_gep_mfs`, 7- and 10-year expected MFS are derived from the 5-year MFS probability, and predicted MFS risk fields equal `1 - expected_mfs_*`
-- **AND** `expected_mss_5yr` equals `biopsy1_gep_mss`, 7- and 10-year expected MSS are derived from the 5-year MSS probability, and predicted MSS risk fields equal `1 - expected_mss_*`
+- **THEN** `expected_mfs_5yr` equals `biopsy1_gep_mfs` and `predicted_mfs_risk_5yr` equals `1 - expected_mfs_5yr`
+- **AND** `expected_mss_5yr` equals `biopsy1_gep_mss` and `predicted_mss_risk_5yr` equals `1 - expected_mss_5yr`
 
 #### Scenario: GEP horizon event types and times match source event data
 - **WHEN** Objective 0 derives MFS and MSS horizon fields
-- **THEN** MFS event/type/time fields match metastasis and competing-death source data at 5, 7, and 10 years
-- **AND** MSS event/type/time fields match melanoma-death and competing-death source data at 5, 7, and 10 years
+- **THEN** MFS event/type/time fields match metastasis and competing-death source data at 5 years
+- **AND** MSS event/type/time fields match melanoma-death and competing-death source data at 5 years
 - **AND** the contract uses the canonical untruncated endpoint pairs:
   `tt_mets_months_analysis` with `mfs_event_type`, and `tt_death_months`
   with `mss_event_type`; all endpoint times are in months
@@ -130,7 +130,7 @@ The contract MUST cover 5-, 7-, and 10-year MFS and MSS expected survival probab
 
 #### Scenario: GEP eligibility and availability labels cannot drift
 - **WHEN** Objective 0 derives GEP eligibility and availability fields
-- **THEN** `mfs_analysis_eligible` and `mss_analysis_eligible` match the endpoint-specific source probability, definitive-GEP, observed endpoint, and nonnegative-time rules
+- **THEN** `mfs_analysis_eligible` and `mss_analysis_eligible` match the endpoint-specific source probability, `gep_group` (Class 1 or Class 2), observed endpoint, and nonnegative-time rules, defined once from `gep_group`
 - **AND** `gep_validation_set` uses only `Eligible` and `No GEP Data`
 - **AND** retired Training/Testing split labels are not reintroduced
 
