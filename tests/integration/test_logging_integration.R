@@ -25,7 +25,8 @@
     df <- parse_nonempty_json_lines(log_file)
     # Basic structure checks
     expect_true(all(c("timestamp", "level_text", "level_num", "message", "cohort", "objective", "subobjective") %in% names(df)))
-    expect_true(any(grepl("GEP MSS validation analysis completed successfully|GEP MFS validation analysis completed successfully", df$message)))
+    expect_true(any(grepl("Definitive-GEP validation completed", df$message, fixed = TRUE)))
+    expect_true(any(grepl("No-GEP analysis completed", df$message, fixed = TRUE)))
     expect_true(any(df$cohort == dataset))
     expect_true(any(df$objective == "objective_4_gep_analysis"))
   })

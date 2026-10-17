@@ -102,6 +102,8 @@ STANDARD_LEVEL_LABELS <- list(
     unstaged = c(
         "Yes_Inappropriate_Scan" = "Yes Inappropriate Scan"
     ),
+    # Identity labels: the group names are already reader-facing; the entry fixes the display order.
+    gep_group = stats::setNames(GEP_GROUP_LEVELS, GEP_GROUP_LEVELS),
     gep12_prame_status = c(
         "Negative" = "Negative",
         "Positive" = "Positive"

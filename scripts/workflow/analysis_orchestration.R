@@ -697,7 +697,7 @@ main_execution <- function() {
     create_gep_observed_vs_imported_panel_report()
     logger::log_info(sprintf(
         "Objective 4 cross-cohort figure saved under: %s",
-        file.path(MERGED_TABLES_DIR, "objective4_poster_figures")
+        file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures")
     ))
 
     # Summary banner

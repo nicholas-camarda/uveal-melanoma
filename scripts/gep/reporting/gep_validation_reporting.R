@@ -428,7 +428,7 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
     invisible(list(primary = primary_path, diagnostics = diagnostics_path, figures = c(figure_paths, comparison_path)))
 }
 
-#' Cross-cohort observed-vs-imported MFS figure for posters and talks
+#' Cross-cohort observed-vs-imported MFS figure
 #'
 #' Reads the group tables from each cohort's primary validation workbook and draws
 #' one panel per cohort.
@@ -436,7 +436,7 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
 #' @param output_dir Character directory to write the PNG to.
 #' @param cohort_sources Data frame with `cohort_dir`, `prefix`, `cohort_label`.
 #' @return Invisibly, the written file path.
-create_gep_observed_vs_imported_panel_report <- function(output_dir = file.path(MERGED_TABLES_DIR, "objective4_poster_figures"),
+create_gep_observed_vs_imported_panel_report <- function(output_dir = file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures"),
                                                          cohort_sources = data.frame(
                                                              cohort_dir = c("uveal_full", "uveal_restricted", "gksrs"),
                                                              prefix = c("full_cohort_", "restricted_cohort_", "gksrs_only_cohort_"),

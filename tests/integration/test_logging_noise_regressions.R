@@ -34,8 +34,10 @@ test_that("main_execution clears stale cohort context before global phases", {
     old_run_objective_0 <- run_objective_0
     old_run_my_analysis <- run_my_analysis
     old_merge_baseline_tables_with_data <- merge_baseline_tables_with_data
+    old_cross_cohort_figure <- create_gep_observed_vs_imported_panel_report
 
     on.exit({
+        assign("create_gep_observed_vs_imported_panel_report", old_cross_cohort_figure, envir = .GlobalEnv)
         assign("PROCESSED_DATA_DIR", old_processed_data_dir, envir = .GlobalEnv)
         assign("list_available_datasets", old_list_available_datasets, envir = .GlobalEnv)
         assign("run_objective_0", old_run_objective_0, envir = .GlobalEnv)
@@ -71,6 +73,7 @@ test_that("main_execution clears stale cohort context before global phases", {
         logger::log_info("Mock merge invoked")
         invisible(NULL)
     }, envir = .GlobalEnv)
+    assign("create_gep_observed_vs_imported_panel_report", function(...) invisible(NULL), envir = .GlobalEnv)
 
     set_log_context(
         cohort = "uveal_melanoma_restricted_cohort",
@@ -263,32 +266,21 @@ test_that("representative survival and CIF plots do not emit duplicate-scale mes
     )
 
     actual_data <- readRDS(file.path(PROCESSED_DATA_DIR, "uveal_melanoma_full_cohort.rds"))
-    cif_test_data <- actual_data %>% dplyr::filter(mss_analysis_eligible)
-    cif_output_dir <- tempfile("cif-noise-")
-    dir.create(cif_output_dir, recursive = TRUE, showWarnings = FALSE)
+    validation <- run_gep_definitive_validation(actual_data, n_boot = 20L)
+    horizon <- validation$horizon_months
 
-    simplified_output_dir <- tempfile("simplified-km-noise-")
-    dir.create(simplified_output_dir, recursive = TRUE, showWarnings = FALSE)
-
-    expect_no_message(
-        create_mss_cumulative_incidence_curves(
-            data = cif_test_data,
-            timepoint = 5,
-            output_dir = cif_output_dir,
-            prefix = "quiet_",
-            group_var = "biopsy1_gep"
+    for (endpoint in c("MFS", "MSS")) {
+        part <- validation[[tolower(endpoint)]]
+        expect_no_message(
+            suppressWarnings(ggplot2::ggplot_build(
+                plot_gep_validation_curves(part$prepared, part$group_table, endpoint, horizon, "Full cohort")
+            ))
         )
-    )
-
+    }
     expect_no_message(
-        suppressWarnings(
-            create_mfs_simplified_survival_curves(
-                data = actual_data,
-                output_dir = simplified_output_dir,
-                prefix = "quiet_",
-                save_plot = TRUE
-            )
-        )
+        suppressWarnings(ggplot2::ggplot_build(
+            plot_gep_observed_vs_imported(list(MFS = validation$mfs$group_table, MSS = validation$mss$group_table))
+        ))
     )
 })
 

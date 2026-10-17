@@ -22,7 +22,6 @@ flowchart LR
         DDER[data_helper/data_derivation.R]
         DCOH[data_helper/cohort_creation.R]
         DORCH[data_helper/cohort_orchestration.R]
-        DGEP[data_helper/gep_missing_data_analysis.R]
     end
 
     subgraph TBL[Tables and Diagnostics]
@@ -72,7 +71,6 @@ flowchart LR
     DORCH --> DLOAD
     DORCH --> DDER
     DORCH --> DCOH
-    DORCH --> DGEP
     DORCH --> PDATA
     DORCH --> OUT
 
