@@ -554,10 +554,10 @@ build_no_gep_treatment_era_sensitivity <- function(endpoint_data, endpoint, hori
         era <- estimate_endpoint_risk(in_era$time_months, in_era$status, horizon_months, endpoint)
         note <- dplyr::case_when(
             nrow(g) == 0L ~ "No patients in this group",
-            nrow(g) == nrow(in_era) ~ "Every patient was treated in the era; same as the primary estimate",
             nrow(in_era) == 0L ~ "No patient treated in the era",
             !era$estimable ~ sprintf("Not followed to %d months in the era (maximum %.0f months)", horizon_months, era$max_followup_months),
             era$events == 0L ~ "No events by the horizon in the era; interval not estimable",
+            nrow(g) == nrow(in_era) ~ "Every patient was treated in the era; same as the primary estimate",
             TRUE ~ ""
         )
         data.frame(

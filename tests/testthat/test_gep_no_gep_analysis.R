@@ -244,8 +244,8 @@ test_that("the treatment-era sensitivity restricts each group to the testing era
             levels = GEP_GROUP_LEVELS
         ),
         treatment_year = c(rep(era - 3, 5), rep(era + 2, 5), rep(era + 3, 6), rep(era - 5, 4)),
-        time_months = c(rep(12, 5), rep(70, 5), rep(70, 6), rep(70, 4)),
-        status = c(rep(1L, 5), rep(0L, 5), rep(0L, 6), rep(0L, 4))
+        time_months = c(rep(12, 5), rep(70, 5), 20, rep(70, 5), rep(70, 4)),
+        status = c(rep(1L, 5), rep(0L, 5), 1L, rep(0L, 5), rep(0L, 4))
     )
     table <- build_no_gep_treatment_era_sensitivity(endpoint_data, "MFS", 60)
     row <- function(group) table[table$group == group, ]
@@ -262,6 +262,13 @@ test_that("the treatment-era sensitivity restricts each group to the testing era
     class_1 <- row("Class 1")
     expect_equal(class_1$risk_in_era, class_1$primary_risk)
     expect_identical(class_1$patients_before_era, 0L)
+    expect_match(class_1$note, "Every patient was treated in the era")
+
+    # A group with no 5-year estimate says so, not that it is unchanged.
+    short <- build_no_gep_treatment_era_sensitivity(
+        transform(endpoint_data[endpoint_data$gep_group == "Class 1", ], time_months = 30, status = 0L), "MFS", 60
+    )
+    expect_match(short$note[short$group == "Class 1"], "Not followed to 60 months in the era")
 
     # A group with nobody in the era has no estimate, and the table says so.
     class_2 <- row("Class 2")
