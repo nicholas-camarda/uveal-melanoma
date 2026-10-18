@@ -61,11 +61,11 @@ test_that("portable smoke path writes GEP validation outputs and dry-run publish
         file.path(EXPORT_ANALYSIS_DIR, "portable-smoke")
     )
     expect_true(any(grepl("04_GEP_Validation", publish_result$manifest$source_path)))
-    # The primary workbook is published; the diagnostics workbook (with record
-    # identifiers) is excluded from synced publishing.
+    # The primary workbook and the diagnostics workbook (with the Record_Issues sheet,
+    # by patient id) are both part of the published package.
     published_sources <- normalizePath(publish_result$manifest$source_path[publish_result$manifest$status == "would_copy"], winslash = "/", mustWork = FALSE)
     expect_true(normalizePath(outputs$primary, winslash = "/", mustWork = FALSE) %in% published_sources)
-    expect_false(normalizePath(outputs$diagnostics, winslash = "/", mustWork = FALSE) %in% published_sources)
+    expect_true(normalizePath(outputs$diagnostics, winslash = "/", mustWork = FALSE) %in% published_sources)
     normalized_manifest_sources <- normalizePath(
         publish_result$manifest$source_path,
         winslash = "/",
