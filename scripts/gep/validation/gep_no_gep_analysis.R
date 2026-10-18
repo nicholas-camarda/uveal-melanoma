@@ -14,7 +14,7 @@
 #' @param data Cohort data frame with `gep_group` and the baseline predictors.
 #' @return `data` with `internal_reflectivity` recoded and unused levels dropped.
 prepare_no_gep_data <- function(data) {
-    required <- c("gep_group", "id", GEP_NO_GEP_CANDIDATE_PREDICTORS)
+    required <- c("gep_group", "id", "treatment_year", GEP_NO_GEP_CANDIDATE_PREDICTORS)
     missing_cols <- setdiff(required, names(data))
     if (length(missing_cols) > 0L) {
         stop(sprintf("No-GEP analysis requires columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
@@ -27,6 +27,9 @@ prepare_no_gep_data <- function(data) {
     data$internal_reflectivity <- droplevels(reflectivity)
     if (anyNA(data$gep_group)) {
         stop(sprintf("gep_group is missing for %d patient(s); every patient must be classified.", sum(is.na(data$gep_group))), call. = FALSE)
+    }
+    if (anyNA(data$treatment_year)) {
+        stop(sprintf("treatment_year is missing for %d patient(s).", sum(is.na(data$treatment_year))), call. = FALSE)
     }
     data$gep_group <- factor(as.character(data$gep_group), levels = GEP_GROUP_LEVELS)
     data
@@ -529,6 +532,46 @@ build_no_gep_group_outcomes <- function(endpoint_data, endpoint, horizon_months)
     dplyr::bind_rows(rows)
 }
 
+#' Sensitivity of the group risks to treatment era
+#'
+#' Re-estimates each group's 5-year risk among patients treated in or after
+#' `GEP_TESTING_ERA_START_YEAR`, so the tested and untested groups cover the same era
+#' (testing appears in this cohort only from that year on). The primary row of each
+#' group is the full-group estimate from `build_no_gep_group_outcomes()`.
+#'
+#' @param endpoint_data Prepared endpoint data with `gep_group`, `treatment_year`,
+#'   `time_months` and `status`.
+#' @param endpoint Character, `"MFS"` or `"MSS"`.
+#' @param horizon_months Numeric horizon in months.
+#' @return Data frame, one row per group: patients, patients in and before the era,
+#'   primary risk, risk in the era with its interval, the difference in percentage
+#'   points, whether the era risk is estimable, and a note.
+build_no_gep_treatment_era_sensitivity <- function(endpoint_data, endpoint, horizon_months) {
+    rows <- lapply(GEP_GROUP_LEVELS, function(group_name) {
+        g <- endpoint_data[endpoint_data$gep_group %in% group_name, , drop = FALSE]
+        in_era <- g[g$treatment_year >= GEP_TESTING_ERA_START_YEAR, , drop = FALSE]
+        primary <- estimate_endpoint_risk(g$time_months, g$status, horizon_months, endpoint)
+        era <- estimate_endpoint_risk(in_era$time_months, in_era$status, horizon_months, endpoint)
+        note <- dplyr::case_when(
+            nrow(g) == 0L ~ "No patients in this group",
+            nrow(g) == nrow(in_era) ~ "Every patient was treated in the era; same as the primary estimate",
+            nrow(in_era) == 0L ~ "No patient treated in the era",
+            !era$estimable ~ sprintf("Not followed to %d months in the era (maximum %.0f months)", horizon_months, era$max_followup_months),
+            era$events == 0L ~ "No events by the horizon in the era; interval not estimable",
+            TRUE ~ ""
+        )
+        data.frame(
+            endpoint = endpoint, group = group_name, patients = nrow(g),
+            patients_in_era = nrow(in_era), patients_before_era = nrow(g) - nrow(in_era),
+            primary_risk = primary$risk, risk_in_era = era$risk,
+            ci_lower_in_era = era$ci_lower, ci_upper_in_era = era$ci_upper,
+            difference_pct_points = 100 * (era$risk - primary$risk),
+            estimable_in_era = era$estimable, note = note, stringsAsFactors = FALSE
+        )
+    })
+    dplyr::bind_rows(rows)
+}
+
 #' Baseline characteristics by GEP availability group
 #'
 #' Descriptive only: medians with quartiles and counts with percentages, in the same
@@ -562,7 +605,7 @@ build_no_gep_baseline_table <- function(data) {
         list("Subretinal fluid", "n (%)", function(d) count_pct(d$srf == "Yes")),
         list("Optic nerve involvement", "n (%)", function(d) count_pct(d$optic_nerve_involvement == 1)),
         list("Treated with GKSRS", "n (%)", function(d) count_pct(d$treatment_group == "GKSRS")),
-        list("Treated in 2013 or later", "n (%)", function(d) count_pct(d$treatment_year >= 2013))
+        list(sprintf("Treated in %d or later", GEP_TESTING_ERA_START_YEAR), "n (%)", function(d) count_pct(d$treatment_year >= GEP_TESTING_ERA_START_YEAR))
     )
     rows <- lapply(specs, function(spec) {
         values <- vapply(groups, function(in_group) {
@@ -584,7 +627,8 @@ build_no_gep_baseline_table <- function(data) {
 #' @param horizon_months Numeric horizon in months (default 60).
 #' @param n_boot Integer bootstrap draws.
 #' @param seed Integer seed for all bootstraps.
-#' @return List: `group_outcomes`, `cause_of_death_sensitivity`, `baseline`, `predictor_screening`, `predictors`,
+#' @return List: `group_outcomes`, `treatment_era_sensitivity`, `treatment_era_excluded_n`,
+#'   `cause_of_death_sensitivity`, `baseline`, `predictor_screening`, `predictors`,
 #'   `model_flow`, `removed_records`, `performance`, `auc_differences`, and
 #'   `design_columns`.
 run_no_gep_analysis <- function(data,
@@ -651,12 +695,29 @@ run_no_gep_analysis <- function(data,
     surrogate_oof <- compute_surrogate_oof_predictions(model_sets$Surrogate$data, predictors)
     performance$Surrogate <- summarize_surrogate_performance(surrogate_oof, n_boot, seed)
 
+    # Patients treated before the testing era stay in every primary table; they are left out
+    # of the treatment-era sensitivity only, and listed so each one can be traced.
+    before_era <- prepared$treatment_year < GEP_TESTING_ERA_START_YEAR
+    era_removed <- data.frame(
+        id = as.character(prepared$id[before_era]),
+        analysis_set = rep("Treatment-era sensitivity", sum(before_era)),
+        reason = rep(sprintf("Treated before %d: left out of the treatment-era sensitivity only", GEP_TESTING_ERA_START_YEAR), sum(before_era)),
+        field = rep("treatment_year", sum(before_era)),
+        current_value = as.character(prepared$treatment_year[before_era]),
+        stringsAsFactors = FALSE
+    )
+
     list(
         horizon_months = horizon_months,
         group_outcomes = dplyr::bind_rows(
             build_no_gep_group_outcomes(sets$MFS, "MFS", horizon_months),
             build_no_gep_group_outcomes(sets$MSS, "MSS", horizon_months)
         ),
+        treatment_era_sensitivity = dplyr::bind_rows(
+            build_no_gep_treatment_era_sensitivity(sets$MFS, "MFS", horizon_months),
+            build_no_gep_treatment_era_sensitivity(sets$MSS, "MSS", horizon_months)
+        ),
+        treatment_era_excluded_n = sum(before_era),
         cause_of_death_sensitivity = compare_unknown_cause_of_death_assumption(
             transform(sets$MSS, gep_group = factor(as.character(gep_group), levels = GEP_GROUP_LEVELS)),
             "gep_group", horizon_months
@@ -666,7 +727,7 @@ run_no_gep_analysis <- function(data,
         predictors = predictors,
         parsimonious_predictors = parsimonious,
         model_flow = dplyr::bind_rows(lapply(model_sets, function(x) x$counts)),
-        removed_records = dplyr::bind_rows(lapply(model_sets, function(x) x$removed)),
+        removed_records = dplyr::bind_rows(c(lapply(model_sets, function(x) x$removed), list(era_removed))),
         performance = dplyr::bind_rows(performance),
         auc_differences = dplyr::bind_rows(auc_differences),
         design_columns = design_columns

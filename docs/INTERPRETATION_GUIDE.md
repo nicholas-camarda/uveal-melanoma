@@ -643,12 +643,15 @@ The overall row averages the group risks weighted by group size and compares the
 
 - `Sensitivity_Late_Biopsy`: each primary quantity next to its value after removing patients sampled more than 180 days after treatment, with the difference.
 - `Sensitivity_Cause_of_Death`: each group's risk with unknown-cause deaths counted as melanoma deaths, the number of deaths reclassified, and the difference in percentage points.
+- `Sensitivity_Treatment_Era` (no-GEP workbook): each group's risk among patients treated in the testing era; see below.
 
 **Worked example (generic).** A group risk of 12.0% that becomes 12.5% when late samples are removed moved by 0.5 percentage points; the late samples do not drive the result. A risk that moves from 9% to 16% when unknown-cause deaths are counted as melanoma deaths depends on how those deaths are classified, and both values are informative.
 
 ### Patients without a definitive call
 
-`Group_Outcomes_MFS` and `Group_Outcomes_MSS` give the same measures as the group table for each of the six GEP groups, with median and maximum follow-up. `Baseline_By_Group` compares baseline characteristics across groups; a group with fewer than 3 patients shows only its size. Compare groups only where both have a 5-year estimate, and read differences between "Not tested" and the Class 1 and Class 2 groups with testing patterns in mind (for example the share treated in 2013 or later).
+`Group_Outcomes_MFS` and `Group_Outcomes_MSS` give the same measures as the group table for each of the six GEP groups, with median and maximum follow-up. `Baseline_By_Group` compares baseline characteristics across groups; a group with fewer than 3 patients shows only its size. Compare groups only where both have a 5-year estimate, and read differences between "Not tested" and the Class 1 and Class 2 groups with testing patterns in mind (for example the share treated in or after the year testing appears).
+
+`Sensitivity_Treatment_Era` repeats each group's risk among patients treated in or after that year (`patients_in_era`), next to the primary risk, with the interval and the difference in percentage points. **Worked example (generic).** A group with 100 patients, 30 of them treated before testing began, a primary risk of 10% and an in-era risk of 14% (interval 8% to 24%) shifts by 4 percentage points; if the primary risk lies inside the in-era interval the era does not change the reading, and a group with `patients_before_era` of 0 is unchanged by construction.
 
 ### Baseline models without GEP
 

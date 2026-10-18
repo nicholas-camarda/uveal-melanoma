@@ -48,7 +48,7 @@ summarize_gep_validation_flow <- function(data, results) {
 #' reason, the raw laboratory label, and nothing else. When the cohort has an
 #' identifier column the key is that identifier; otherwise it is the row position and
 #' `key_source` says so. Contains identifiers: keep it in the diagnostics workbook,
-#' which is excluded from publishing.
+#' which is part of the results package.
 #'
 #' @param data Cohort data frame with `gep_group`, `biopsy1_gep_raw`, `gep_test_timing`
 #'   and `gep_test_days`.
@@ -337,7 +337,7 @@ plot_gep_observed_vs_imported <- function(group_tables, title = "Observed vs imp
 #' Write the validation workbooks and figures for one cohort
 #'
 #' Primary workbook (publishable): group tables and discrimination. Diagnostics
-#' workbook (excluded from publishing; contains identifiers): specification,
+#' workbook (part of the results package; `Record_Issues` lists patients by id): specification,
 #' denominators, checks, limitations, and record issues.
 #'
 #' @param results Output of `run_gep_definitive_validation()`.

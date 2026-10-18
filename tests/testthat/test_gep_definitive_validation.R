@@ -368,3 +368,11 @@ test_that("the MSS AUC treats competing deaths as controls (AUC_2), not as exclu
     expect_equal(result$auc, auc_2, tolerance = 1e-10)
     expect_gt(abs(result$auc - auc_1), 1e-4)
 })
+
+test_that("the retired survcomp package (which dropped tied pairs) is neither used nor locked", {
+    lock <- jsonlite::fromJSON(here::here("renv.lock"), simplifyVector = FALSE)
+    expect_false(any(c("survcomp", "survivalROC", "SuppDists", "rmeta", "bootstrap") %in% names(lock$Packages)))
+    script_files <- list.files(here::here("scripts"), pattern = "\\.R$", recursive = TRUE, full.names = TRUE)
+    script_text <- vapply(script_files, function(path) paste(readLines(path, warn = FALSE), collapse = "\n"), character(1))
+    expect_identical(basename(script_files)[grepl("survcomp", script_text, fixed = TRUE)], character(0))
+})

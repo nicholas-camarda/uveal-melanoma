@@ -578,7 +578,7 @@ For reading the generated files, see [Understanding GEP Analysis](INTERPRETATION
 | **4c** Outcomes by availability group | What are the 5-year outcomes of patients without a definitive call? | All six GEP groups, full cohort | 5-year risk per group | Kaplan-Meier, Aalen-Johansen | `*_no_gep_5yr.xlsx` (`Group_Outcomes_MFS`, `Group_Outcomes_MSS`, `Baseline_By_Group`) |
 | **4d** Baseline features | Do baseline clinical features rank 5-year risk better than T stage or tumor diameter alone in patients without a definitive call? | Full cohort, scored in the "No GEP" scope | Out-of-fold AUC and Brier skill; paired AUC difference to a comparator | Repeated nested cross-validation of a ridge model with inverse-probability-of-censoring weights | `Model_Performance`, `AUC_Difference` sheets |
 
-The sensitivity analyses (late biopsy, unknown cause of death) belong to 4a-4c and are described below.
+The sensitivity analyses (late biopsy, unknown cause of death, treatment era) belong to 4a-4c and are described below.
 
 ### Imported predictions
 
@@ -671,13 +671,14 @@ Each sensitivity analysis recomputes the group tables and discrimination under o
 
 - **Late biopsy.** The biopsy date is compared with the treatment date, and patients sampled more than 180 days after treatment are removed. A sample taken after treatment (for example at recurrence) describes a different tumor state, and the interval from the GEP sample to the outcome starts after follow-up began. Biopsy timing is classified as more than 31 days before treatment, within 31 days, 31 to 180 days after, more than 180 days after, or no biopsy date. The windows are defined in `objective4_policy.R`.
 - **Unknown cause of death.** Deaths with recorded cause `Unknown` or `Unknown_Cancer` are counted as melanoma deaths instead of competing deaths. The primary analysis counts them as competing, so this is the opposite extreme.
+- **Treatment era.** GEP testing appears in this cohort only from a given treatment year on (`GEP_TESTING_ERA_START_YEAR` in `objective4_policy.R`), so patients treated earlier could not have been tested. Each group's 5-year risk is recomputed among patients treated in or after that year, with a log-log 95% interval and the difference from the primary risk, so tested and untested groups cover the same era. Patients treated before it stay in every primary table, are left out of this sensitivity only, and are listed by id in `Record_Issues`.
 - **Biopsy date review.** A primary-set patient whose biopsy is more than 365 days before treatment, or has no date, is listed in `Record_Issues` for date review and stays in the analysis. A long interval can reflect an earlier diagnostic sample or a date-entry error; the pipeline does not decide which.
 
 **How to read it.** A small difference from the primary value (for example a group risk moving by 1 percentage point) means the assumption does not drive the result. A large difference means the result depends on that assumption, and both values should be reported.
 
 ### Patients without a definitive call
 
-Goal 4c applies the same Kaplan-Meier and Aalen-Johansen estimators to every GEP group in the full cohort, including the groups without a Class 1/Class 2 call. A group with no patient followed to 60 months has no 5-year estimate. Follow-up is summarized from treatment with the reverse Kaplan-Meier method, in which the censoring is treated as the event. The baseline table by group shows only the size of a group with fewer than 3 patients, so a published table cannot describe one or two individuals. It also gives the share treated in 2013 or later, because testing coverage varies with treatment era.
+Goal 4c applies the same Kaplan-Meier and Aalen-Johansen estimators to every GEP group in the full cohort, including the groups without a Class 1/Class 2 call. A group with no patient followed to 60 months has no 5-year estimate. Follow-up is summarized from treatment with the reverse Kaplan-Meier method, in which the censoring is treated as the event. The baseline table by group shows only the size of a group with fewer than 3 patients, so a published table cannot describe one or two individuals. It also gives the share treated in or after the testing-era start year, because testing coverage varies with treatment era; the treatment-era sensitivity (above) restricts each group to that era.
 
 **How to read it.** A group's risk is comparable with another group's only where both have estimates and overlapping follow-up. A group followed for a median of 2 years cannot show a 5-year risk. Groups differ in who was tested, so differences between "Not tested" and the Class 1 and Class 2 groups reflect testing patterns as well as biology.
 

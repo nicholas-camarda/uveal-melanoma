@@ -27,7 +27,11 @@ summarize_no_gep_flow <- function(data, results) {
     rbind(
         data.frame(step = "All patients in cohort", n = nrow(data), stringsAsFactors = FALSE),
         data.frame(step = paste("GEP group:", GEP_GROUP_LEVELS), n = as.integer(group_counts), stringsAsFactors = FALSE),
-        set_rows
+        set_rows,
+        data.frame(
+            step = sprintf("Treated before %d (left out of the treatment-era sensitivity only)", GEP_TESTING_ERA_START_YEAR),
+            n = results$treatment_era_excluded_n, stringsAsFactors = FALSE
+        )
     )
 }
 
@@ -56,6 +60,16 @@ build_no_gep_checks <- function(results) {
         add(o$endpoint, "Patients known event-free at the horizon", o$group, as.character(o$event_free_through_horizon),
             if (o$event_free_through_horizon >= GEP_MIN_AT_RISK_AT_HORIZON) "no concern" else "concern",
             sprintf("Fewer than %d known event-free patients makes the observed risk imprecise", GEP_MIN_AT_RISK_AT_HORIZON))
+    }
+    era <- results$treatment_era_sensitivity
+    era <- era[era$endpoint == "MFS", , drop = FALSE]
+    for (i in seq_len(nrow(era))) {
+        e <- era[i, ]
+        if (e$patients == 0L) next
+        add("All", sprintf("Patients treated before %d", GEP_TESTING_ERA_START_YEAR), e$group,
+            sprintf("%d of %d patients", e$patients_before_era, e$patients),
+            if (e$patients_before_era == 0L) "no concern" else "concern",
+            "Testing appears in this cohort only from that year on, so the group's risk may mix eras; see Sensitivity_Treatment_Era")
     }
     perf <- results$performance
     for (i in seq_len(nrow(perf))) {
@@ -100,7 +114,7 @@ build_no_gep_checks <- function(results) {
 #' @param horizon_months Numeric horizon in months.
 #' @return Data frame with method, estimand, units, direction and interpretation.
 build_no_gep_specification <- function(horizon_months) {
-    data.frame(
+    base <- data.frame(
         quantity = c("Observed risk by group", "Median follow-up", "Out-of-fold AUC", "Comparators", "Brier skill", "Class 2-like score AUC", "AUC difference vs T stage", "Unknown-cause-of-death sensitivity"),
         method = c(
             sprintf("Kaplan-Meier risk (MFS) or Aalen-Johansen cumulative incidence (MSS) at %d months; no value is carried past a group's last follow-up", horizon_months),
@@ -133,6 +147,16 @@ build_no_gep_specification <- function(horizon_months) {
         ),
         stringsAsFactors = FALSE
     )
+    era <- data.frame(
+        quantity = "Treatment-era sensitivity",
+        method = sprintf("Observed risk per group recomputed among patients treated in %d or later (the era in which testing appears in this cohort), with a log-log 95%% interval", GEP_TESTING_ERA_START_YEAR),
+        estimand = sprintf("Probability of the event by %.0f years among patients treated in the testing era", horizon_months / 12),
+        units = "proportion; difference in percentage points",
+        direction = "Difference = era risk minus primary risk",
+        interpretation = "Small differences mean the group comparison does not depend on treatment era; a group with every patient in the era is unchanged",
+        stringsAsFactors = FALSE
+    )
+    rbind(base, era)
 }
 
 #' Limitations for the no-GEP results
@@ -146,7 +170,7 @@ build_no_gep_limitations <- function(results) {
         limitation = c("Groups without a 5-year estimate", "Selection into testing", "Internal validation only", "Interval construction", "Predictors dropped"),
         detail = c(
             if (length(not_estimable) > 0) paste("Not followed to 60 months, so no observed risk:", paste(not_estimable, collapse = "; ")) else "None",
-            "Testing coverage depends on treatment era and tumor size (see Baseline_By_Group); group differences describe who was tested, not the effect of testing.",
+            "Testing coverage depends on treatment era and tumor size (see Baseline_By_Group and Sensitivity_Treatment_Era); group differences describe who was tested, not the effect of testing.",
             "Performance is out-of-fold within this cohort; there is no external validation.",
             "Bootstrap intervals resample patients and out-of-fold predictions; the model is not refit on each bootstrap sample.",
             paste(results$predictor_screening$predictor[results$predictor_screening$status == "dropped"], collapse = "; ")
@@ -257,7 +281,7 @@ suppress_small_groups <- function(table, count_col, keep_cols) {
 #' Write the no-GEP workbooks and figures
 #'
 #' Primary workbook (publishable): group outcomes, baseline table, performance.
-#' Diagnostics workbook (excluded from publishing; contains identifiers).
+#' Diagnostics workbook (part of the results package; `Record_Issues` lists patients by id).
 #'
 #' @param results Output of `run_no_gep_analysis()`.
 #' @param data Prepared cohort with `gep_group`.
@@ -275,6 +299,7 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
             Baseline_By_Group = results$baseline,
             Model_Performance = results$performance,
             AUC_Difference = results$auc_differences,
+            Sensitivity_Treatment_Era = suppress_small_groups(results$treatment_era_sensitivity, "patients_in_era", c("endpoint", "group", "patients", "patients_in_era", "patients_before_era")),
             Sensitivity_Cause_of_Death = suppress_small_groups(results$cause_of_death_sensitivity, "patients", c("group", "patients"))
         ),
         primary_path

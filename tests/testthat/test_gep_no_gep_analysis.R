@@ -159,7 +159,7 @@ test_that("baseline table is descriptive and covers every group", {
     table <- build_no_gep_baseline_table(prepared)
     expect_setequal(setdiff(names(table), c("characteristic", "statistic")), c("All patients", GEP_GROUP_LEVELS))
     expect_identical(table[["All patients"]][table$characteristic == "Patients"], as.character(nrow(prepared)))
-    expect_true(all(c("Treated in 2013 or later", "Age at diagnosis, years") %in% table$characteristic))
+    expect_true(all(c(sprintf("Treated in %d or later", GEP_TESTING_ERA_START_YEAR), "Age at diagnosis, years") %in% table$characteristic))
 })
 
 test_that("no-GEP outputs reconcile their flow with Record_Issues and keep identifiers out of the primary workbook", {
@@ -171,7 +171,7 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     expect_true(all(file.exists(c(paths$primary, paths$diagnostics, paths$figures))))
     expect_identical(
         readxl::excel_sheets(paths$primary),
-        c("Group_Outcomes_MFS", "Group_Outcomes_MSS", "Baseline_By_Group", "Model_Performance", "AUC_Difference", "Sensitivity_Cause_of_Death")
+        c("Group_Outcomes_MFS", "Group_Outcomes_MSS", "Baseline_By_Group", "Model_Performance", "AUC_Difference", "Sensitivity_Treatment_Era", "Sensitivity_Cause_of_Death")
     )
     expect_identical(
         readxl::excel_sheets(paths$diagnostics),
@@ -189,7 +189,16 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     issues <- readxl::read_excel(paths$diagnostics, sheet = "Record_Issues")
     expect_identical(
         nrow(issues),
-        as.integer(sum(flow$not_eligible_for_endpoint + flow$removed_sparse_level + flow$removed_missing_predictor))
+        as.integer(sum(flow$not_eligible_for_endpoint + flow$removed_sparse_level + flow$removed_missing_predictor) + results$treatment_era_excluded_n)
+    )
+    # Every patient treated before the testing era is listed by id, and the flow counts them.
+    era_issues <- issues[issues$analysis_set == "Treatment-era sensitivity", ]
+    expect_identical(nrow(era_issues), as.integer(sum(cohort$treatment_year < GEP_TESTING_ERA_START_YEAR)))
+    expect_setequal(era_issues$record_key, as.character(cohort$id[cohort$treatment_year < GEP_TESTING_ERA_START_YEAR]))
+    diagnostics_flow <- readxl::read_excel(paths$diagnostics, sheet = "Denominators_Flow")
+    expect_identical(
+        diagnostics_flow$n[grepl("^Treated before", diagnostics_flow$step)],
+        as.numeric(results$treatment_era_excluded_n)
     )
     checks <- readxl::read_excel(paths$diagnostics, sheet = "Checks")
     expect_true(all(checks$status %in% c("no concern", "concern", "not assessed")))
@@ -225,4 +234,46 @@ test_that("reverse Kaplan-Meier follow-up matches a hand calculation", {
     # censored, so S = 0.5 exactly; at 80 months 2 are at risk and 1 is censored, so S = 0.25.
     # S equals 0.5 from 60 until 80, so by the survfit convention the median is the midpoint, 70.
     expect_equal(outcomes$median_followup_months[outcomes$group == "Not tested"], 70)
+})
+
+test_that("the treatment-era sensitivity restricts each group to the testing era and says when it cannot", {
+    era <- GEP_TESTING_ERA_START_YEAR
+    endpoint_data <- data.frame(
+        gep_group = factor(
+            c(rep("Not tested", 10), rep("Class 1", 6), rep("Class 2", 4)),
+            levels = GEP_GROUP_LEVELS
+        ),
+        treatment_year = c(rep(era - 3, 5), rep(era + 2, 5), rep(era + 3, 6), rep(era - 5, 4)),
+        time_months = c(rep(12, 5), rep(70, 5), rep(70, 6), rep(70, 4)),
+        status = c(rep(1L, 5), rep(0L, 5), rep(0L, 6), rep(0L, 4))
+    )
+    table <- build_no_gep_treatment_era_sensitivity(endpoint_data, "MFS", 60)
+    row <- function(group) table[table$group == group, ]
+
+    # Half the group had a metastasis at 12 months but was treated before the era.
+    not_tested <- row("Not tested")
+    expect_identical(c(not_tested$patients, not_tested$patients_in_era, not_tested$patients_before_era), c(10L, 5L, 5L))
+    expect_equal(not_tested$primary_risk, 0.5)
+    expect_equal(not_tested$risk_in_era, 0)
+    expect_equal(not_tested$difference_pct_points, -50)
+    expect_match(not_tested$note, "No events by the horizon in the era")
+
+    # A group that is entirely in the era is unchanged.
+    class_1 <- row("Class 1")
+    expect_equal(class_1$risk_in_era, class_1$primary_risk)
+    expect_identical(class_1$patients_before_era, 0L)
+
+    # A group with nobody in the era has no estimate, and the table says so.
+    class_2 <- row("Class 2")
+    expect_identical(class_2$patients_in_era, 0L)
+    expect_true(is.na(class_2$risk_in_era))
+    expect_false(class_2$estimable_in_era)
+    expect_match(class_2$note, "No patient treated in the era")
+
+    # Empty groups stay in the table.
+    expect_setequal(table$group, GEP_GROUP_LEVELS)
+    expect_error(
+        prepare_no_gep_data(transform(synthetic_no_gep_cohort(), treatment_year = replace(treatment_year, 1, NA))),
+        "treatment_year is missing for 1 patient"
+    )
 })
