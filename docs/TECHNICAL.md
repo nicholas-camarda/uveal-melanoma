@@ -535,7 +535,7 @@ Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the 
 - Full cohort, `d_no_gep/`: `<prefix>no_gep_5yr.xlsx` (`Group_Outcomes_MFS`, `Group_Outcomes_MSS`, `Baseline_By_Group`, `Model_Performance`, `AUC_Difference`, `Sensitivity_Cause_of_Death`), `<prefix>no_gep_group_risk.png`, `<prefix>no_gep_model_auc.png`, and `<prefix>no_gep_diagnostics.xlsx` (adds `Predictor_Screening`)
 - `merged_tables/objective4_cross_cohort_figures/`: the observed-vs-imported MFS figure across the three cohorts
 
-**Diagnostics contract:** the diagnostics workbooks contain patient ids (`Record_Issues`) and are part of the results package: the publish artifact registry copies the `04_GEP_Validation` diagnostics workbooks (the model diagnostics workbooks of Objectives 1-3 stay excluded), and the collaborator export (`scripts/tools/export_gep_objective4_to_downloads.R`) ships the primary workbooks, diagnostics workbooks and figures. They are never committed to Git or posted publicly. A test checks that the exporter and the registry select the same files.
+**Diagnostics contract:** the diagnostics workbooks contain patient ids (`Record_Issues`) and are part of the results package: the publish artifact registry copies every `*_diagnostics.xlsx`, and the collaborator export (`scripts/tools/export_gep_objective4_to_downloads.R`) ships the primary workbooks, diagnostics workbooks and figures. They are never committed to Git or posted publicly. A test checks that the exporter and the registry select the same files.
 
 **Important layout note:** cross-cutting cohort outputs such as baseline characteristics and treatment-duration summaries belong in `00_General/` inside each cohort folder, not in a shared top-level `Analysis/General/` directory.
 

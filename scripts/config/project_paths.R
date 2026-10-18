@@ -287,10 +287,8 @@ PUBLISH_ARTIFACT_REGISTRY <- list(
     ),
     excluded = c(
         "(^|/)(logs|cache|caches|tools_output|test_output|tmp|temp)(/|$)",
-        # Model diagnostics workbooks stay out of snapshots. The GEP diagnostics workbooks are part
-        # of the package: their Record_Issues sheets list, by patient id, who was left out of or
-        # flagged in each analysis, which a reader needs to trace every count.
-        "^(?!04_GEP_Validation/).*_diagnostics\\.xlsx$",
+        # Diagnostics workbooks (*_diagnostics.xlsx) are part of the package: they list, by patient
+        # id, who was left out of or flagged in each analysis, which a reader needs to trace counts.
         "(^|/).*(?:_SKIPPED\\.html|_NO_CONTENT_DIAGNOSTIC\\.html|publish_manifest\\.csv)$",
         "(^|/)01_Efficacy/h_propensity_score_sensitivity/.+\\.(csv|tsv|rds)$"
     )

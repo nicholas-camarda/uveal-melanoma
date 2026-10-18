@@ -324,7 +324,7 @@ test_that("artifact registry allowlists only explicit publishable outputs", {
     expect_true(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_diagnostics.xlsx", "cohort"))
     expect_true(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("01_Efficacy/model.rds", "cohort"))
-    expect_false(is_publishable_relative_artifact("01_Efficacy/summary_diagnostics.xlsx", "cohort"))
+    expect_true(is_publishable_relative_artifact("01_Efficacy/summary_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("cache/intermediate.csv", "cohort"))
     expect_true(is_publishable_relative_artifact(
         "01_Efficacy/h_propensity_score_sensitivity/restricted_cohort_propensity_overlap_summary.md",
@@ -432,8 +432,11 @@ test_that("publish_outputs dry run reports publishable outputs and excludes runt
     result <- publish_outputs(snapshot_id = "2026-03-25-unit", dry_run = TRUE)
 
     expect_true(result$dry_run)
-    expect_equal(result$summary$would_copy, 8)
+    expect_equal(result$summary$would_copy, 9)
     expect_equal(result$summary$copied, 0)
+    would_copy_sources <- result$manifest$source_path[result$manifest$status == "would_copy"]
+    expect_true(any(grepl("summary_diagnostics\\.xlsx$", would_copy_sources)))
+    expect_false(any(grepl("model\\.rds$|cache\\.csv$", would_copy_sources)))
     expect_true(any(result$manifest$status == "skipped_not_publishable"))
     expect_true(any(result$manifest$status == "optional_root_absent"))
     expect_equal(result$summary$missing, 0)
@@ -596,8 +599,8 @@ test_that("publish_outputs copies the Objective 4 workbooks, diagnostics workboo
     expect_true(any(grepl("full_cohort_no_gep_5yr\\.xlsx$", would_copy_sources)))
     expect_true(any(grepl("full_cohort_gep_validation_diagnostics\\.xlsx$", would_copy_sources)))
     expect_true(any(grepl("full_cohort_no_gep_diagnostics\\.xlsx$", would_copy_sources)))
-    # Model diagnostics workbooks of the other objectives stay out of snapshots.
-    expect_true(any(grepl("full_cohort_overall_survival_diagnostics\\.xlsx$", skipped_sources)))
+    # The model diagnostics workbooks of the other objectives travel with their results too.
+    expect_true(any(grepl("full_cohort_overall_survival_diagnostics\\.xlsx$", would_copy_sources)))
 })
 
 test_that("publish_outputs creates a new snapshot and rejects existing snapshot overwrite", {
