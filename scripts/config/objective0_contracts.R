@@ -45,6 +45,16 @@ OBJECTIVE2_TOXICITY_ENDPOINTS <- tibble::tribble(
 # descriptive p-values are reproducible without perturbing unrelated RNG state.
 OBJECTIVE2_SIMULATED_FISHER_SEED <- 20260422L
 
+# Visual-acuity models adjust for baseline logMAR VA in addition to the common
+# confounder set (Revision 2, Reviewer 1 comment 1c). The change score already
+# contains baseline VA, so this adjustment estimates the treatment difference
+# among patients with the same starting acuity (ANCOVA-equivalent contrast).
+OBJECTIVE2_VA_BASELINE_COVARIATE <- "initial_vision"
+
+# The seven-level Snellen-line distribution uses an exact Fisher test rather than
+# a Monte Carlo approximation, so the displayed p-value is identical on every run.
+OBJECTIVE2_FISHER_EXACT_WORKSPACE <- 2e8
+
 # Downstream objective input contract enforced centrally during Objective 0.
 # Domains are checked on non-missing values unless `missing_policy` is
 # `complete`, which requires a value for every analytic row.

@@ -78,6 +78,27 @@ with_preserved_rng_seed <- function(seed, expr) {
     force(expr)
 }
 
+#' Build the covariate set for adjusted visual-acuity change models
+#'
+#' The primary and minimum-follow-up VA models adjust for the common confounder
+#' set plus baseline logMAR VA (`OBJECTIVE2_VA_BASELINE_COVARIATE`). Stops when
+#' baseline VA is absent, because a silently unadjusted model would misstate the
+#' reported specification.
+#'
+#' @param confounders Character vector of common confounders already filtered to
+#'   columns present in the data.
+#' @param available_columns Character vector of column names in the modeling data.
+#' @return Character vector of unique covariate names, confounders first.
+build_va_model_covariates <- function(confounders, available_columns) {
+    if (!OBJECTIVE2_VA_BASELINE_COVARIATE %in% available_columns) {
+        stop(
+            sprintf("Baseline VA column '%s' is required for the adjusted VA models.", OBJECTIVE2_VA_BASELINE_COVARIATE),
+            call. = FALSE
+        )
+    }
+    unique(c(confounders, OBJECTIVE2_VA_BASELINE_COVARIATE))
+}
+
 #' Compute an Objective 2 simulated Fisher p-value with the configured seed
 #'
 #' Uses the central Objective 2 seed for sparse categorical descriptive tests.
@@ -631,7 +652,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     vision_change_contract_note <- paste(
         "Vision endpoint is visual-acuity change score",
         "(initial vision minus final or recurrence-pre-treatment vision);",
-        "baseline visual acuity and latest-VA follow-up time are reviewer-response sensitivity considerations;",
+        "adjusted change-score models include baseline logMAR VA with the common confounders; latest-VA follow-up time enters only the latest-VA ANCOVA sensitivity;",
         "minimum-follow-up sensitivity uses explicit last_followup timing as primary and a separately labeled general-follow-up proxy as sensitivity context."
     )
     ordinal_assumption_note <- paste(
@@ -662,6 +683,9 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
 
     confounders_for_model <- confounders %||% character()
     confounders_for_model <- confounders_for_model[confounders_for_model %in% names(data_with_vision_change)]
+    # Primary and minimum-follow-up VA models share one covariate set: the common
+    # confounders plus baseline VA. The latest-VA ANCOVA sensitivity keeps its own set.
+    va_model_covariates <- build_va_model_covariates(confounders_for_model, names(data_with_vision_change))
     exclusion_vars <- unique(c("treatment_group", confounders_for_model))
     exclusion_result <- apply_sparse_level_exclusions(
         data_with_vision_change,
@@ -679,6 +703,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     }
 
     vision_model_data <- exclusion_result$data
+    va_model_id_col <- pick_sparse_level_id_col(data_with_vision_change)
     line_change_model_data <- vision_model_data %>%
         mutate(
             vision_line_change = compute_line_change_lines(vision_change)
@@ -911,7 +936,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
                     test = list(
                         all_categorical() ~ "fisher.test"
                     ),
-                    test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
+                    test.args = list(all_categorical() ~ list(workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE))
                 )
             ) %>%
             add_overall() %>%
@@ -1015,7 +1040,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
         data = vision_model_data,
         outcome_var = "vision_change",
         predictor_vars = "treatment_group",
-        confounders = confounders_for_model,
+        confounders = va_model_covariates,
         model_type = "linear",
         effect_measure = "MD", # Mean Difference for continuous outcome
         analysis_name = "logmar_vision_change_adjusted",
@@ -1095,7 +1120,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     )
     latest_va_sensitivity_note <- paste(
         "ANCOVA-style reviewer-response sensitivity: latest logMAR visual acuity is modeled with treatment group, viable reviewer-requested baseline predictors, explicit latest-VA follow-up duration, and the standard confounder set.",
-        "This avoids adding baseline visual acuity as an ordinary covariate to a change-score outcome that already contains baseline visual acuity.",
+        "Unlike the primary change-score models, this sensitivity also adjusts for latest-VA follow-up duration and tumor characteristics.",
         "The accompanying reviewer_predictor_availability sheet documents unavailable and non-viable requested fields."
     )
     latest_va_sensitivity_result <- generate_regression_table(
@@ -1118,7 +1143,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
         data = line_change_model_data,
         outcome_var = "vision_line_change",
         predictor_vars = "treatment_group",
-        confounders = confounders_for_model,
+        confounders = va_model_covariates,
         model_type = "linear",
         effect_measure = "MD",
         analysis_name = "snellen_line_change_adjusted",
@@ -1136,7 +1161,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
         data = ordinal_model_data,
         outcome_var = "vision_line_change_bucket",
         predictor_vars = "treatment_group",
-        confounders = confounders_for_model,
+        confounders = va_model_covariates,
         model_type = "ordinal",
         effect_measure = "OR",
         analysis_name = "snellen_line_change_distribution_adjusted",
@@ -1231,8 +1256,8 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
             analysis_label = "LogMAR Vision Change",
             model_label = "Adjusted linear",
             term = "treatment_group",
-            model_formula = build_effect_summary_model_formula("vision_change", "treatment_group", confounders_for_model),
-            covariates_used = format_effect_summary_covariates(confounders_for_model),
+            model_formula = build_effect_summary_model_formula("vision_change", "treatment_group", va_model_covariates),
+            covariates_used = format_effect_summary_covariates(va_model_covariates),
             effect_measure = "MD",
             n_patients = nrow(vision_model_data),
             n_outcome_non_missing = sum(!is.na(vision_model_data$vision_change)),
@@ -1318,8 +1343,8 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
             analysis_label = "Snellen Line Change",
             model_label = "Adjusted linear",
             term = "treatment_group",
-            model_formula = build_effect_summary_model_formula("vision_line_change", "treatment_group", confounders_for_model),
-            covariates_used = format_effect_summary_covariates(confounders_for_model),
+            model_formula = build_effect_summary_model_formula("vision_line_change", "treatment_group", va_model_covariates),
+            covariates_used = format_effect_summary_covariates(va_model_covariates),
             effect_measure = "MD",
             n_patients = nrow(line_change_model_data),
             n_outcome_non_missing = sum(!is.na(line_change_model_data$vision_line_change)),
@@ -1385,8 +1410,8 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
             analysis_label = "Snellen Line Change Distribution",
             model_label = "Adjusted ordinal logistic",
             term = "treatment_group",
-            model_formula = build_effect_summary_model_formula("vision_line_change_bucket", "treatment_group", confounders_for_model),
-            covariates_used = format_effect_summary_covariates(confounders_for_model),
+            model_formula = build_effect_summary_model_formula("vision_line_change_bucket", "treatment_group", va_model_covariates),
+            covariates_used = format_effect_summary_covariates(va_model_covariates),
             effect_measure = "OR",
             n_patients = nrow(ordinal_model_data),
             n_outcome_non_missing = sum(!is.na(ordinal_model_data$vision_line_change_bucket)),
@@ -1433,7 +1458,11 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
                 min_followup_months = threshold_months,
                 timing_var = timing_definition$timing_var
             )
+            # Descriptive medians and group sizes use every patient meeting the
+            # threshold; the adjusted model uses only rows retained in the primary
+            # VA model (sparse tumor-location levels excluded) so both share one specification.
             threshold_model_data <- visual_followup_sensitivities[[sensitivity_key]]$data %>%
+                dplyr::filter(.data[[va_model_id_col]] %in% vision_model_data[[va_model_id_col]]) %>%
                 enforce_unordered_factors()
             visual_followup_models[[sensitivity_key]] <- if (
                 nrow(threshold_model_data) > 0 &&
@@ -1443,7 +1472,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
                     data = threshold_model_data,
                     outcome_var = "vision_change",
                     predictor_vars = "treatment_group",
-                    confounders = confounders_for_model,
+                    confounders = va_model_covariates,
                     model_type = "linear",
                     effect_measure = "MD",
                     analysis_name = threshold_slug,
@@ -1469,7 +1498,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
                 timing_surface = timing_name,
                 min_followup_months = threshold_months,
                 model_status = ifelse(is.null(visual_followup_models[[sensitivity_key]]$model), "skipped", "completed"),
-                model = "vision_change ~ treatment_group + confounders",
+                model = "vision_change ~ treatment_group + confounders + initial_vision (primary-model rows; sparse tumor-location levels excluded)",
                 subset = paste0(timing_definition$timing_var, " >= ", threshold_months),
                 timing_definition = timing_definition$label,
                 threshold_rationale = "Minimum-follow-up latest-visual-acuity sensitivity using 1-, 3-, and 5-year durations as cutoff options; these are not fixed-landmark VA measurements."

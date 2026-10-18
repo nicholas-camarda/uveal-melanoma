@@ -1819,7 +1819,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                         ) %>%
                         modify_table_styling(
                             columns = "p.value",
-                            footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test (simulated p-value) for categorical rows."
+                            footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test for categorical rows."
                         ) %>%
                         collapse_binary_outcomes_to_cases()
                 }
@@ -1902,7 +1902,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                             add_overall() %>%
                             add_p(
                                 test = list(all_categorical() ~ "fisher.test"),
-                                test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
+                                test.args = list(all_categorical() ~ list(workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE))
                             ) %>%
                             format_count_percent_columns() %>%
                             bold_labels() %>%
@@ -1958,7 +1958,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                 modify_caption("**Table 3: Adverse Events**") %>%
                 modify_table_styling(
                     columns = starts_with("p.value"),
-                    footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test (simulated p-value) for categorical rows."
+                    footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test for categorical rows."
                 )
 
             save_gt_html(

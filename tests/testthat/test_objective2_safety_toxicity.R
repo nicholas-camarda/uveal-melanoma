@@ -177,8 +177,21 @@ test_that("Objective 2 writes adjusted outputs in each side-effect subfolder", {
     )
     expect_equal(
         ordinal_rows$covariates_used[ordinal_rows$model_label == "Adjusted ordinal logistic"],
-        "age_at_diagnosis"
+        format_effect_summary_covariates(c("age_at_diagnosis", OBJECTIVE2_VA_BASELINE_COVARIATE))
     )
+
+    # Every adjusted VA change model adjusts for baseline VA (Revision 2, R1-1c).
+    adjusted_va_rows <- subset(
+        vision_effect_summary,
+        analysis_label %in% c("LogMAR Vision Change", "Snellen Line Change", "Snellen Line Change Distribution") &
+            model_label %in% c("Adjusted linear", "Adjusted ordinal logistic")
+    )
+    expect_equal(nrow(adjusted_va_rows), 3)
+    expect_true(all(grepl(OBJECTIVE2_VA_BASELINE_COVARIATE, adjusted_va_rows$covariates_used, fixed = TRUE)))
+    expect_true(OBJECTIVE2_VA_BASELINE_COVARIATE %in% attr(stats::terms(results$vision_changes$regression_model), "term.labels"))
+    expect_true(OBJECTIVE2_VA_BASELINE_COVARIATE %in% attr(stats::terms(results$vision_changes$line_change_regression_model), "term.labels"))
+    unadjusted_va_rows <- subset(vision_effect_summary, model_label %in% c("Unadjusted linear", "Unadjusted ordinal logistic"))
+    expect_true(all(unadjusted_va_rows$covariates_used == "None"))
     expect_true(all(grepl("Proportional-odds assumption was not formally tested", ordinal_rows$notes, fixed = TRUE)))
 
     ordinal_diagnostics_sheets <- readxl::excel_sheets(
@@ -269,6 +282,7 @@ test_that("visual-acuity minimum-follow-up sensitivity reruns treatment-effect m
         "mean_vision_change",
         "median_vision_change"
     ) %in% names(followup_12)))
+    expect_true(all(grepl(OBJECTIVE2_VA_BASELINE_COVARIATE, model_status$model, fixed = TRUE)))
     expect_equal(sort(model_status$subset), c(
         "last_vision_followup_months_explicit >= 12",
         "last_vision_followup_months_explicit >= 36",
@@ -400,4 +414,51 @@ test_that("Merged adverse events table converts the displayed logMAR summary row
             convert_logmar_summary_stat_to_line_summary(logmar_row[[col_name]][[1]])
         )
     }
+})
+
+test_that("adjusted VA models require and append baseline VA", {
+    expect_equal(
+        build_va_model_covariates(c("age_at_diagnosis", "sex"), c("age_at_diagnosis", "sex", "initial_vision")),
+        c("age_at_diagnosis", "sex", OBJECTIVE2_VA_BASELINE_COVARIATE)
+    )
+    expect_equal(
+        build_va_model_covariates(c("initial_vision"), c("initial_vision")),
+        OBJECTIVE2_VA_BASELINE_COVARIATE
+    )
+    expect_error(
+        build_va_model_covariates(c("age_at_diagnosis"), c("age_at_diagnosis")),
+        "Baseline VA column"
+    )
+})
+
+test_that("Snellen-line distribution p-value uses the exact Fisher test", {
+    distribution <- matrix(
+        c(52, 8, 10, 24, 4, 1, 4, 24, 1, 9, 16, 9, 3, 2),
+        nrow = 2,
+        byrow = TRUE
+    )
+    exact_p <- stats::fisher.test(distribution, workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE)$p.value
+    # Exact test is deterministic: no RNG state can change it.
+    set.seed(1)
+    first <- stats::fisher.test(distribution, workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE)$p.value
+    set.seed(99)
+    second <- stats::fisher.test(distribution, workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE)$p.value
+    expect_identical(first, second)
+    expect_equal(exact_p, 0.0466, tolerance = 1e-3)
+
+    distribution_data <- data.frame(
+        treatment_group = factor(rep(c("PBT", "GKSRS"), times = rowSums(distribution)), levels = c("PBT", "GKSRS")),
+        vision_line_change_bucket = factor(
+            c(rep(VISION_LINE_CHANGE_CATEGORY_LEVELS[7:1], distribution[1, ]),
+              rep(VISION_LINE_CHANGE_CATEGORY_LEVELS[7:1], distribution[2, ])),
+            levels = VISION_LINE_CHANGE_CATEGORY_LEVELS
+        )
+    )
+    table_p <- distribution_data %>%
+        gtsummary::tbl_summary(by = treatment_group) %>%
+        gtsummary::add_p(
+            test = list(gtsummary::all_categorical() ~ "fisher.test"),
+            test.args = list(gtsummary::all_categorical() ~ list(workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE))
+        )
+    expect_equal(table_p$table_body$p.value[[1]], exact_p, tolerance = 1e-10)
 })
