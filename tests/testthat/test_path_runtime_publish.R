@@ -93,12 +93,13 @@ test_that("Objective 4 exporter ships the same files as the publish registry and
         logical(1)
     )]
     expect_setequal(shared_relative, registry_relative)
-    expect_false(any(grepl("diagnostics", shared)))
+    # Diagnostics workbooks (Record_Issues, by patient id) travel with the results.
+    expect_equal(sum(grepl("_diagnostics\\.xlsx$", shared)), 2L)
 
     destination <- file.path(withr::local_tempdir(), "pack")
     manifest <- export_env$copy_objective4_artifacts(shared, destination, "full")
     expect_true(all(file.exists(manifest$destination_path)))
-    expect_setequal(manifest$category, c("excel", "png"))
+    expect_setequal(manifest$category, c("excel", "diagnostics", "png"))
     dry <- export_env$copy_objective4_artifacts(shared, file.path(destination, "dry"), "full", dry_run = TRUE)
     expect_true(all(dry$status == "would_copy"))
     expect_false(dir.exists(file.path(destination, "dry")))
@@ -319,8 +320,9 @@ test_that("artifact registry allowlists only explicit publishable outputs", {
     expect_true(is_publishable_relative_artifact("merged_tables/objective4_cross_cohort_figures/three_panel_report.md", "merged_tables"))
     expect_true(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_5yr.xlsx", "cohort"))
     expect_true(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_group_risk.png", "cohort"))
-    expect_false(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_diagnostics.xlsx", "cohort"))
-    expect_false(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_diagnostics.xlsx", "cohort"))
+    # The GEP diagnostics workbooks carry the Record_Issues sheets and are part of the package.
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_diagnostics.xlsx", "cohort"))
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("01_Efficacy/model.rds", "cohort"))
     expect_false(is_publishable_relative_artifact("01_Efficacy/summary_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("cache/intermediate.csv", "cohort"))
@@ -546,7 +548,7 @@ test_that("publish CLI main prints the concise report without manifest rows", {
     expect_false(grepl("source_path", output, fixed = TRUE))
 })
 
-test_that("publish_outputs copies Objective 4 workbooks and figures but never the diagnostics workbooks", {
+test_that("publish_outputs copies the Objective 4 workbooks, diagnostics workbooks and figures", {
     tmp_root <- tempfile("runtime-publish-obj4-")
     install_publish_contract_fixture(tmp_root)
     runtime_root <- file.path(tmp_root, "runtime")
@@ -555,8 +557,11 @@ test_that("publish_outputs copies Objective 4 workbooks and figures but never th
     export_analysis_root <- file.path(export_root, "Analysis")
     obj4_dir <- file.path(output_root, "uveal_full", "04_GEP_Validation")
     obj4_no_gep_dir <- file.path(obj4_dir, "d_no_gep")
+    obj1_dir <- file.path(output_root, "uveal_full", "01_Efficacy")
 
     dir.create(obj4_no_gep_dir, recursive = TRUE, showWarnings = FALSE)
+    dir.create(obj1_dir, recursive = TRUE, showWarnings = FALSE)
+    writeLines("model diagnostics", file.path(obj1_dir, "full_cohort_overall_survival_diagnostics.xlsx"))
     writeLines("primary", file.path(obj4_dir, "full_cohort_gep_validation_5yr.xlsx"))
     writeLines("figure", file.path(obj4_dir, "full_cohort_gep_validation_mfs_curves.png"))
     writeLines("record identifiers", file.path(obj4_dir, "full_cohort_gep_validation_diagnostics.xlsx"))
@@ -589,9 +594,10 @@ test_that("publish_outputs copies Objective 4 workbooks and figures but never th
     expect_true(any(grepl("full_cohort_gep_validation_5yr\\.xlsx$", would_copy_sources)))
     expect_true(any(grepl("full_cohort_gep_validation_mfs_curves\\.png$", would_copy_sources)))
     expect_true(any(grepl("full_cohort_no_gep_5yr\\.xlsx$", would_copy_sources)))
-    expect_true(any(grepl("full_cohort_gep_validation_diagnostics\\.xlsx$", skipped_sources)))
-    expect_true(any(grepl("full_cohort_no_gep_diagnostics\\.xlsx$", skipped_sources)))
-    expect_false(any(grepl("diagnostics\\.xlsx$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_gep_validation_diagnostics\\.xlsx$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_no_gep_diagnostics\\.xlsx$", would_copy_sources)))
+    # Model diagnostics workbooks of the other objectives stay out of snapshots.
+    expect_true(any(grepl("full_cohort_overall_survival_diagnostics\\.xlsx$", skipped_sources)))
 })
 
 test_that("publish_outputs creates a new snapshot and rejects existing snapshot overwrite", {

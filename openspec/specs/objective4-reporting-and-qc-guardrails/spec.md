@@ -21,11 +21,16 @@ Define Objective 4 reporting guardrails that keep estimates tied to the follow-u
 - **AND** a check that could not run is recorded as not assessed
 - **AND** a failed analysis stops the run instead of producing a partial workbook
 
-### Requirement: Objective 4 SHALL keep record identifiers out of shared outputs
-#### Scenario: Diagnostics workbooks are not published
+### Requirement: Objective 4 SHALL make every exclusion traceable by patient id
+#### Scenario: Diagnostics workbooks travel with the results
 - **WHEN** a snapshot is published or the collaborator export is built
-- **THEN** workbooks with a `Record_Issues` sheet are excluded
+- **THEN** the Objective 4 diagnostics workbooks, including their `Record_Issues` sheets, are included beside the primary workbooks
+- **AND** each `Record_Issues` row carries the patient `id` used in the analytic dataset
 - **AND** the primary workbooks contain no patient identifiers
+
+#### Scenario: Identifiers stay out of Git and public documents
+- **WHEN** documentation, tests or committed files describe or exercise the diagnostics workbooks
+- **THEN** they contain no real patient identifiers
 
 #### Scenario: Record_Issues reconciles with the flow
 - **WHEN** a diagnostics workbook is written

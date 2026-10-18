@@ -35,29 +35,30 @@ get_objective4_cohort_map <- function() {
 #' Determine the destination subdirectory for an exported artifact
 #'
 #' @param source_path Character scalar source file path.
-#' @return `png` for figures, `excel` for workbooks.
+#' @return `png` for figures, `diagnostics` for diagnostics workbooks, `excel` for the
+#'   other workbooks.
 get_objective4_artifact_category <- function(source_path) {
     extension <- tolower(tools::file_ext(source_path))
     if (identical(extension, "png")) {
         return("png")
     }
     if (identical(extension, "xlsx")) {
-        return("excel")
+        return(if (grepl("_diagnostics\\.xlsx$", basename(source_path))) "diagnostics" else "excel")
     }
     stop(sprintf("Unsupported Objective 4 artifact type: %s", source_path), call. = FALSE)
 }
 
 #' List the shareable Objective 4 files of one cohort
 #'
-#' The shareable files are the primary workbooks and figures. Diagnostics
-#' workbooks carry record identifiers and never leave the runtime folder; this
-#' is the same rule as the publish artifact registry.
+#' The package is the primary workbooks, the diagnostics workbooks and the figures,
+#' the same files the publish artifact registry copies. The diagnostics workbooks list,
+#' by patient id, every patient left out of or flagged in an analysis (`Record_Issues`),
+#' so the package goes only to people who already have access to the study data.
 #'
 #' @param objective4_root Character scalar path to the cohort's `04_GEP_Validation` folder.
 #' @return Character vector of absolute file paths, sorted.
 list_objective4_shareable_files <- function(objective4_root) {
-    files <- list.files(objective4_root, pattern = "\\.(xlsx|png)$", recursive = TRUE, full.names = TRUE)
-    sort(files[!grepl("_diagnostics\\.xlsx$", basename(files))])
+    sort(list.files(objective4_root, pattern = "\\.(xlsx|png)$", recursive = TRUE, full.names = TRUE))
 }
 
 #' Copy shareable Objective 4 artifacts into a destination folder
@@ -96,8 +97,8 @@ copy_objective4_artifacts <- function(source_paths, export_root, cohort_label, d
 
 #' Export the Objective 4 paper pack to Downloads
 #'
-#' Copies the primary workbooks and figures of the full, restricted and
-#' GKSRS-only cohorts. A missing Objective 4 folder or an empty folder stops the
+#' Copies the primary workbooks, diagnostics workbooks (patient ids) and figures of the
+#' full, restricted and GKSRS-only cohorts. A missing Objective 4 folder or an empty folder stops the
 #' export, so a pack is never partial.
 #'
 #' @param destination_dir Optional destination directory. Defaults to a fresh

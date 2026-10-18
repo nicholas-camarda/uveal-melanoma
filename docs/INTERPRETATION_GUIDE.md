@@ -605,7 +605,7 @@ Each cohort's `04_GEP_Validation/` folder holds one workbook and three figures; 
 | `d_no_gep/<prefix>no_gep_5yr.xlsx` | Full cohort: outcomes in every GEP group, baseline characteristics by group, baseline-model performance |
 | `d_no_gep/<prefix>no_gep_group_risk.png`, `d_no_gep/<prefix>no_gep_model_auc.png` | Observed 5-year risk by group; model and comparator AUC |
 
-A `<prefix>..._diagnostics.xlsx` workbook sits next to each primary workbook in the runtime folder. It documents how each result was produced and lists the records behind every exclusion; it contains patient identifiers and is not part of published snapshots or the collaborator export. The three cohorts also share a cross-cohort observed-vs-imported figure in `merged_tables/objective4_cross_cohort_figures/`.
+A `<prefix>..._diagnostics.xlsx` workbook sits next to each primary workbook and travels with it in published snapshots and the collaborator export. It documents how each result was produced and lists, by patient `id`, the records behind every exclusion or flag. It contains patient identifiers, so share it only with people who already have access to the study data. The three cohorts also share a cross-cohort observed-vs-imported figure in `merged_tables/objective4_cross_cohort_figures/`.
 
 ### Reading the group table
 
@@ -658,7 +658,7 @@ The overall row averages the group risks weighted by group size and compares the
 
 ### Diagnostics workbook
 
-Read `Specification_Coding` first: each quantity's method, estimand, units, direction and plain-language reading. `Denominators_Flow` counts patients through each step. `Checks` gives each check a result and a status (no concern, concern, not assessed) with a reason; a check that was not run is "not assessed" and never appears as passed. `Record_Issues` lists, one row per record and issue, the patients outside the primary set, the patients flagged for biopsy timing (including a biopsy long before treatment, which stays in the analysis), and the patients removed from a model; its counts reconcile with `Denominators_Flow`.
+Read `Specification_Coding` first: each quantity's method, estimand, units, direction and plain-language reading. `Denominators_Flow` counts patients through each step. `Checks` gives each check a result and a status (no concern, concern, not assessed) with a reason; a check that was not run is "not assessed" and never appears as passed. `Record_Issues` lists, one row per record and issue, each with the patient `id` from the analytic dataset, the patients outside the primary set, the patients flagged for biopsy timing (including a biopsy long before treatment, which stays in the analysis), and the patients removed from a model; its counts reconcile with `Denominators_Flow`.
 
 ### Suggested interpretation template
 
