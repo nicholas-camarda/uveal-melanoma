@@ -327,22 +327,29 @@ create_derived_variables <- function(data) {
             vision_line_change_bucket = assign_line_change_bucket(vision_line_change),
         ) %>%
         mutate(
-            recurrence_event = if_else(recurrence1 == "Y", 1, 0, missing = 0),
-            mets_event = if_else(mets_progression == "Y", 1L, 0L, missing = 0L),
+            # A blank source value stays missing so the Objective 0 contract (complete
+            # binary endpoints) rejects it; it is never read as "no event".
+            recurrence_event = if_else(recurrence1 == "Y", 1, 0),
+            mets_event = if_else(mets_progression == "Y", 1L, 0L),
             mets_event_analysis = if_else(
                 mets_at_or_before_treatment,
                 NA_integer_,
                 mets_event
             ),
-            death_event = if_else(!is.na(dod), 1, 0, missing = 0),
-            # Melanoma-specific death is defined by the recorded cause of death.
+            death_event = if_else(!is.na(dod), 1, 0),
+            # Melanoma-specific death is defined by the recorded cause of death. A death
+            # with no recorded cause is missing, not silently a competing death; deaths
+            # recorded as Unknown or Unknown_Cancer are competing (see the cause-of-death
+            # sensitivity).
             melanoma_death_event = case_when(
                 cod == "Metastatic_Uveal_Melanoma" ~ 1,
+                !is.na(dod) & is.na(cod) ~ NA_real_,
                 TRUE ~ 0
             ),
             # Every death not classified as melanoma-specific is competing;
             # patients without a death are censored.
             competing_death_event = case_when(
+                is.na(melanoma_death_event) ~ NA_integer_,
                 death_event == 0 ~ 0L,
                 melanoma_death_event == 1 ~ 0L,
                 TRUE ~ 1L

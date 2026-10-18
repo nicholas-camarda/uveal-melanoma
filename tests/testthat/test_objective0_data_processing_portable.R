@@ -294,3 +294,26 @@ test_that("unknown-cause deaths are recoded to melanoma deaths only in the sensi
     others <- setdiff(seq_len(nrow(derived)), dead[1:4])
     expect_identical(derived$mss_event_type_unknown_cause_melanoma[others], derived$mss_event_type[others])
 })
+
+test_that("a death with no recorded cause is missing, not a competing death", {
+    test_data <- create_test_dataset()[1:3, ]
+    test_data$dod <- as.Date(c("2024-01-01", "2024-02-01", NA))
+    test_data$cod <- c("Metastatic_Uveal_Melanoma", NA, NA)
+
+    derived <- create_derived_variables(test_data)
+
+    expect_identical(derived$death_event, c(1, 1, 0))
+    expect_identical(derived$melanoma_death_event, c(1, NA, 0))
+    expect_identical(derived$competing_death_event, c(0L, NA, 0L))
+})
+
+test_that("a blank metastasis or recurrence source value stays missing", {
+    test_data <- create_test_dataset()[1:2, ]
+    test_data$recurrence1 <- c("Y", NA)
+    test_data$mets_progression <- c(NA, "Y")
+
+    derived <- create_derived_variables(test_data)
+
+    expect_identical(derived$recurrence_event, c(1, NA))
+    expect_identical(derived$mets_event, c(NA, 1L))
+})
