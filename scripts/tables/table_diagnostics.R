@@ -213,12 +213,9 @@ build_sample_size_summary_tab <- function(filter_stats, dataset_name, analysis_n
     }
 
     initial_n <- stats$initial_n %||% modeled_n
-    model_n <- stats$model_n %||% modeled_n
-    removed_n <- stats$removed_n %||% pmax(initial_n - modeled_n, 0)
-    removed_pct <- stats$removed_pct
-    if (is.null(removed_pct) || is.na(removed_pct)) {
-        removed_pct <- if (initial_n > 0) round((initial_n - model_n) / initial_n * 100, 1) else 0
-    }
+    model_n <- modeled_n
+    removed_n <- pmax(initial_n - model_n, 0)
+    removed_pct <- if (initial_n > 0) round(removed_n / initial_n * 100, 1) else 0
 
     data.frame(
         dataset_name = dataset_name,
