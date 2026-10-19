@@ -555,8 +555,9 @@ main_execution <- function() {
     fatal_issues <- character()
     warning_issues <- character()
     
-    # Store data for merging at the end
+    # Store data and fitted-model results for merging at the end
     cohort_data <- list()
+    cohort_results <- list()
 
     logger::log_info("Starting global Objective 0 preflight")
 
@@ -616,6 +617,7 @@ main_execution <- function() {
                 results <- run_my_analysis(dataset_name, objectives_to_run = c(1, 2, 3, 4))
                 fatal_issues <- c(fatal_issues, results$fatal_issues %||% character())
                 warning_issues <- c(warning_issues, results$warning_issues %||% character())
+                cohort_results[[dataset_name]] <- results
 
                 # Load the data directly for merging
                 tryCatch({
@@ -663,6 +665,20 @@ main_execution <- function() {
     }, error = function(e) {
         fatal_issues <<- append_issue(fatal_issues, sprintf("merge_failure:%s", e$message))
         logger::log_error(formatted(sprintf("Error merging baseline tables: %s", e$message)))
+    })
+
+    # Full-model supplement (Reviewer 2): every term of each primary adjusted
+    # model plus the sensitivity analyses, from the fitted models of the two
+    # main cohorts. A missing model fails the run instead of writing a partial table.
+    tryCatch({
+        write_full_model_supplement(list(
+            Full = cohort_results[["uveal_melanoma_full_cohort"]],
+            Restricted = cohort_results[["uveal_melanoma_restricted_cohort"]]
+        ))
+        logger::log_info("Files created: full_model_supplement.xlsx")
+    }, error = function(e) {
+        fatal_issues <<- append_issue(fatal_issues, sprintf("full_model_supplement:%s", e$message))
+        logger::log_error(formatted(sprintf("Error writing full-model supplement: %s", e$message)))
     })
 
     # Generate cross-cohort Objective 4 poster figures after all cohort-level

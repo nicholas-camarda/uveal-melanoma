@@ -576,3 +576,77 @@ test_that("supplement p-values follow the manuscript precision rule", {
         c("0.26", "0.03", "0.005", "<0.001", "1.00", NA)
     )
 })
+
+test_that("supplement sensitivity rows report the treatment term of each sensitivity model", {
+    set.seed(11)
+    fit_data <- data.frame(
+        y = rnorm(80),
+        treatment_group = factor(rep(c("PBT", "GKSRS"), 40), levels = c("PBT", "GKSRS")),
+        age_at_diagnosis = rnorm(80, 60, 10)
+    )
+    lm_fit <- stats::lm(y ~ treatment_group + age_at_diagnosis, fit_data)
+    followup <- list(
+        proxy_36mo = list(model = lm_fit),
+        proxy_12mo = list(model = lm_fit),
+        proxy_60mo = list(model = lm_fit),
+        explicit_12mo = list(model = lm_fit)
+    )
+    weighted <- tibble::tibble(
+        outcome = c("Local Recurrence", "Overall Survival"),
+        n = c(164L, 164L), events = c(18L, 39L),
+        estimate = c(1.527, 0.868), conf_low = c(0.569, 0.410), conf_high = c(4.096, 1.838),
+        p_value = c(0.400, 0.711), status = c("estimated", "estimated")
+    )
+    cohort <- function(propensity) {
+        list(
+            objective_1 = list(propensity_sensitivity = propensity),
+            objective_2 = list(vision_changes = list(visual_followup_model = followup, latest_va_sensitivity_model = lm_fit))
+        )
+    }
+    sensitivity <- build_supplement_sensitivity_models(list(
+        Full = cohort(NULL),
+        Restricted = cohort(list(artifacts = list(weighted_cox_results = weighted)))
+    ))
+
+    expect_equal(sum(sensitivity$cohort == "Full"), 4L)
+    expect_equal(sum(sensitivity$cohort == "Restricted"), 6L)
+    followup_rows <- sensitivity[sensitivity$cohort == "Full" & grepl("minimum follow-up", sensitivity$analysis), ]
+    expect_equal(followup_rows$analysis[1:3], sprintf("VA change, logMAR, %d-year minimum follow-up (linear)", c(1L, 3L, 5L)))
+    expect_true(all(followup_rows$fitted_n == 80L))
+    expected_p <- summary(lm_fit)$coefficients["treatment_groupGKSRS", "Pr(>|t|)"]
+    expect_equal(followup_rows$p_value[[1]], format_manuscript_pvalue(expected_p))
+    expect_equal(followup_rows$estimate[[1]], format_supplement_number(stats::coef(lm_fit)[["treatment_groupGKSRS"]]))
+
+    weighted_rows <- sensitivity[grepl("overlap-weighted", sensitivity$analysis), ]
+    expect_equal(weighted_rows$cohort, rep("Restricted", 2))
+    expect_equal(weighted_rows$estimate, c("1.53", "0.87"))
+    expect_equal(weighted_rows$ci_95, c("0.57, 4.10", "0.41, 1.84"))
+    expect_equal(weighted_rows$events, c(18L, 39L))
+
+    expect_error(
+        build_supplement_sensitivity_models(list(Full = list(objective_1 = list(), objective_2 = list()))),
+        "Missing minimum-follow-up"
+    )
+})
+
+test_that("merged adverse events workbook carries the exact p-values behind each displayed p-value", {
+    test_data <- create_test_dataset()
+    output_path <- file.path(TEST_OUTPUT_DIR, "merged_exact_pvalue_sheet")
+    dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+    withr::defer(unlink(output_path, recursive = TRUE), envir = parent.frame())
+    merge_adverse_events_tables(test_data, test_data, output_path)
+
+    merged_xlsx <- file.path(output_path, "merged_adverse_events.xlsx")
+    expect_true("Exact_pvalues" %in% readxl::excel_sheets(merged_xlsx))
+    exact <- readxl::read_xlsx(merged_xlsx, sheet = "Exact_pvalues", col_types = "text")
+    expect_gt(nrow(exact), 0)
+
+    exact_p <- as.numeric(exact$full_cohort_p_exact)
+    has_p <- !is.na(exact_p)
+    expect_true(any(has_p))
+    expect_equal(exact$full_cohort_p_displayed[has_p], format_manuscript_pvalue(exact_p[has_p]))
+
+    table_sheet <- readxl::read_xlsx(merged_xlsx, sheet = "Sheet1", col_types = "text")
+    displayed <- unlist(table_sheet[, grepl("p-value", names(table_sheet), fixed = TRUE)], use.names = FALSE)
+    expect_true(all(exact$full_cohort_p_displayed[has_p] %in% displayed))
+})

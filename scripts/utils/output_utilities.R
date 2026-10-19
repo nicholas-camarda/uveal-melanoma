@@ -1958,7 +1958,8 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                 modify_caption("**Table 3: Adverse Events**") %>%
                 modify_table_styling(
                     columns = starts_with("p.value"),
-                    footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test for categorical rows."
+                    footnote = "Wilcoxon rank-sum test for continuous rows; Fisher's exact test for categorical rows.",
+                    fmt_fun = format_manuscript_pvalue
                 )
 
             save_gt_html(
@@ -1966,11 +1967,22 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                 filename = file.path(output_path, "merged_adverse_events.html")
             )
 
-            merged_table %>%
-                as_tibble() %>%
-                write_readable_xlsx(
-                    path = file.path(output_path, "merged_adverse_events.xlsx")
+            # Unrounded p-values behind the displayed column, so each Table 3
+            # p-value can be traced to the run and its display precision checked.
+            exact_pvalues <- merged_table$table_body %>%
+                dplyr::filter(!is.na(.data$p.value_1) | !is.na(.data$p.value_2)) %>%
+                dplyr::transmute(
+                    characteristic = gsub("^_+|_+$", "", .data$label),
+                    full_cohort_p_exact = .data$p.value_1,
+                    full_cohort_p_displayed = format_manuscript_pvalue(.data$p.value_1),
+                    restricted_cohort_p_exact = .data$p.value_2,
+                    restricted_cohort_p_displayed = format_manuscript_pvalue(.data$p.value_2)
                 )
+
+            write_readable_xlsx(
+                list(Sheet1 = as_tibble(merged_table), Exact_pvalues = exact_pvalues),
+                path = file.path(output_path, "merged_adverse_events.xlsx")
+            )
 
             logger::log_info("Saved merged adverse events table (Excel and HTML)")
         },

@@ -114,6 +114,97 @@ build_full_model_supplement <- function(results_by_cohort) {
     dplyr::bind_rows(rows)
 }
 
+#' Format a number to two decimals for the supplement sensitivity rows
+#'
+#' @param x Numeric vector.
+#' @return Character vector of fixed two-decimal strings.
+format_supplement_number <- function(x) {
+    formatC(x, format = "f", digits = 2)
+}
+
+#' Build one treatment-term sensitivity row
+#'
+#' @param cohort Display cohort label.
+#' @param analysis Sensitivity analysis label.
+#' @param effect_measure Effect measure abbreviation (`HR` or `MD`).
+#' @param fitted_n Number of patients in the fitted model, or `NA`.
+#' @param events Number of outcome events (`NA` for linear models), or `NA`.
+#' @param estimate,lower,upper,p Numeric estimate, 95% CI limits and p-value,
+#'   or `NA` when the model was not fitted.
+#' @return One-row tibble with the supplement sensitivity columns; a missing
+#'   estimate becomes a row saying the model was not fitted.
+sensitivity_row <- function(cohort, analysis, effect_measure, fitted_n, events, estimate, lower, upper, p) {
+    fitted <- !is.na(estimate)
+    tibble::tibble(
+        cohort = cohort,
+        analysis = analysis,
+        effect_measure = effect_measure,
+        fitted_n = as.integer(fitted_n),
+        events = as.integer(events),
+        estimate = if (fitted) format_supplement_number(estimate) else "Model not fitted",
+        ci_95 = if (fitted) paste(format_supplement_number(lower), format_supplement_number(upper), sep = ", ") else NA_character_,
+        p_value = if (fitted) format_manuscript_pvalue(p) else NA_character_
+    )
+}
+
+#' Build the sensitivity-analysis rows reported beneath the primary models
+#'
+#' Treatment term (GKSRS vs PBT) only, taken from the fitted objects the
+#' pipeline already holds: the 1-, 3-, and 5-year minimum-follow-up VA models
+#' (general follow-up definition, the one the Methods state), the extended
+#' latest-VA model, and, for the cohort that has one, the overlap-weighted Cox
+#' models. The overlap-weighted models exist only for the restricted cohort, so
+#' other cohorts contribute no such rows.
+#'
+#' @param results_by_cohort Named list as in `build_full_model_supplement()`.
+#' @return Tibble with cohort, analysis, effect measure, fitted N, events,
+#'   estimate, 95% CI, and p-value columns.
+build_supplement_sensitivity_models <- function(results_by_cohort) {
+    rows <- list()
+    add_row <- function(row) rows[[length(rows) + 1]] <<- row
+    for (cohort_label in names(results_by_cohort)) {
+        vision <- results_by_cohort[[cohort_label]]$objective_2$vision_changes
+        followup_models <- vision$visual_followup_model
+        proxy_keys <- grep("^proxy_[0-9]+mo$", names(followup_models), value = TRUE)
+        if (is.null(vision) || length(proxy_keys) == 0) {
+            stop(sprintf("Missing minimum-follow-up VA models for %s.", cohort_label), call. = FALSE)
+        }
+        proxy_months <- as.integer(sub("^proxy_([0-9]+)mo$", "\\1", proxy_keys))
+        for (key in proxy_keys[order(proxy_months)]) {
+            months <- as.integer(sub("^proxy_([0-9]+)mo$", "\\1", key))
+            effect <- extract_va_treatment_effect(followup_models[[key]]$model)
+            add_row(sensitivity_row(
+                cohort_label,
+                sprintf("VA change, logMAR, %g-year minimum follow-up (linear)", months / 12),
+                "MD", effect$modeled_n, NA, effect$adjusted_md, effect$ci_lower, effect$ci_upper, effect$p_value
+            ))
+        }
+        if (!"latest_va_sensitivity_model" %in% names(vision)) {
+            stop(sprintf("Missing latest-VA sensitivity model for %s.", cohort_label), call. = FALSE)
+        }
+        latest <- extract_va_treatment_effect(vision$latest_va_sensitivity_model)
+        add_row(sensitivity_row(
+            cohort_label, "Latest logMAR VA, extended model (linear)", "MD",
+            latest$modeled_n, NA, latest$adjusted_md, latest$ci_lower, latest$ci_upper, latest$p_value
+        ))
+        weighted <- results_by_cohort[[cohort_label]]$objective_1$propensity_sensitivity$artifacts$weighted_cox_results
+        if (!is.null(weighted)) {
+            for (i in seq_len(nrow(weighted))) {
+                estimated <- identical(weighted$status[[i]], "estimated")
+                add_row(sensitivity_row(
+                    cohort_label,
+                    sprintf("%s, overlap-weighted Cox (full follow-up)", weighted$outcome[[i]]),
+                    "HR", weighted$n[[i]], weighted$events[[i]],
+                    if (estimated) as.numeric(weighted$estimate[[i]]) else NA_real_,
+                    as.numeric(weighted$conf_low[[i]]), as.numeric(weighted$conf_high[[i]]),
+                    as.numeric(weighted$p_value[[i]])
+                ))
+            }
+        }
+    }
+    dplyr::bind_rows(rows)
+}
+
 #' Write the full-model supplementary table
 #'
 #' @param results_by_cohort Named list as in `build_full_model_supplement()`.
@@ -121,16 +212,20 @@ build_full_model_supplement <- function(results_by_cohort) {
 #' @return Path to the written workbook, invisibly.
 write_full_model_supplement <- function(results_by_cohort, output_dir = MERGED_TABLES_DIR) {
     supplement <- build_full_model_supplement(results_by_cohort)
+    sensitivity <- build_supplement_sensitivity_models(results_by_cohort)
     notes <- tibble::tibble(note = c(
         "Each block is one primary adjusted model; terms, estimates, 95% CIs, and p-values are taken from the same formatted table the pipeline writes for that model.",
         "HR, hazard ratio (GKSRS vs PBT and per covariate level); MD, mean difference in logMAR change (positive = less VA loss); OR, odds ratio.",
         "Cox models for local recurrence and metastatic progression use full follow-up; overall and progression-free survival models are administratively censored at 60 months.",
         "Covariates: age at diagnosis (continuous), sex, and tumor location (sparse location categories excluded); the VA model also includes baseline logMAR VA.",
         "fitted_n is the number of patients in the fitted model; events is the number of outcome events in that model (not applicable to the linear model). Both exclude patients in sparse tumor-location categories, so they can be slightly smaller than the cohort counts in Tables 2 and 3.",
-        "p-values: two decimals at or above 0.01, three decimals below 0.01, <0.001 below 0.001. A factor's p-value is shown on its level row."
+        "p-values: two decimals at or above 0.01, three decimals below 0.01, <0.001 below 0.001. A factor's p-value is shown on its level row.",
+        "Sensitivity_models lists the treatment term (GKSRS vs PBT) of each sensitivity analysis: VA change among patients with at least 1, 3, or 5 years of follow-up (same covariates as the primary VA model; follow-up uses the last documented visit, or general follow-up when that date is missing), the extended latest-VA model, and, for the restricted cohort only, overlap-weighted Cox models.",
+        "The extended latest-VA model adjusts for baseline VA, time to last follow-up, tumor height, basal diameter, T-stage, SRF, treatment year, age, sex, and tumor location (and optic-nerve abutment in the full cohort); its endpoint is the latest logMAR VA, not the change score.",
+        "The overlap-weighted OS and PFS models use full follow-up, unlike the 5-year primary OS and PFS models, so their event counts are larger."
     ))
     path <- file.path(output_dir, "full_model_supplement.xlsx")
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-    write_readable_xlsx(list(Full_models = supplement, Notes = notes), path)
+    write_readable_xlsx(list(Full_models = supplement, Sensitivity_models = sensitivity, Notes = notes), path)
     invisible(path)
 }
