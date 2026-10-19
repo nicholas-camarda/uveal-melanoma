@@ -521,6 +521,7 @@ test_that("Table 3 and the effect-summary note export the same exact distributio
     p_cells <- merged[distribution_row, grepl("p-value", merged[1, ], fixed = TRUE)]
     p_cells <- p_cells[!is.na(p_cells) & nzchar(p_cells)]
     expect_true(length(p_cells) >= 1)
+    expect_true("0.047" %in% p_cells)
     for (cell in p_cells) {
         decimals <- nchar(sub("^[^.]*\\.", "", cell))
         expect_equal(as.numeric(cell), round(exact_p, decimals))
@@ -574,6 +575,10 @@ test_that("supplement p-values follow the manuscript precision rule", {
     expect_equal(
         format_manuscript_pvalue(c(0.2563, 0.0272, 0.0049, 0.0004, 0.9994, NA)),
         c("0.26", "0.03", "0.005", "<0.001", "1.00", NA)
+    )
+    expect_equal(
+        format_manuscript_pvalue(c(0.0449, 0.0466, 0.0499, 0.0549, 0.0551)),
+        c("0.04", "0.047", "0.050", "0.055", "0.06")
     )
 })
 

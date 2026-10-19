@@ -44,7 +44,8 @@ full_model_fit_counts <- function(model) {
 #' Format a p-value with the manuscript's precision rule
 #'
 #' Two decimals at or above 0.01, three decimals from 0.001 to below 0.01, and
-#' "<0.001" below that.
+#' "<0.001" below that. Values from 0.045 to below 0.055 also keep three
+#' decimals so a p-value just under 0.05 is not rounded onto the 0.05 threshold.
 #'
 #' @param p Numeric vector of p-values.
 #' @return Character vector; `NA` stays `NA`.
@@ -53,6 +54,7 @@ format_manuscript_pvalue <- function(p) {
         is.na(p) ~ NA_character_,
         p < 0.001 ~ "<0.001",
         p < 0.01 ~ formatC(p, format = "f", digits = 3),
+        p >= 0.045 & p < 0.055 ~ formatC(p, format = "f", digits = 3),
         TRUE ~ formatC(p, format = "f", digits = 2)
     )
 }
@@ -219,7 +221,7 @@ write_full_model_supplement <- function(results_by_cohort, output_dir = MERGED_T
         "Cox models for local recurrence and metastatic progression use full follow-up; overall and progression-free survival models are administratively censored at 60 months.",
         "Covariates: age at diagnosis (continuous), sex, and tumor location (sparse location categories excluded); the VA model also includes baseline logMAR VA.",
         "fitted_n is the number of patients in the fitted model; events is the number of outcome events in that model (not applicable to the linear model). Both exclude patients in sparse tumor-location categories, so they can be slightly smaller than the cohort counts in Tables 2 and 3.",
-        "p-values: two decimals at or above 0.01, three decimals below 0.01, <0.001 below 0.001. A factor's p-value is shown on its level row.",
+        "p-values: two decimals at or above 0.01, three decimals below 0.01 and from 0.045 to below 0.055 (so a value near 0.05 is not rounded onto it), <0.001 below 0.001. A factor's p-value is shown on its level row.",
         "Sensitivity_models lists the treatment term (GKSRS vs PBT) of each sensitivity analysis: VA change among patients with at least 1, 3, or 5 years of follow-up (same covariates as the primary VA model; follow-up uses the last documented visit, or general follow-up when that date is missing), the extended latest-VA model, and, for the restricted cohort only, overlap-weighted Cox models.",
         "The extended latest-VA model adjusts for baseline VA, time to last follow-up, tumor height, basal diameter, T-stage, SRF, treatment year, age, sex, and tumor location (and optic-nerve abutment in the full cohort); its endpoint is the latest logMAR VA, not the change score.",
         "The overlap-weighted OS and PFS models use full follow-up, unlike the 5-year primary OS and PFS models, so their event counts are larger."
