@@ -99,10 +99,13 @@ build_va_model_covariates <- function(confounders, available_columns) {
     unique(c(confounders, OBJECTIVE2_VA_BASELINE_COVARIATE))
 }
 
-#' Compute an Objective 2 simulated Fisher p-value with the configured seed
+#' Compute an Objective 2 exact Fisher p-value
 #'
-#' Uses the central Objective 2 seed for sparse categorical descriptive tests.
-#' Degenerate tables return `NA` instead of stopping the analysis.
+#' Used for the effect-summary notes of the Snellen-line distribution and binary
+#' toxicities. It calls `stats::fisher.test()` in the same form gtsummary uses for
+#' Table 3, so every exported distribution p-value is the same exact value.
+#' Tables with fewer than two groups or categories are not testable and return
+#' `NA`; a failure of the test itself stops the analysis.
 #'
 #' @param data Data frame containing grouping and outcome columns.
 #' @param group_var Character scalar grouping column name.
@@ -125,13 +128,11 @@ calculate_objective2_fisher_p_value <- function(data, group_var, outcome_var) {
         return(NA_real_)
     }
 
-    with_preserved_rng_seed(
-        OBJECTIVE2_SIMULATED_FISHER_SEED,
-        tryCatch(
-            stats::fisher.test(contingency_table, simulate.p.value = TRUE)$p.value,
-            error = function(e) NA_real_
-        )
-    )
+    stats::fisher.test(
+        test_data[[outcome_var]],
+        test_data[[group_var]],
+        workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE
+    )$p.value
 }
 
 #' Safely compute a Wilcoxon treatment-group p-value

@@ -370,7 +370,7 @@ test_that("Objective 2 toxicity analysis consumes prepared burden fields only", 
     )
 })
 
-test_that("Objective 2 simulated Fisher p-values are locally seeded", {
+test_that("Objective 2 Fisher p-values do not consume global RNG state", {
     test_data <- create_test_dataset()
     set.seed(99)
     previous_seed <- .Random.seed
@@ -500,4 +500,53 @@ test_that("minimum-follow-up treatment effect extraction returns estimate, CI, p
     expect_equal(unname(c(effect$ci_lower, effect$ci_upper)), unname(stats::confint(fit)["treatment_groupGKSRS", ]))
     expect_equal(effect$modeled_n, 40L)
     expect_true(is.na(extract_va_treatment_effect(NULL)$adjusted_md))
+})
+
+test_that("Table 3 and the effect-summary note export the same exact distribution p-value", {
+    # Restricted-cohort Snellen-line counts (PBT, GKSRS) from <=-3 lines to >=+3 lines.
+    pbt_counts <- c(52, 8, 10, 24, 4, 1, 4)
+    gk_counts <- c(24, 1, 9, 16, 9, 3, 2)
+    line_values <- c(-0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3)
+    n_total <- sum(pbt_counts, gk_counts)
+    base <- create_test_dataset()
+    cohort <- base[rep(seq_len(nrow(base)), length.out = n_total), , drop = FALSE]
+    cohort$id <- as.character(seq_len(n_total))
+    cohort$treatment_group <- factor(
+        rep(c("PBT", "GKSRS"), times = c(sum(pbt_counts), sum(gk_counts))),
+        levels = c("PBT", "GKSRS")
+    )
+    # Small within-line offsets keep the score continuous (as in real data) while
+    # every value still rounds to the same Snellen line.
+    offsets <- rep(c(-0.04, -0.02, 0, 0.02, 0.04), length.out = n_total)
+    cohort$vision_change <- c(rep(line_values, pbt_counts), rep(line_values, gk_counts)) + offsets
+    expect_equal(
+        as.vector(table(cohort$treatment_group, compute_line_change_lines(cohort$vision_change))),
+        as.vector(rbind(pbt_counts, gk_counts))
+    )
+
+    exact_p <- stats::fisher.test(
+        rbind(pbt_counts, gk_counts),
+        workspace = OBJECTIVE2_FISHER_EXACT_WORKSPACE
+    )$p.value
+    expect_equal(exact_p, 0.0466, tolerance = 1e-3)
+
+    bucket_data <- cohort
+    bucket_data$vision_line_change_bucket <- assign_line_change_bucket(compute_line_change_lines(bucket_data$vision_change))
+    note <- build_distribution_note(bucket_data, "vision_line_change_bucket", "test file")
+    expect_match(note, format_effect_summary_pvalue(exact_p), fixed = TRUE)
+
+    output_path <- file.path(TEST_OUTPUT_DIR, "merged_exact_fisher_test")
+    dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+    withr::defer(unlink(output_path, recursive = TRUE), envir = parent.frame())
+    merge_adverse_events_tables(cohort, cohort, output_path)
+    merged <- as.matrix(readxl::read_xlsx(file.path(output_path, "merged_adverse_events.xlsx"), col_names = FALSE, col_types = "text"))
+    distribution_row <- grep("Distribution", merged[, 1])
+    expect_length(distribution_row, 1)
+    p_cells <- merged[distribution_row, grepl("p-value", merged[1, ], fixed = TRUE)]
+    p_cells <- p_cells[!is.na(p_cells) & nzchar(p_cells)]
+    expect_true(length(p_cells) >= 1)
+    for (cell in p_cells) {
+        decimals <- nchar(sub("^[^.]*\\.", "", cell))
+        expect_equal(as.numeric(cell), round(exact_p, decimals))
+    }
 })
