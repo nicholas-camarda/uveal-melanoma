@@ -312,7 +312,10 @@ create_model_summary_tab <- function(model_fit, data, outcome_var, confounders, 
     data.frame(
         analysis_type = paste0("unified_", analysis_name),
         outcome = outcome_var,
-        n_total = nrow(data),
+        # Fitted N from the model frame (nobs() on a Cox model returns events);
+        # input rows are kept alongside so complete-case exclusions stay visible.
+        n_total = if (!is.null(model_fit)) nrow(stats::model.frame(model_fit)) else nrow(data),
+        n_input_rows = nrow(data),
         n_events = n_events,
         n_outcome_levels = n_outcome_levels,
         model_fitted = !is.null(model_fit),

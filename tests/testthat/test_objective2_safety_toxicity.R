@@ -463,30 +463,6 @@ test_that("Snellen-line distribution p-value uses the exact Fisher test", {
     expect_equal(table_p$table_body$p.value[[1]], exact_p, tolerance = 1e-10)
 })
 
-test_that("VA assessment timing uses the recurrence date for recurrence rows and excludes undated visits", {
-    timing_data <- data.frame(
-        treatment_group = factor(c("PBT", "PBT", "PBT", "GKSRS", "GKSRS", "GKSRS"), levels = c("PBT", "GKSRS")),
-        vision_change = c(-0.2, -0.1, NA, 0.0, -0.3, -0.4),
-        recurrence_event = c(0, 1, 0, 0, 0, 1),
-        treatment_date = as.Date("2015-01-01"),
-        recurrence1_date = lubridate::`%m+%`(as.Date("2015-01-01"), months(c(50, 12, 40, 30, 20, 6))),
-        last_vision_followup_months_explicit = c(60, 70, 40, NA, 24, 36)
-    )
-    timing <- summarize_va_assessment_timing(timing_data)
-    pbt <- timing[timing$treatment_group == "PBT", ]
-    gk <- timing[timing$treatment_group == "GKSRS", ]
-    # PBT: VA-change rows are 1 (60 months, last visit) and 2 (recurrence at 12 months).
-    expect_equal(pbt$n_with_va_change, 2)
-    expect_equal(pbt$n_dated_va_visit, 2)
-    expect_equal(pbt$n_timed_at_recurrence, 1)
-    expect_equal(pbt$median_months, 36)
-    # GKSRS: row 4 has no dated last visit and is excluded; row 6 is timed at recurrence.
-    expect_equal(gk$n_with_va_change, 3)
-    expect_equal(gk$n_dated_va_visit, 2)
-    expect_equal(c(gk$min_months, gk$max_months), c(6, 24))
-    expect_error(summarize_va_assessment_timing(timing_data[, -3]), "recurrence_event")
-})
-
 test_that("minimum-follow-up treatment effect extraction returns estimate, CI, p and fitted N", {
     set.seed(3)
     fit_data <- data.frame(

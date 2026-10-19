@@ -451,64 +451,6 @@ summarize_vision_followup_by_group <- function(data, value_var = "last_vision_fo
         )
 }
 
-#' Summarize time from treatment to the visit that supplied the VA endpoint
-#'
-#' The VA measurement date itself was not abstracted. The latest VA was recorded
-#' at the last documented follow-up visit, except for patients with local
-#' recurrence, whose change score uses the pre-salvage VA recorded at recurrence.
-#' This summary therefore times each patient to the dated last follow-up or, for
-#' recurrence, to the recurrence date. Patients without a dated last visit are
-#' excluded, matching the basis of the reported follow-up durations. Quartiles
-#' use type-2 (inverse empirical CDF with averaging) quantiles, as in the
-#' reported follow-up summaries.
-#'
-#' @param data Data frame with `treatment_group`, `vision_change`,
-#'   `recurrence_event`, `treatment_date`, `recurrence1_date`, and
-#'   `last_vision_followup_months_explicit`. Recurrence timing is computed as
-#'   treatment-to-recurrence months, identical to the analysis recurrence time.
-#' @return Tibble with one row per treatment group: patients with a VA change,
-#'   patients with a dated VA visit, recurrence-timed patients, and median,
-#'   quartiles, minimum and maximum months.
-summarize_va_assessment_timing <- function(data) {
-    required <- c(
-        "treatment_group", "vision_change", "recurrence_event",
-        "treatment_date", "recurrence1_date", "last_vision_followup_months_explicit"
-    )
-    missing_fields <- setdiff(required, names(data))
-    if (length(missing_fields) > 0) {
-        stop(sprintf("VA assessment timing requires: %s", paste(missing_fields, collapse = ", ")), call. = FALSE)
-    }
-    data %>%
-        dplyr::filter(!is.na(.data$vision_change)) %>%
-        dplyr::mutate(
-            va_timed_at_recurrence = .data$recurrence_event %in% 1,
-            va_assessment_months = dplyr::if_else(
-                .data$va_timed_at_recurrence,
-                lubridate::time_length(lubridate::interval(.data$treatment_date, .data$recurrence1_date), unit = "months"),
-                .data$last_vision_followup_months_explicit
-            )
-        ) %>%
-        dplyr::group_by(.data$treatment_group) %>%
-        dplyr::summarise(
-            n_with_va_change = dplyr::n(),
-            n_dated_va_visit = sum(!is.na(.data$va_assessment_months)),
-            n_timed_at_recurrence = sum(.data$va_timed_at_recurrence & !is.na(.data$va_assessment_months)),
-            median_months = stats::median(.data$va_assessment_months, na.rm = TRUE),
-            q1_months = stats::quantile(.data$va_assessment_months, 0.25, type = 2, na.rm = TRUE, names = FALSE),
-            q3_months = stats::quantile(.data$va_assessment_months, 0.75, type = 2, na.rm = TRUE, names = FALSE),
-            min_months = min(.data$va_assessment_months, na.rm = TRUE),
-            max_months = max(.data$va_assessment_months, na.rm = TRUE),
-            .groups = "drop"
-        ) %>%
-        dplyr::mutate(
-            definition = paste(
-                "Months from first-line treatment to the visit supplying the VA endpoint:",
-                "dated last follow-up, or the local-recurrence date for patients whose change score uses pre-salvage VA.",
-                "The VA measurement date itself was not abstracted; patients without a dated last visit are excluded."
-            )
-        )
-}
-
 #' Extract the adjusted treatment effect from a minimum-follow-up VA model
 #'
 #' @param model Fitted `lm` object, or `NULL` when the model was skipped.
@@ -1542,9 +1484,21 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
             # Descriptive medians and group sizes use every patient meeting the
             # threshold; the adjusted model uses only rows retained in the primary
             # VA model (sparse tumor-location levels excluded) so both share one specification.
-            threshold_model_data <- visual_followup_sensitivities[[sensitivity_key]]$data %>%
+            threshold_all_data <- visual_followup_sensitivities[[sensitivity_key]]$data
+            threshold_model_data <- threshold_all_data %>%
                 dplyr::filter(.data[[va_model_id_col]] %in% vision_model_data[[va_model_id_col]]) %>%
                 enforce_unordered_factors()
+            threshold_removed_n <- nrow(threshold_all_data) - nrow(threshold_model_data)
+            threshold_filter_stats <- list(
+                initial_n = nrow(threshold_all_data),
+                model_n = nrow(threshold_model_data),
+                removed_n = threshold_removed_n,
+                removed_pct = if (nrow(threshold_all_data) > 0) round(100 * threshold_removed_n / nrow(threshold_all_data), 1) else 0,
+                removal_reason = sprintf(
+                    "Excluded %d rows in sparse tumor-location levels, as in the primary VA model; displayed group sizes include them.",
+                    threshold_removed_n
+                )
+            )
             visual_followup_models[[sensitivity_key]] <- if (
                 nrow(threshold_model_data) > 0 &&
                     dplyr::n_distinct(stats::na.omit(threshold_model_data$treatment_group)) >= 2
@@ -1559,7 +1513,9 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
                     analysis_name = threshold_slug,
                     dataset_name = dataset_name %||% "vision_followup_sensitivity",
                     output_dir = vision_sensitivity_dir,
-                    prefix = prefix
+                    prefix = prefix,
+                    sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+                    filter_stats = threshold_filter_stats
                 )
             } else {
                 list(
@@ -1603,7 +1559,6 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
         list(
             available_explicit_va_timing = summarize_vision_followup_by_group(data, "last_vision_followup_months_explicit"),
             available_proxy_va_timing = summarize_vision_followup_by_group(data, "last_vision_followup_months_proxy"),
-            va_assessment_timing = summarize_va_assessment_timing(data),
             timing_source_counts = summarize_vision_followup_timing_sources(data),
             treatment_effect_model = dplyr::bind_rows(visual_followup_model_status),
             latest_va_reviewer_model = tibble::tibble(
