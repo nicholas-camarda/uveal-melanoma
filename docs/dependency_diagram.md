@@ -133,6 +133,7 @@ flowchart LR
 - `forest_plot_diagnostics.R`
 - `forest_plot_draw.R`
 - `forest_plot_formatting.R`
+- `full_model_supplement.R`
 - `gep`
 - `gep_clinical_interpretation.R`
 - `gep_evaluation_core_mfs.R`
