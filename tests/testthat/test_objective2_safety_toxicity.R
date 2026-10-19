@@ -569,3 +569,10 @@ test_that("full-model supplement lists every term with reference rows and fitted
     expect_match(nvg_rows$term, "not fitted")
     expect_error(build_full_model_supplement(list(Restricted = list(objective_1 = list(), objective_2 = list()))), "Missing")
 })
+
+test_that("supplement p-values follow the manuscript precision rule", {
+    expect_equal(
+        format_manuscript_pvalue(c(0.2563, 0.0272, 0.0049, 0.0004, 0.9994, NA)),
+        c("0.26", "0.03", "0.005", "<0.001", "1.00", NA)
+    )
+})

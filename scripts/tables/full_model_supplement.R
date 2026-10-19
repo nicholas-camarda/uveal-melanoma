@@ -41,6 +41,22 @@ full_model_fit_counts <- function(model) {
     list(fitted_n = as.integer(fitted_n), events = as.integer(events))
 }
 
+#' Format a p-value with the manuscript's precision rule
+#'
+#' Two decimals at or above 0.01, three decimals from 0.001 to below 0.01, and
+#' "<0.001" below that.
+#'
+#' @param p Numeric vector of p-values.
+#' @return Character vector; `NA` stays `NA`.
+format_manuscript_pvalue <- function(p) {
+    dplyr::case_when(
+        is.na(p) ~ NA_character_,
+        p < 0.001 ~ "<0.001",
+        p < 0.01 ~ formatC(p, format = "f", digits = 3),
+        TRUE ~ formatC(p, format = "f", digits = 2)
+    )
+}
+
 #' Build the full-model supplementary table from objective results
 #'
 #' A model that was not fitted (for example the restricted-cohort neovascular
@@ -91,7 +107,7 @@ build_full_model_supplement <- function(results_by_cohort) {
                 term = ifelse(body$row_type == "label", body$label, paste0("    ", body$label)),
                 estimate = ifelse(body$reference_row %in% TRUE, "Reference", formatted$estimate),
                 ci_95 = formatted$conf.low,
-                p_value = formatted$p.value
+                p_value = format_manuscript_pvalue(body$p.value)
             )
         }
     }
@@ -110,7 +126,8 @@ write_full_model_supplement <- function(results_by_cohort, output_dir = MERGED_T
         "HR, hazard ratio (GKSRS vs PBT and per covariate level); MD, mean difference in logMAR change (positive = less VA loss); OR, odds ratio.",
         "Cox models for local recurrence and metastatic progression use full follow-up; overall and progression-free survival models are administratively censored at 60 months.",
         "Covariates: age at diagnosis (continuous), sex, and tumor location (sparse location categories excluded); the VA model also includes baseline logMAR VA.",
-        "fitted_n is the number of patients in the fitted model; events is the number of outcome events (not applicable to the linear model)."
+        "fitted_n is the number of patients in the fitted model; events is the number of outcome events in that model (not applicable to the linear model). Both exclude patients in sparse tumor-location categories, so they can be slightly smaller than the cohort counts in Tables 2 and 3.",
+        "p-values: two decimals at or above 0.01, three decimals below 0.01, <0.001 below 0.001. A factor's p-value is shown on its level row."
     ))
     path <- file.path(output_dir, "full_model_supplement.xlsx")
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
