@@ -1138,6 +1138,7 @@ fit_capped_cox_sensitivity <- function(data,
     list(
         data = model_data,
         model = result$model,
+        table = result$table,
         effect_summary = effect_summary,
         diagnostics = result$diagnostics,
         ph_diagnostics = ph_diagnostics

@@ -526,3 +526,46 @@ test_that("Table 3 and the effect-summary note export the same exact distributio
         expect_equal(as.numeric(cell), round(exact_p, decimals))
     }
 })
+
+test_that("full-model supplement lists every term with reference rows and fitted counts", {
+    set.seed(5)
+    fit_data <- data.frame(
+        y = rnorm(60),
+        event = rbinom(60, 1, 0.4),
+        treatment_group = factor(rep(c("PBT", "GKSRS"), 30), levels = c("PBT", "GKSRS")),
+        age_at_diagnosis = rnorm(60, 60, 10),
+        sex = factor(sample(c("Female", "Male"), 60, TRUE))
+    )
+    lm_fit <- stats::lm(y ~ treatment_group + age_at_diagnosis + sex, fit_data)
+    glm_fit <- stats::glm(event ~ treatment_group + age_at_diagnosis + sex, binomial(), fit_data)
+    make_tbl <- function(m, measure, type) {
+        create_gtsummary_table(m, measure, "t", data = fit_data, outcome_var = if (type == "binary") "event" else "y",
+            confounders = c("age_at_diagnosis", "sex"), outcome_type = type)
+    }
+    one_cohort <- list(
+        objective_1 = list(
+            recurrence_time_to_event = list(cox_model = NULL),
+            mets_time_to_event = list(cox_model = NULL),
+            os_5yr_capped = list(model = NULL),
+            pfs_5yr_capped = list(model = NULL)
+        ),
+        objective_2 = list(
+            vision_changes = list(regression_model = lm_fit, regression_table = make_tbl(lm_fit, "MD", "continuous")),
+            retinopathy_analysis = list(model = glm_fit, table = make_tbl(glm_fit, "OR", "binary")),
+            nvg_analysis = list(model = NULL),
+            srd_analysis = list(model = glm_fit, table = make_tbl(glm_fit, "OR", "binary"))
+        )
+    )
+    supplement <- build_full_model_supplement(list(Restricted = one_cohort))
+    va_rows <- supplement[supplement$model == "VA change, logMAR (linear)", ]
+    expect_equal(unique(va_rows$fitted_n), 60L)
+    expect_true(all(is.na(va_rows$events)))
+    expect_true("Reference" %in% va_rows$estimate)
+    expect_true(any(grepl("GKSRS", va_rows$term)) && any(grepl("Age", va_rows$term)))
+    srd_rows <- supplement[supplement$model == "Serous retinal detachment (logistic)", ]
+    expect_equal(unique(srd_rows$events), sum(fit_data$event))
+    nvg_rows <- supplement[supplement$model == "Neovascular glaucoma (logistic)", ]
+    expect_equal(nrow(nvg_rows), 1)
+    expect_match(nvg_rows$term, "not fitted")
+    expect_error(build_full_model_supplement(list(Restricted = list(objective_1 = list(), objective_2 = list()))), "Missing")
+})
