@@ -73,3 +73,10 @@ test_that("tool refresh suite writes its complete audit summary", {
     expect_match(summary_text, "- derived_variables_documentation:", fixed = TRUE)
     expect_match(summary_text, "- figure_counts_audit_doc:", fixed = TRUE)
 })
+
+test_that("the figure counts audit is written under the runtime tools folder, not docs", {
+    default_path <- eval(formals(generate_figure_counts_audit_doc)$output_file)
+
+    expect_identical(dirname(default_path), TOOLS_OUTPUT_DIR)
+    expect_false(file.exists(here::here("docs", "FIGURE_COUNTS_AUDIT.md")))
+})

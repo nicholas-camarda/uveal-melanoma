@@ -319,8 +319,16 @@ render_figure_counts_audit_markdown <- function(summary_data = NULL) {
     )
 }
 
-generate_figure_counts_audit_doc <- function(output_file = here::here("docs", "FIGURE_COUNTS_AUDIT.md")) {
+#' Write the figure-counts audit
+#'
+#' The audit lists removed patient IDs and run-specific paths, so it is written
+#' to the runtime tools folder rather than the tracked `docs/` folder.
+#'
+#' @param output_file Path of the audit markdown file.
+#' @return List with `status` and `output_file`.
+generate_figure_counts_audit_doc <- function(output_file = file.path(TOOLS_OUTPUT_DIR, "FIGURE_COUNTS_AUDIT.md")) {
     markdown_lines <- render_figure_counts_audit_markdown()
+    dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
     writeLines(markdown_lines, output_file)
 
     list(

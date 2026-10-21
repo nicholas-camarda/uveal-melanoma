@@ -336,7 +336,7 @@ Current canonical outputs from the refreshed tool suite include:
 - `comprehensive_variable_census.rds`
 - `comprehensive_variable_census.html`
 - `docs/dependency_diagram.md`
-- `docs/FIGURE_COUNTS_AUDIT.md`
+- `FIGURE_COUNTS_AUDIT.md` (current-state figure/count audit; lists removed patient IDs, so it stays out of Git)
 - timestamped `*_run_*_summary.csv` and `*_run_*_summary.txt` files for each tool execution
 
 These files are treated as documentation and audit artifacts, not analysis outputs. They should stay synchronized with the active workflow and be regenerated when the derived-variable catalog, variable census, or tool logic changes.
@@ -686,6 +686,16 @@ Rscript scripts/bootstrap_packages.R
 Project commands must not use `Rscript --vanilla`, manual `.libPaths()`
 injection, or direct package installation because those bypass the declared
 environment.
+
+`renv/settings.json` sets `snapshot.type` to `all` so `renv::status()` treats the
+restored lockfile library as synchronized; with `explicit`, every lockfile package
+that is not a declared dependency is reported as inconsistent.
+
+R sources keep non-ASCII text out of code: labels such as the greater-than-or-equal
+sign are written as `\u2265` escapes, which are the same string in every session
+locale. A literal character would be read in the session's encoding, so a
+C-locale session would write `<U+2265>` into the analytic datasets.
+`tests/testthat/test_source_encoding.R` enforces this for `scripts/` and `tests/`.
 
 Run tests with the shell entry points used elsewhere in the repository:
 

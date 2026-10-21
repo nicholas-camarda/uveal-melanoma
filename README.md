@@ -260,5 +260,4 @@ Objective 4 grouping and display settings are also centralized there through `GE
 - [docs/CALCULATIONS.md](docs/CALCULATIONS.md): derived-variable definitions, endpoint construction, and sign conventions
 - [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md): statistical methodology, assumptions, thresholds, and validation metrics
 - [docs/INTERPRETATION_GUIDE.md](docs/INTERPRETATION_GUIDE.md): how to read tables, plots, workbooks, and Objective 4 deliverables
-- [docs/FIGURE_COUNTS_AUDIT.md](docs/FIGURE_COUNTS_AUDIT.md): generated current-state figure/count audit from runtime artifacts
 - [docs/dependency_diagram.md](docs/dependency_diagram.md): generated loader/workflow dependency map with full sourced inventory appendix
