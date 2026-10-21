@@ -33,6 +33,7 @@ extract_displayed_risk_counts <- function(risk_table_plot, time_point = 0) {
 test_that("survival helper can separate KM display groups from Cox model groups", {
     test_data <- tibble::tibble(
         tt_mets_months = c(12, 24, 18, 30),
+        id = sprintf("T%03d", seq_along(tt_mets_months)),
         mets_event = c(0, 1, 0, 1),
         biopsy1_gep = factor(c("Class 1", "Class 1", GEP_GROUP_TEST_FAILED, GEP_GROUP_TEST_FAILED)),
         biopsy1_gep_model = factor(c("Class 1", "Class 1", GEP_GROUP_TEST_FAILED, GEP_GROUP_TEST_FAILED))
@@ -82,6 +83,7 @@ test_that("risk table keeps displayed row labels aligned with their counts when 
 
     test_data <- tibble::tibble(
         tt_mets_months = seq_len(sum(baseline_counts)) * 6,
+        id = sprintf("T%03d", seq_along(tt_mets_months)),
         mets_event = rep(c(0, 1), length.out = sum(baseline_counts)),
         biopsy1_gep = factor(
             unlist(Map(rep, names(baseline_counts), baseline_counts)),
@@ -117,6 +119,7 @@ test_that("risk table preserves requested row order for a subset of present stra
 
     test_data <- tibble::tibble(
         tt_mets_months = seq_len(sum(baseline_counts)) * 6,
+        id = sprintf("T%03d", seq_along(tt_mets_months)),
         mets_event = rep(c(0, 1), length.out = sum(baseline_counts)),
         biopsy1_gep = factor(
             unlist(Map(rep, names(baseline_counts), baseline_counts)),
@@ -144,13 +147,14 @@ test_that("risk table preserves requested row order for a subset of present stra
     expect_equal(extract_displayed_risk_counts(result$plot$table, time_point = 0), unname(baseline_counts[present_order]))
 })
 
-test_that("Cox diagnostics keep group counts and event rates in Raw_model_output", {
+test_that("Cox diagnostics keep group counts and event rates in Term_support", {
     test_output_dir <- file.path(TEST_OUTPUT_DIR, "objective4_group_counts_in_raw_output")
     dir.create(test_output_dir, recursive = TRUE, showWarnings = FALSE)
     on.exit(unlink(test_output_dir, recursive = TRUE), add = TRUE)
 
     test_data <- tibble::tibble(
         tt_mets_months = c(8, 16, 24, 32, 10, 20, 30, 40),
+        id = sprintf("T%03d", seq_along(tt_mets_months)),
         mets_event = c(1, 0, 0, 1, 0, 1, 0, 1),
         biopsy1_gep_model = factor(
             c("Class 1", "Class 1", "Class 1", "Class 1", "Class 2", "Class 2", "Class 2", "Class 2"),
@@ -176,32 +180,24 @@ test_that("Cox diagnostics keep group counts and event rates in Raw_model_output
 
     expect_true(file.exists(result$output_files$diagnostics_path))
 
-    raw_output <- readxl::read_excel(result$output_files$diagnostics_path, sheet = "Raw_model_output")
-    expect_true(all(c(
-        "group_n", "group_events", "group_non_events", "group_event_rate_pct",
-        "reference_level", "reference_n", "reference_events", "reference_non_events",
-        "reference_event_rate_pct"
-    ) %in% names(raw_output)))
-    expect_false("group_event_summary" %in% names(raw_output))
+    term_support <- readxl::read_excel(result$output_files$diagnostics_path, sheet = "Term_support")
+    expect_true(all(c("n", "events", "non_events", "event_rate_percent", "is_reference") %in% names(term_support)))
 
-    reference_row <- raw_output[raw_output$row_type == "Reference Level" & raw_output$variable == "Class 1", , drop = FALSE]
+    reference_row <- term_support[term_support$variable == "biopsy1_gep_model" & term_support$level == "Class 1", , drop = FALSE]
     expect_equal(nrow(reference_row), 1)
-    expect_equal(reference_row$group_n[[1]], 4)
-    expect_equal(reference_row$group_events[[1]], 2)
-    expect_equal(reference_row$group_non_events[[1]], 2)
-    expect_equal(reference_row$group_event_rate_pct[[1]], 50)
+    expect_true(reference_row$is_reference[[1]])
+    expect_equal(reference_row$n[[1]], 4)
+    expect_equal(reference_row$events[[1]], 2)
+    expect_equal(reference_row$non_events[[1]], 2)
+    expect_equal(reference_row$event_rate_percent[[1]], 50)
 
-    coefficient_row <- raw_output[raw_output$row_type == "Coefficient" & raw_output$variable == "Class 2", , drop = FALSE]
-    expect_equal(nrow(coefficient_row), 1)
-    expect_equal(coefficient_row$group_n[[1]], 4)
-    expect_equal(coefficient_row$group_events[[1]], 2)
-    expect_equal(coefficient_row$group_non_events[[1]], 2)
-    expect_equal(coefficient_row$group_event_rate_pct[[1]], 50)
-    expect_equal(coefficient_row$reference_level[[1]], "Class 1")
-    expect_equal(coefficient_row$reference_n[[1]], 4)
-    expect_equal(coefficient_row$reference_events[[1]], 2)
-    expect_equal(coefficient_row$reference_non_events[[1]], 2)
-    expect_equal(coefficient_row$reference_event_rate_pct[[1]], 50)
+    comparison_row <- term_support[term_support$variable == "biopsy1_gep_model" & term_support$level == "Class 2", , drop = FALSE]
+    expect_equal(nrow(comparison_row), 1)
+    expect_false(comparison_row$is_reference[[1]])
+    expect_equal(comparison_row$n[[1]], 4)
+    expect_equal(comparison_row$events[[1]], 2)
+    expect_equal(comparison_row$non_events[[1]], 2)
+    expect_equal(comparison_row$event_rate_percent[[1]], 50)
 })
 
 # Test 4c: Competing risk analysis produces valid statistical results

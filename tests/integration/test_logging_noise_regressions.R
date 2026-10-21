@@ -237,6 +237,7 @@ test_that("confidence interval helpers suppress profiling messages", {
 
 test_that("representative survival and CIF plots do not emit duplicate-scale messages", {
     km_test_data <- tibble::tibble(
+        id = sprintf("T%03d", 1:12),
         tt_mets_months = seq(6, 72, by = 6),
         mets_event = rep(c(0, 1), length.out = 12),
         biopsy1_gep = factor(
