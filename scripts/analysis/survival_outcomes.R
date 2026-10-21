@@ -1343,11 +1343,17 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         ))
     }
 
+    # Patients with metastasis at or before treatment have no incident endpoint; they are
+    # removed here with their reason and listed in the diagnostics workbook.
+    endpoint_exclusion <- exclude_undefined_endpoint_rows(
+        data, time_var, event_var, pick_sparse_level_id_col(data)
+    )
+
     # Filter data based on analysis type
     fix_event_data <- if (analysis_type == "post_treatment_only") {
-        data %>% dplyr::filter(!!sym(time_var) >= 0)
+        endpoint_exclusion$data %>% dplyr::filter(!!sym(time_var) >= 0)
     } else if (analysis_type == "all_patients") {
-        data
+        endpoint_exclusion$data
     } else {
         stop(sprintf("Invalid analysis_type: %s", analysis_type))
     }
@@ -1434,6 +1440,9 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         analysis_name = paste0(make_filename_safe(ylab), "_cox"),
         id_col = pick_sparse_level_id_col(model_data),
         level_exclusions = MODELING_LEVEL_EXCLUSIONS
+    )
+    cox_exclusion_result$filter_stats <- add_endpoint_exclusions_to_filter_stats(
+        cox_exclusion_result$filter_stats, endpoint_exclusion$removed_records
     )
 
     if (cox_exclusion_result$removed_row_count > 0) {

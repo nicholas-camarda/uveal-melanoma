@@ -379,6 +379,78 @@ append_prefit_filter_records <- function(filter_stats, data_before, data_after, 
     filter_stats
 }
 
+#' Remove patients whose incident endpoint is undefined
+#'
+#' The incident metastasis and PFS fields are NA for a patient with metastasis dated on
+#' or before treatment, because that metastasis is not an event after treatment. Those
+#' patients stay in the cohort counts but cannot enter a time-to-event model. The function
+#' removes every row with a missing time or event and stops if one is missing for a
+#' reason other than baseline metastasis, so no row leaves a model without a stated reason.
+#'
+#' @param data Data frame with the endpoint columns and `mets_at_or_before_treatment`.
+#' @param time_var Name of the follow-up time column.
+#' @param event_var Name of the event indicator column.
+#' @param id_col Name of the patient identifier column.
+#' @return List with `data` (rows with a defined endpoint) and `removed_records`
+#'   (one row per removed patient, step `MODEL_RECORD_STEP_PREFIT_FILTER`).
+exclude_undefined_endpoint_rows <- function(data, time_var, event_var, id_col) {
+    undefined <- is.na(data[[time_var]]) | is.na(data[[event_var]])
+    if (!any(undefined)) {
+        return(list(data = data, removed_records = build_model_record_table()))
+    }
+    baseline_mets <- if ("mets_at_or_before_treatment" %in% names(data)) {
+        data$mets_at_or_before_treatment %in% TRUE
+    } else {
+        rep(FALSE, nrow(data))
+    }
+    if (any(undefined & !baseline_mets)) {
+        stop(sprintf(
+            "%d row(s) have a missing `%s` or `%s` without baseline metastasis as the reason.",
+            sum(undefined & !baseline_mets), time_var, event_var
+        ), call. = FALSE)
+    }
+    if (is.null(id_col) || !id_col %in% names(data) || anyNA(data[[id_col]][undefined])) {
+        stop("A patient with an undefined endpoint has no usable identifier.", call. = FALSE)
+    }
+    list(
+        data = data[!undefined, , drop = FALSE],
+        removed_records = build_model_record_table(
+            record_key = data[[id_col]][undefined], key_source = id_col,
+            step = MODEL_RECORD_STEP_PREFIT_FILTER,
+            reason = "Metastasis dated on or before treatment: incident endpoint undefined",
+            field = "mets_at_or_before_treatment", current_value = "TRUE"
+        )
+    )
+}
+
+#' Count patients removed for an undefined endpoint in the model's pre-fit audit
+#'
+#' @param filter_stats List from `apply_sparse_level_exclusions()`, computed on the rows
+#'   that remained after the endpoint exclusion.
+#' @param removed_records Records from `exclude_undefined_endpoint_rows()`.
+#' @return `filter_stats` with the removed patients added to the initial and removed counts,
+#'   the reason text and `removed_records`.
+add_endpoint_exclusions_to_filter_stats <- function(filter_stats, removed_records) {
+    removed_n <- length(unique(removed_records$record_key))
+    if (removed_n == 0L) {
+        return(filter_stats)
+    }
+    filter_stats$initial_n <- filter_stats$initial_n + removed_n
+    filter_stats$removed_n <- filter_stats$removed_n + removed_n
+    filter_stats$removed_pct <- round(100 * filter_stats$removed_n / filter_stats$initial_n, 1)
+    endpoint_reason <- sprintf(
+        "Excluded %d patient(s) with metastasis dated on or before treatment (incident endpoint undefined).",
+        removed_n
+    )
+    filter_stats$removal_reason <- if (identical(filter_stats$removal_reason, "No sparse-level exclusions applied")) {
+        endpoint_reason
+    } else {
+        paste(endpoint_reason, filter_stats$removal_reason)
+    }
+    filter_stats$removed_records <- dplyr::bind_rows(removed_records, filter_stats$removed_records)
+    filter_stats
+}
+
 #' Generate valid confounders
 #'
 #' Generates a list of valid confounders that have more than 1 level and at least THRESHOLD_RARITY counts per level.
