@@ -1,4 +1,9 @@
-test_that("main_execution discovers datasets created during objective 0 preflight", {
+#' Run `main_execution()` with stubbed analyses
+#'
+#' @param cross_cohort_figure Function that replaces
+#'   `create_gep_observed_vs_imported_panel_report()` for the run.
+#' @return List with `result` (the `main_execution()` value) and `analyzed_datasets`.
+run_main_execution_with_stubs <- function(cross_cohort_figure) {
     temp_processed_dir <- tempfile("processed-clean-start-")
     dir.create(temp_processed_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -43,11 +48,24 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
     assign("merge_baseline_tables_with_data", function(full_data, restricted_data, gksrs_only_data = NULL) {
         invisible(NULL)
     }, envir = .GlobalEnv)
-    assign("create_gep_observed_vs_imported_panel_report", function(...) invisible(NULL), envir = .GlobalEnv)
+    assign("create_gep_observed_vs_imported_panel_report", cross_cohort_figure, envir = .GlobalEnv)
 
-    expect_no_error(main_execution())
+    result <- main_execution()
+    list(result = result, analyzed_datasets = analyzed_datasets)
+}
+
+test_that("main_execution discovers datasets created during objective 0 preflight", {
+    run <- NULL
+    expect_no_error(run <- run_main_execution_with_stubs(function(...) invisible(NULL)))
     expect_setequal(
-        analyzed_datasets,
+        run$analyzed_datasets,
         c("uveal_melanoma_full_cohort", "uveal_melanoma_restricted_cohort")
     )
+})
+
+test_that("a failing cross-cohort figure fails the run state instead of aborting main_execution", {
+    run <- NULL
+    expect_no_error(run <- run_main_execution_with_stubs(function(...) stop("workbook missing", call. = FALSE)))
+    expect_identical(run$result$run_state, "failed")
+    expect_true(any(grepl("^objective4_cross_cohort_figure:workbook missing$", run$result$fatal_issues)))
 })

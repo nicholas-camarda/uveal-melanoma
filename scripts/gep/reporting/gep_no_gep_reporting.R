@@ -85,7 +85,7 @@ build_no_gep_checks <- function(results) {
         }
     }
     for (endpoint in names(results$design_columns)) {
-        cases <- perf$cases_by_horizon[perf$endpoint == endpoint & perf$performance_scope == "All patients" & grepl("all retained", perf$model)]
+        cases <- perf$cases_by_horizon[perf$endpoint == endpoint & perf$performance_scope == "All patients" & perf$model == GEP_NO_GEP_MODEL_LABELS[["full"]]]
         columns <- results$design_columns[[endpoint]][["full"]]
         add(endpoint, "Events per model parameter (full model)", "All patients",
             sprintf("%d events / %d design columns = %.1f", cases, columns, cases / columns),
@@ -177,6 +177,7 @@ wrap_plot_text <- function(text, width = 95L) {
 #' @param group_outcomes Data frame from `build_no_gep_group_outcomes()` for both endpoints.
 #' @return A `ggplot` object.
 plot_no_gep_group_risk <- function(group_outcomes) {
+    horizon_label <- sprintf("%.0f-year", GEP_VALIDATION_HORIZON_YEARS)
     plot_data <- group_outcomes[group_outcomes$n >= GEP_MIN_REPORTED_GROUP_SIZE, , drop = FALSE]
     plot_data$no_events <- plot_data$events_by_horizon == 0
     plot_data$label <- factor(
@@ -186,7 +187,7 @@ plot_no_gep_group_risk <- function(group_outcomes) {
     plot_data$support <- ifelse(
         plot_data$estimable,
         sprintf("%s%d known event-free", ifelse(plot_data$no_events, "0 events; ", ""), plot_data$event_free_through_horizon),
-        sprintf("no 5-year estimate; %d event-free", plot_data$event_free_through_horizon)
+        sprintf("no %s estimate; %d event-free", horizon_label, plot_data$event_free_through_horizon)
     )
     colors <- get_gep_class_palette(unique(as.character(plot_data$group)))
     ggplot2::ggplot(plot_data, ggplot2::aes(y = .data$label)) +
@@ -201,10 +202,13 @@ plot_no_gep_group_risk <- function(group_outcomes) {
         ggplot2::scale_color_manual(values = stats::setNames(unname(colors), names(colors)), guide = "none") +
         ggplot2::scale_x_continuous(limits = c(0, 2.1), breaks = c(0, 0.25, 0.5, 0.75, 1), labels = scales::percent_format(accuracy = 1)) +
         ggplot2::labs(
-            x = "Observed 5-year risk (95% interval)", y = NULL,
-            title = "5-year risk by GEP availability group",
+            x = sprintf("Observed %s risk (95%% interval)", horizon_label), y = NULL,
+            title = sprintf("%s risk by GEP availability group", horizon_label),
             subtitle = wrap_plot_text("Kaplan-Meier (metastasis) and Aalen-Johansen (melanoma death). No interval is shown when no events occurred.", 110),
-            caption = wrap_plot_text("Known event-free: patients observed event-free through 60 months. Open circles: no events occurred. Groups not followed to 60 months have no estimate; groups with fewer than 3 patients are not shown.", 110)
+            caption = wrap_plot_text(sprintf(
+                "Known event-free: patients observed event-free through %d months. Open circles: no events occurred. Groups not followed to %d months have no estimate; groups with fewer than %d patients are not shown.",
+                GEP_VALIDATION_HORIZON_MONTHS, GEP_VALIDATION_HORIZON_MONTHS, GEP_MIN_REPORTED_GROUP_SIZE
+            ), 110)
         ) +
         ggplot2::theme_minimal(base_size = 12) +
         ggplot2::theme(panel.grid.minor = ggplot2::element_blank(), panel.grid.major.x = ggplot2::element_line(color = "grey92"), plot.title.position = "plot", plot.caption.position = "plot")
@@ -239,7 +243,7 @@ plot_no_gep_model_auc <- function(performance) {
         ggplot2::scale_x_continuous(breaks = seq(axis_lower, 1, by = 0.1)) +
         ggplot2::coord_cartesian(xlim = c(axis_lower, 1)) +
         ggplot2::labs(
-            x = "Out-of-fold AUC at 5 years (95% bootstrap interval)", y = NULL,
+            x = sprintf("Out-of-fold AUC at %.0f years (95%% bootstrap interval)", GEP_VALIDATION_HORIZON_YEARS), y = NULL,
             title = "Baseline features vs chance and single measurements",
             subtitle = wrap_plot_text("Dashed line: chance (0.5). Open diamonds: T stage or tumor diameter used directly, with no fitting.", 80),
             caption = wrap_plot_text("AUC: probability that a patient with the outcome scores higher than one without.", 80)
@@ -293,9 +297,9 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
         ),
         primary_path
     )
-    id_col <- pick_sparse_level_id_col(data)
+    # Every removed record is keyed on `id`, which prepare_no_gep_data() requires to be unique and observed.
     removed <- results$removed_records
-    removed$key_source <- rep(id_col %||% "row position", nrow(removed))
+    removed$key_source <- rep("id", nrow(removed))
     removed <- removed[, c("id", "key_source", "analysis_set", "reason", "field", "current_value")]
     names(removed)[names(removed) == "id"] <- "record_key"
     diagnostics_path <- file.path(output_dir, paste0(prefix, "no_gep_diagnostics.xlsx"))

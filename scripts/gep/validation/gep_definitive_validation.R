@@ -241,11 +241,13 @@ standardised_overall_risk <- function(group_estimates) {
 #'   the horizon, observed and imported risk, their difference in percentage
 #'   points, the observed-to-imported ratio, and an `estimable` flag with a note.
 build_gep_group_table <- function(prepared, endpoint, horizon_months) {
-    group_estimates <- list()
-    group_rows <- lapply(levels(prepared$validation_group), function(group_name) {
-        g <- prepared[prepared$validation_group == group_name, , drop = FALSE]
-        est <- estimate_endpoint_risk(g$time_months, g$status, horizon_months, endpoint)
-        group_estimates[[group_name]] <<- est
+    group_names <- levels(prepared$validation_group)
+    group_data <- lapply(group_names, function(group_name) prepared[prepared$validation_group == group_name, , drop = FALSE])
+    group_estimates <- lapply(group_data, function(g) estimate_endpoint_risk(g$time_months, g$status, horizon_months, endpoint))
+    group_rows <- lapply(seq_along(group_names), function(i) {
+        group_name <- group_names[[i]]
+        g <- group_data[[i]]
+        est <- group_estimates[[i]]
         imported_values <- unique(round(g$published_risk, 6))
         imported <- if (nrow(g) > 0L) mean(g$published_risk) else NA_real_
         note <- dplyr::case_when(
@@ -451,10 +453,16 @@ check_gep_proportional_hazards <- function(prepared) {
     fit <- survival::coxph(survival::Surv(time_months, status == 1L) ~ published_risk, data = prepared)
     zph <- survival::cox.zph(fit)
     row <- as.data.frame(zph$table)["published_risk", ]
+    # A degenerate fit can return no p-value; that is not a pass.
+    has_p_value <- is.finite(row$p)
     data.frame(
         term = "published_risk", chisq = row$chisq, df = row$df, p_value = row$p,
-        status = if (row$p < 0.05) "concern" else "no concern",
-        reason = "Schoenfeld residual test of a time-constant effect; p < 0.05 flagged",
+        status = if (!has_p_value) "not assessed" else if (row$p < 0.05) "concern" else "no concern",
+        reason = if (has_p_value) {
+            "Schoenfeld residual test of a time-constant effect; p < 0.05 flagged"
+        } else {
+            "The Schoenfeld test returned no p-value"
+        },
         stringsAsFactors = FALSE
     )
 }

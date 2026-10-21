@@ -370,13 +370,14 @@ All event indicators are coded as:
 
 - **0** = Event did not occur (censored)
 - **1** = Event occurred
+- **NA** = the source value is blank (never read as "no event"; the Objective 0 contract rejects it)
 
 **Examples:**
 
 ```r
-recurrence_event = if_else(recurrence1 == "Y", 1, 0, missing = 0)
-mets_event = if_else(mets_progression == "Y", 1, 0, missing = 0)
-death_event = if_else(!is.na(dod), 1, 0, missing = 0)
+recurrence_event = if_else(recurrence1 == "Y", 1, 0)
+mets_event = if_else(mets_progression == "Y", 1, 0)
+death_event = if_else(!is.na(dod), 1, 0)
 ```
 
 ---
@@ -388,6 +389,7 @@ death_event = if_else(!is.na(dod), 1, 0, missing = 0)
 ```r
 melanoma_death_event = case_when(
     cod == "Metastatic_Uveal_Melanoma" ~ 1,
+    !is.na(dod) & is.na(cod) ~ NA_real_,
     TRUE ~ 0
 )
 ```
@@ -396,13 +398,16 @@ melanoma_death_event = case_when(
 
 - Used in melanoma-specific survival (MSS) analysis
 - Distinguishes melanoma deaths from other causes of death
+- A death with no recorded cause is missing, not a competing death; deaths recorded as `Unknown` or `Unknown_Cancer` are competing and are recounted as melanoma deaths in the cause-of-death sensitivity
 
 **Competing Death Event:**
 
 ```r
 competing_death_event = case_when(
-    !is.na(dod) & cod != "Metastatic_Uveal_Melanoma" ~ 1,
-    TRUE ~ 0
+    is.na(melanoma_death_event) ~ NA_integer_,
+    death_event == 0 ~ 0L,
+    melanoma_death_event == 1 ~ 0L,
+    TRUE ~ 1L
 )
 ```
 

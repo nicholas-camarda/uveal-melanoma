@@ -33,6 +33,11 @@ GEP_NO_GEP_CANDIDATE_PREDICTORS <- c(
 )
 GEP_NO_GEP_FACTOR_PREDICTORS <- c("sex", "location", "initial_t_stage_simple", "internal_reflectivity", "srf")
 GEP_NO_GEP_PARSIMONIOUS_PREDICTORS <- c("age_at_diagnosis", "initial_tumor_diameter", "location", "initial_t_stage_simple")
+# Labels of the two penalized models; the analysis names its results with them and the checks look them up.
+GEP_NO_GEP_MODEL_LABELS <- c(
+    full = "Penalized, all retained predictors",
+    parsimonious = "Penalized, parsimonious predictors"
+)
 GEP_NO_GEP_COMPARATOR_PREDICTORS <- c(
     "T stage alone" = "initial_t_stage_simple",
     "Tumor diameter alone" = "initial_tumor_diameter"
@@ -131,14 +136,18 @@ GEP_UNKNOWN_CAUSE_OF_DEATH_LEVELS <- c("Unknown", "Unknown_Cancer")
 # different tumor state and starts the GEP-to-outcome clock after follow-up began.
 GEP_TEST_TIMING_WINDOW_DAYS <- 31
 GEP_TEST_TIMING_LATE_DAYS <- 180
+GEP_TEST_TIMING_BEFORE <- sprintf("More than %d days before treatment", GEP_TEST_TIMING_WINDOW_DAYS)
+GEP_TEST_TIMING_AT_TREATMENT <- sprintf("Within %d days of treatment", GEP_TEST_TIMING_WINDOW_DAYS)
+GEP_TEST_TIMING_AFTER <- sprintf("%d to %d days after treatment", GEP_TEST_TIMING_WINDOW_DAYS, GEP_TEST_TIMING_LATE_DAYS)
+GEP_TEST_TIMING_LATE <- sprintf("More than %d days after treatment", GEP_TEST_TIMING_LATE_DAYS)
+GEP_TEST_TIMING_NO_DATE <- "No biopsy date"
 GEP_TEST_TIMING_LEVELS <- c(
-    "More than 31 days before treatment",
-    "Within 31 days of treatment",
-    "31 to 180 days after treatment",
-    "More than 180 days after treatment",
-    "No biopsy date"
+    GEP_TEST_TIMING_BEFORE,
+    GEP_TEST_TIMING_AT_TREATMENT,
+    GEP_TEST_TIMING_AFTER,
+    GEP_TEST_TIMING_LATE,
+    GEP_TEST_TIMING_NO_DATE
 )
-GEP_TEST_TIMING_LATE <- GEP_TEST_TIMING_LEVELS[[4]]
 # A biopsy this many days before treatment (or earlier) may be a date-entry error or a
 # long-standing earlier sample; the patient stays in the analysis and is listed for review.
 GEP_TEST_REVIEW_BEFORE_DAYS <- 365
@@ -150,11 +159,11 @@ GEP_TEST_REVIEW_BEFORE_REASON <- sprintf("More than %d days before treatment: co
 #' @return Character vector of timing categories (`GEP_TEST_TIMING_LEVELS`).
 classify_gep_test_timing <- function(days_from_treatment) {
     dplyr::case_when(
-        is.na(days_from_treatment) ~ GEP_TEST_TIMING_LEVELS[[5]],
-        days_from_treatment < -GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_LEVELS[[1]],
-        days_from_treatment <= GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_LEVELS[[2]],
-        days_from_treatment <= GEP_TEST_TIMING_LATE_DAYS ~ GEP_TEST_TIMING_LEVELS[[3]],
-        TRUE ~ GEP_TEST_TIMING_LEVELS[[4]]
+        is.na(days_from_treatment) ~ GEP_TEST_TIMING_NO_DATE,
+        days_from_treatment < -GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_BEFORE,
+        days_from_treatment <= GEP_TEST_TIMING_WINDOW_DAYS ~ GEP_TEST_TIMING_AT_TREATMENT,
+        days_from_treatment <= GEP_TEST_TIMING_LATE_DAYS ~ GEP_TEST_TIMING_AFTER,
+        TRUE ~ GEP_TEST_TIMING_LATE
     )
 }
 

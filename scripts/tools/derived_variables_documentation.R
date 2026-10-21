@@ -277,15 +277,15 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
 
     # ===== EVENT INDICATORS =====
     recurrence_event = list(
-        description = "Binary indicator for first recurrence (1 = occurred, 0 = censored)",
-        calculation = "if_else(recurrence1 == 'Y', 1, 0, missing = 0)",
+        description = "Binary indicator for first recurrence (1 = occurred, 0 = censored, NA = source value missing)",
+        calculation = "if_else(recurrence1 == 'Y', 1, 0)",
         purpose = "Event indicator for recurrence-free survival analysis",
         data_type = "numeric",
         units = "binary"
     ),
     mets_event = list(
-        description = "Binary indicator for metastatic progression (1 = occurred, 0 = censored)",
-        calculation = "if_else(mets_progression == 'Y', 1, 0, missing = 0)",
+        description = "Binary indicator for metastatic progression (1 = occurred, 0 = censored, NA = source value missing)",
+        calculation = "if_else(mets_progression == 'Y', 1, 0)",
         purpose = "Raw metastatic progression indicator retained for audit",
         data_type = "numeric",
         units = "binary"
@@ -299,21 +299,21 @@ DERIVED_VARIABLE_DOCUMENTATION <- list(
     ),
     death_event = list(
         description = "Binary indicator for death (1 = occurred, 0 = censored)",
-        calculation = "if_else(!is.na(dod), 1, 0, missing = 0)",
+        calculation = "if_else(!is.na(dod), 1, 0)",
         purpose = "Event indicator for overall survival analysis",
         data_type = "numeric",
         units = "binary"
     ),
     melanoma_death_event = list(
-        description = "Binary melanoma-specific death indicator (1 = recorded cause is Metastatic_Uveal_Melanoma, 0 = otherwise)",
-        calculation = "if_else(cod == 'Metastatic_Uveal_Melanoma', 1, 0, missing = 0)",
+        description = "Binary melanoma-specific death indicator (1 = recorded cause is Metastatic_Uveal_Melanoma, 0 = any other recorded cause or no death, NA = death with no recorded cause)",
+        calculation = "case_when(cod == 'Metastatic_Uveal_Melanoma' ~ 1, !is.na(dod) & is.na(cod) ~ NA, TRUE ~ 0)",
         purpose = "Target-event indicator for melanoma-specific mortality analyses",
         data_type = "integer",
         units = "binary"
     ),
     competing_death_event = list(
-        description = "Binary competing-death indicator (1 = death from any cause not classified as melanoma-specific, 0 = alive/censored or melanoma-specific death)",
-        calculation = "case_when(death_event == 0 ~ 0, melanoma_death_event == 1 ~ 0, TRUE ~ 1)",
+        description = "Binary competing-death indicator (1 = death from any recorded cause not classified as melanoma-specific, 0 = alive/censored or melanoma-specific death, NA = death with no recorded cause)",
+        calculation = "case_when(is.na(melanoma_death_event) ~ NA, death_event == 0 ~ 0, melanoma_death_event == 1 ~ 0, TRUE ~ 1)",
         purpose = "Identifies other-cause deaths, including deaths with an unknown recorded cause, for competing-risk MSS analyses",
         data_type = "integer",
         units = "binary"

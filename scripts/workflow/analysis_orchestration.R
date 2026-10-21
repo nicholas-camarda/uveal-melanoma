@@ -566,7 +566,6 @@ merge_baseline_tables <- function() {
 #' @export
 main_execution <- function() {
     main_start_time <- Sys.time()
-    run_started <- Sys.time()
     initialize_runtime_dirs()
     set_log_context(replace = TRUE)
     log_phase("MAIN EXECUTION PHASE")
@@ -694,12 +693,18 @@ main_execution <- function() {
     })
 
     # Cross-cohort observed-vs-imported figure, drawn after every cohort workbook is refreshed.
-    # A failure here fails the run like any other Objective 4 output.
-    create_gep_observed_vs_imported_panel_report(run_started = run_started)
-    logger::log_info(sprintf(
-        "Objective 4 cross-cohort figure saved under: %s",
-        file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures")
-    ))
+    # A failure is a fatal issue like any other Objective 4 output, recorded so the run still
+    # reports its state and the earlier cohort failures instead of aborting before the summary.
+    tryCatch({
+        create_gep_observed_vs_imported_panel_report(run_started = main_start_time)
+        logger::log_info(sprintf(
+            "Objective 4 cross-cohort figure saved under: %s",
+            file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures")
+        ))
+    }, error = function(e) {
+        fatal_issues <<- append_issue(fatal_issues, sprintf("objective4_cross_cohort_figure:%s", e$message))
+        logger::log_error(formatted(sprintf("Objective 4 cross-cohort figure failed: %s", e$message)))
+    })
 
     # Summary banner
     set_log_context(replace = TRUE)

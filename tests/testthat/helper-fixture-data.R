@@ -354,7 +354,7 @@ create_pipeline_test_dataset <- function(n = 96L, seed = 20260816L) {
 # tests; this fixture is the small, data-free contract used by portable CI.
 # Values are rounded synthetic proportions inspired by the study design, not
 # copied observations or estimates from the clinical workbook.
-SYNTHETIC_CI_FIXTURE_VERSION <- "2026-08-06.1"
+SYNTHETIC_CI_FIXTURE_VERSION <- "2026-10-20.1"
 SYNTHETIC_CI_FIXTURE_SEED <- 20260806L
 SYNTHETIC_CI_TREATMENT_LEVELS <- c("PBT", "GKSRS")
 SYNTHETIC_CI_COHORT_LEVELS <- c("full", "restricted", "gksrs_only")
@@ -365,7 +365,7 @@ SYNTHETIC_CI_GEP_LEVELS <- c("Class 1", "Class 2")
 #' @return Character vector of required column names.
 synthetic_ci_required_columns <- function() {
   c(
-    "treatment_group", "consort_group", "synthetic_cohort",
+    "id", "treatment_group", "consort_group", "synthetic_cohort",
     "biopsy1_gep", "biopsy1_gep_mfs", "biopsy1_gep_mss", "prame_status",
     "gep12_prame_status", "gep_validation_set", "tt_mets_months",
     "mets_event", "tt_death_months", "tt_death_years",
@@ -453,6 +453,8 @@ create_synthetic_ci_dataset <- function(n = 48L, seed = SYNTHETIC_CI_FIXTURE_SEE
     )
 
     tibble::tibble(
+      # A generated key, not a patient identifier: Record_Issues lists records by id.
+      id = sprintf("SYN%03d", seq_len(n)),
       treatment_group = treatment_group,
       consort_group = treatment_group,
       synthetic_cohort = synthetic_cohort,

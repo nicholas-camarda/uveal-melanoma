@@ -100,23 +100,11 @@ make_objective0_validation_dataset <- function() {
         mfs_analysis_eligible = c(TRUE, TRUE, TRUE),
         mss_analysis_eligible = c(TRUE, TRUE, TRUE),
         expected_mfs_5yr = c(0.95, 0.55, 0.90),
-        expected_mfs_7yr = c(0.95, 0.55, 0.90)^(7 / 5),
-        expected_mfs_10yr = c(0.95, 0.55, 0.90)^(10 / 5),
         expected_mss_5yr = c(0.96, 0.60, 0.92),
-        expected_mss_7yr = c(0.96, 0.60, 0.92)^(7 / 5),
-        expected_mss_10yr = c(0.96, 0.60, 0.92)^(10 / 5),
         predicted_mfs_risk_5yr = c(0.05, 0.45, 0.10),
-        predicted_mfs_risk_7yr = 1 - c(0.95, 0.55, 0.90)^(7 / 5),
-        predicted_mfs_risk_10yr = 1 - c(0.95, 0.55, 0.90)^(10 / 5),
         predicted_mss_risk_5yr = c(0.04, 0.40, 0.08),
-        predicted_mss_risk_7yr = 1 - c(0.96, 0.60, 0.92)^(7 / 5),
-        predicted_mss_risk_10yr = 1 - c(0.96, 0.60, 0.92)^(10 / 5),
         metastasis_by_5yr = c(NA_integer_, NA_integer_, 1L),
-        metastasis_by_7yr = c(NA_integer_, NA_integer_, 1L),
-        metastasis_by_10yr = c(NA_integer_, NA_integer_, 1L),
         melanoma_death_by_5yr = c(NA_integer_, NA_integer_, 1L),
-        melanoma_death_by_7yr = c(NA_integer_, NA_integer_, 1L),
-        melanoma_death_by_10yr = c(NA_integer_, NA_integer_, 1L),
         mfs_event_type = c(0L, 0L, 1L),
         mss_event_type = c(0L, 0L, 1L)
     )
@@ -262,8 +250,6 @@ test_that("adjudicated baseline metastasis is informational and incomplete sourc
     baseline_mets_data$tt_pfs_months[1] <- 0
     baseline_mets_data$tt_pfs_months_analysis[1] <- 0
     baseline_mets_data$metastasis_by_5yr[1] <- NA_integer_
-    baseline_mets_data$metastasis_by_7yr[1] <- NA_integer_
-    baseline_mets_data$metastasis_by_10yr[1] <- NA_integer_
     baseline_mets_data$mfs_event_type[1] <- NA_integer_
     baseline_mets_data$mfs_analysis_eligible[1] <- FALSE
 
@@ -611,8 +597,6 @@ test_that("Objective 1 endpoint invariants include metastatic progression in PFS
     invariant_data$tt_pfs_months[1] <- 10
     invariant_data$tt_pfs_months_analysis[1] <- 10
     invariant_data$metastasis_by_5yr[1] <- 1L
-    invariant_data$metastasis_by_7yr[1] <- 1L
-    invariant_data$metastasis_by_10yr[1] <- 1L
     invariant_data$mfs_event_type[1] <- 1L
 
     validation_result <- validate_processing_pipeline(

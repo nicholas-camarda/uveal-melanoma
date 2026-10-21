@@ -208,6 +208,20 @@ test_that("proportional-hazards check reports one term with an explicit status",
     expect_match(skipped$reason, "Too few events")
 })
 
+test_that("a Schoenfeld test without a p-value is not assessed rather than passed or fatal", {
+    prepared <- prepare_gep_validation_endpoint(synthetic_validation_cohort(n_per_group = 25L), "MFS")
+    degenerate_zph <- function(...) {
+        list(table = matrix(
+            c(NaN, 1, NaN), nrow = 1L,
+            dimnames = list("published_risk", c("chisq", "df", "p"))
+        ))
+    }
+    testthat::local_mocked_bindings(cox.zph = degenerate_zph, .package = "survival")
+    result <- check_gep_proportional_hazards(prepared)
+    expect_identical(result$status, "not assessed")
+    expect_match(result$reason, "no p-value")
+})
+
 test_that("the definitive validation module reports no 7- or 10-year horizons", {
     result <- run_gep_definitive_validation(synthetic_validation_cohort(n_per_group = 15L), n_boot = 20L)
     expect_identical(result$horizon_months, 60)
@@ -300,10 +314,14 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_true(all(issues$key_source == "id"))
     expect_true(all(startsWith(issues$record_key, "P")))
 
-    # Without an identifier column the key is the row position, and says so.
-    anonymous <- build_gep_record_issues(cohort[, setdiff(names(cohort), "id")])
-    expect_identical(nrow(anonymous), nrow(issues))
-    expect_true(all(anonymous$key_source == "row position (no identifier column)"))
+    # A listed record must be traceable: a missing, incomplete or duplicated identifier stops the run.
+    expect_error(build_gep_record_issues(cohort[, setdiff(names(cohort), "id")]), "unique, observed patient identifier")
+    with_missing_id <- cohort
+    with_missing_id$id[1] <- NA_character_
+    expect_error(build_gep_record_issues(with_missing_id), "unique, observed patient identifier")
+    with_duplicate_id <- cohort
+    with_duplicate_id$id[2] <- with_duplicate_id$id[1]
+    expect_error(build_gep_record_issues(with_duplicate_id), "unique, observed patient identifier")
 
     # A cohort in which every patient is in the primary set yields an empty, well-formed sheet.
     complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2") & cohort$gep_test_timing == GEP_TEST_TIMING_LEVELS[[2]] &

@@ -669,10 +669,10 @@ run_no_gep_analysis <- function(data,
     for (endpoint in c("MFS", "MSS")) {
         model_data <- model_sets[[endpoint]]$data
         oof <- list(
-            Full = compute_no_gep_oof_predictions(model_data, endpoint, predictors, horizon_months),
-            Parsimonious = compute_no_gep_oof_predictions(model_data, endpoint, parsimonious, horizon_months)
+            compute_no_gep_oof_predictions(model_data, endpoint, predictors, horizon_months),
+            compute_no_gep_oof_predictions(model_data, endpoint, parsimonious, horizon_months)
         )
-        names(oof) <- c("Penalized, all retained predictors", "Penalized, parsimonious predictors")
+        names(oof) <- unname(GEP_NO_GEP_MODEL_LABELS[c("full", "parsimonious")])
         performance[[endpoint]] <- summarize_no_gep_model_performance(oof, endpoint, n_boot, seed)
         auc_differences[[endpoint]] <- summarize_no_gep_auc_differences(oof, endpoint, n_boot, seed)
         design_columns[[endpoint]] <- c(

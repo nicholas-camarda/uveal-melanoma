@@ -41,7 +41,10 @@ test_that("synthetic fixture does not depend on private files or identifying fie
     data <- create_synthetic_ci_dataset()
 
     expect_false(grepl("read\\.(xlsx|csv|rds)|RAW_DATA_DIR|Original Files", generator_text, ignore.case = TRUE))
-    expect_false(any(grepl("(^|_)(patient|study|record|case)?_?id$|date", names(data), ignore.case = TRUE)))
+    # The only key is a generated one, so listed records stay traceable without a patient identifier.
+    expect_false(any(grepl("(patient|study|record|case)_id$|date", names(data), ignore.case = TRUE)))
+    expect_true(all(grepl("^SYN[0-9]{3}$", data$id)))
+    expect_false(anyDuplicated(data$id) > 0L)
     expect_false(any(vapply(data, is.list, logical(1))))
 })
 

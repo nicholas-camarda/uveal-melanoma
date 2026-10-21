@@ -40,7 +40,11 @@ summarize_gep_validation_flow <- function(data, results) {
             "Equals eligible; an eligible patient without a validation group, follow-up time or status stops the run",
             "Listed in Record_Issues with the field values behind the exclusion",
             "Listed in Record_Issues with the field values behind the exclusion",
-            c("", "", "", "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis", "Flagged in Record_Issues"),
+            # One note per timing level, matched by level so reordering the levels cannot misplace a note.
+            ifelse(
+                GEP_TEST_TIMING_LEVELS == GEP_TEST_TIMING_LATE, "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis",
+                ifelse(GEP_TEST_TIMING_LEVELS == GEP_TEST_TIMING_NO_DATE, "Flagged in Record_Issues", "")
+            ),
             "Counted in the timing row above; flagged in Record_Issues and kept in the analysis"
         ),
         stringsAsFactors = FALSE
@@ -52,9 +56,9 @@ summarize_gep_validation_flow <- function(data, results) {
 #'
 #' One row per patient not in the Class 1/Class 2 primary set, with the step and
 #' reason, the raw laboratory label, and nothing else; plus the primary-set patients who are
-#' not eligible for an endpoint (with the fields that decide it) or whose biopsy timing needs a look. When the cohort has an
-#' identifier column the key is that identifier; otherwise it is the row position and
-#' `key_source` says so. Contains identifiers: keep it in the diagnostics workbook,
+#' not eligible for an endpoint (with the fields that decide it) or whose biopsy timing needs a look. The key is the
+#' cohort's patient identifier (`key_source` names the column); a cohort without a unique, observed
+#' identifier stops the run. Contains identifiers: keep it in the diagnostics workbook,
 #' which is part of the results package.
 #'
 #' @param data Cohort data frame with `gep_group`, `biopsy1_gep_raw`, `gep_test_timing`
@@ -63,8 +67,11 @@ summarize_gep_validation_flow <- function(data, results) {
 #'   `current_value`.
 build_gep_record_issues <- function(data) {
     id_col <- pick_sparse_level_id_col(data)
-    record_key <- if (is.null(id_col)) as.character(seq_len(nrow(data))) else as.character(data[[id_col]])
-    key_source <- if (is.null(id_col)) "row position (no identifier column)" else id_col
+    if (is.null(id_col) || anyNA(data[[id_col]]) || anyDuplicated(data[[id_col]]) > 0L) {
+        stop("Record_Issues needs a unique, observed patient identifier column so every listed record can be traced.", call. = FALSE)
+    }
+    record_key <- as.character(data[[id_col]])
+    key_source <- id_col
     outside <- !(data$gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS)
     n_outside <- sum(outside)
     group_rows <- data.frame(
@@ -78,7 +85,7 @@ build_gep_record_issues <- function(data) {
     )
     # Primary-set patients whose biopsy timing needs a look (kept in the analysis).
     review_before <- !is.na(data$gep_test_days) & data$gep_test_days < -GEP_TEST_REVIEW_BEFORE_DAYS
-    flagged <- !outside & (as.character(data$gep_test_timing) %in% c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_LEVELS[[5]]) | review_before)
+    flagged <- !outside & (as.character(data$gep_test_timing) %in% c(GEP_TEST_TIMING_LATE, GEP_TEST_TIMING_NO_DATE) | review_before)
     n_flagged <- sum(flagged)
     timing_rows <- data.frame(
         record_key = record_key[flagged],
@@ -337,7 +344,7 @@ plot_gep_observed_vs_imported <- function(group_tables, title = "Observed vs imp
         ggplot2::scale_color_manual(values = colors, guide = "none") +
         ggplot2::scale_x_continuous(limits = c(0, 1), labels = scales::percent_format(accuracy = 1)) +
         ggplot2::labs(
-            x = "5-year risk", y = NULL, title = title,
+            x = sprintf("%.0f-year risk", GEP_VALIDATION_HORIZON_YEARS), y = NULL, title = title,
             caption = wrap_plot_text("Filled points: observed risk with 95% interval. Open circles: no events occurred, so no interval can be estimated. Open diamonds: imported risk.", 100)
         ) +
         ggplot2::theme_minimal(base_size = 13) +
@@ -456,8 +463,10 @@ create_gep_observed_vs_imported_panel_report <- function(run_started,
                                                              stringsAsFactors = FALSE
                                                          )) {
     tables <- lapply(seq_len(nrow(cohort_sources)), function(i) {
-        path <- file.path(OUTPUT_DIR, cohort_sources$cohort_dir[i], "04_GEP_Validation",
-                          paste0(cohort_sources$prefix[i], "gep_validation_5yr.xlsx"))
+        gep_dir <- get_output_dir(
+            define_objective_directory_map(file.path(OUTPUT_DIR, cohort_sources$cohort_dir[i])), "obj4_gep"
+        )
+        path <- file.path(gep_dir, paste0(cohort_sources$prefix[i], "gep_validation_5yr.xlsx"))
         if (!file.exists(path)) {
             stop(sprintf("Validation workbook not found: %s", path), call. = FALSE)
         }
