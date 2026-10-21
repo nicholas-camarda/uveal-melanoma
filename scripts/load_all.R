@@ -1,22 +1,22 @@
-# The session must use a UTF-8 locale. In a non-UTF-8 session (for example a
-# plain C locale) R reads text such as "\u2265 63 years" as bytes, so label
-# lookups and factor levels built from it silently stop matching. LC_CTYPE sets
-# the character handling; LC_COLLATE is set to the same locale so sorted text
-# keeps the order of the published outputs (produced under en_US.UTF-8).
-# Sourcing any project file before this point would read it in the old locale.
-if (!isTRUE(l10n_info()[["UTF-8"]])) {
-    for (utf8_locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
-        ctype_set <- nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", utf8_locale)))
-        collate_set <- nzchar(suppressWarnings(Sys.setlocale("LC_COLLATE", utf8_locale)))
-        if (ctype_set && collate_set) {
-            break
-        }
-    }
-    if (!isTRUE(l10n_info()[["UTF-8"]])) {
+# Every project session uses one locale, en_US.UTF-8, whatever locale R was
+# started in. LC_CTYPE decides how text is read: in a non-UTF-8 session (for
+# example a plain C locale) text such as "\u2265 63 years" is read as bytes, so
+# label lookups and factor levels built from it silently stop matching.
+# LC_COLLATE decides how character vectors sort: sort(), order(), arrange() and
+# factor() without explicit levels order text differently under C (codepoint
+# order) and en_US.UTF-8, and the published outputs were produced under
+# en_US.UTF-8. Both are set unconditionally, not only when the session is not
+# UTF-8, so a C.UTF-8 or LC_COLLATE=C session cannot reorder results either.
+# This runs before any project file is sourced, which would otherwise be read
+# in the starting locale.
+PROJECT_LOCALE <- "en_US.UTF-8"
+for (locale_category in c("LC_CTYPE", "LC_COLLATE")) {
+    if (!nzchar(suppressWarnings(Sys.setlocale(locale_category, PROJECT_LOCALE)))) {
         stop(
-            paste(
-                "No UTF-8 locale (en_US.UTF-8, C.UTF-8 or UTF-8) is available",
-                "to set for this R session; install one and rerun."
+            sprintf(
+                "The %s locale is not available for %s; install it and rerun.",
+                PROJECT_LOCALE,
+                locale_category
             ),
             call. = FALSE
         )

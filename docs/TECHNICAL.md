@@ -711,8 +711,13 @@ without them fails. The lane fails before test execution unless the raw
 spreadsheet and all canonical cohort files exist. It treats both directories as
 read-only and creates analysis outputs beneath the process temporary directory.
 
-R sessions started in a non-UTF-8 locale (for example `LC_ALL=C`) are handled
-automatically: `scripts/load_all.R` switches `LC_CTYPE` and `LC_COLLATE` to a
-UTF-8 locale before sourcing anything, `tests/testthat/test_source_encoding.R`
-keeps non-ASCII characters out of code (labels are written as `\u` escapes), and
-each run log records the session locale.
+Every session uses one locale, `en_US.UTF-8`, whatever locale R was started in.
+`scripts/load_all.R` sets `LC_CTYPE` (how text is read) and `LC_COLLATE` (how
+character vectors sort) before sourcing anything, and stops with a message if
+the locale is not installed. Without it, a C-locale session reads a label such
+as `"\u2265 63 years"` as bytes, so factor levels built in different files stop
+matching, and `sort()`, `order()`, `arrange()` and `factor()` order text
+differently from the published outputs. `tests/testthat/test_source_encoding.R`
+keeps non-ASCII characters out of code (labels are written as `\u` escapes),
+checks the locale from fresh processes started in `C` and `C.UTF-8`, and each
+run log records the session locale.
