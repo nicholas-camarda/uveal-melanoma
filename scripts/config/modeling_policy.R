@@ -81,22 +81,18 @@ STAGES_TO_EXCLUDE_FROM_MODIFIED <- c("3B", "3C", "4")
 MODEL_EFFECT_READING <- list(
     cox = list(
         method = "Cox proportional hazards regression",
-        measure = "HR",
         reading = "A hazard ratio above 1 means a higher hazard than the reference level (or per one-unit increase for a continuous variable); below 1 means a lower hazard."
     ),
     logistic = list(
         method = "Logistic regression",
-        measure = "OR",
         reading = "An odds ratio above 1 means higher odds of the outcome than the reference level (or per one-unit increase for a continuous variable); below 1 means lower odds."
     ),
     linear = list(
         method = "Linear regression",
-        measure = "MD",
         reading = "A mean difference is in the units of the outcome; a positive value means a higher mean than the reference level (or per one-unit increase for a continuous variable)."
     ),
     ordinal = list(
         method = "Proportional-odds ordinal logistic regression",
-        measure = "OR",
         reading = "A cumulative odds ratio above 1 means higher odds of a higher outcome category than the reference level (or per one-unit increase for a continuous variable)."
     )
 )

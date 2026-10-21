@@ -159,3 +159,59 @@ test_that("an error inside the Cox regression layer fails the survival analysis 
         "regression layer failure"
     )
 })
+
+test_that("a skipped workbook states the skip reason once and does not flag metrics that found nothing", {
+    diagnostics <- build_skip_report_diagnostics(
+        status = "skipped", analysis_name = "unit_skip", dataset_name = "unit_data",
+        reason = "Adjusted model skipped because only 4 events were observed.",
+        skip_summary = build_skip_summary_tab(list(
+            modeled_events = 4L, minimum_events_required = 10L, sparse_exclusions = "None",
+            separation_risk_levels = "None detected"
+        )),
+        model_context = build_model_context_tab(list(model_type = "logistic", censored_n = 7L, censoring_percent = 17.5))
+    )
+    sheets <- build_skipped_model_workbook_sheets(diagnostics)
+
+    checks <- sheets$Checks
+    expect_equal(checks$status[checks$check == "sparse exclusions"], "no concern")
+    expect_equal(checks$status[checks$check == "separation risk levels"], "no concern")
+    expect_equal(checks$status[checks$check == "minimum events required"], "concern")
+    expect_equal(sum(grepl("only 4 events", checks$reason)), 1L)
+    # Counts appear in Denominators_Flow only, not again as model context.
+    expect_false(any(grepl("censor", sheets$Specification_Coding$item)))
+    expect_true(any(grepl("censor", sheets$Denominators_Flow$stage)))
+})
+
+test_that("events per coefficient is not assessed when the event count is unknown", {
+    fit <- fit_synthetic_model("logistic", withr::local_tempdir())
+    diagnostics <- fit$result$diagnostics
+    diagnostics$model_summary$n_events <- NA_real_
+    checks <- build_model_checks_sheet(diagnostics)
+    expect_equal(checks$status[checks$check == "Events per estimated coefficient"], "not assessed")
+})
+
+test_that("a 0/1 indicator keeps its levels in Term_support while a continuous variable does not", {
+    expect_equal(model_variable_type(c(0, 1, 1, NA)), "binary indicator")
+    expect_equal(model_variable_type(c(1.5, 2, 9)), "continuous")
+    expect_equal(model_variable_type(factor(c("a", "b"))), "categorical")
+
+    data <- synthetic_model_cohort()
+    data$flag <- as.integer(data$event == 1L & data$treatment_group == "GKSRS")
+    exclusion <- apply_sparse_level_exclusions(data, variables = "location", analysis_name = "unit", id_col = "id")
+    support <- build_level_support_tab(exclusion$data, c("flag", "age"), outcome_var = "event")
+    expect_setequal(support$level[support$variable == "flag"], c("0", "1"))
+    expect_equal(sum(support$variable == "age" & support$level == "Continuous"), 1L)
+})
+
+test_that("a workbook that cannot be written is an error even when an older file exists", {
+    path <- file.path(withr::local_tempdir(), "d.xlsx")
+    write_readable_xlsx(list(S = data.frame(a = 1)), path)
+    expect_true(file.exists(path))
+    locked_dir <- dirname(path)
+    # Writing to a folder that does not exist must fail, not pass on a stale file elsewhere.
+    expect_error(
+        suppressWarnings(write_readable_xlsx(list(S = data.frame(a = 1)), file.path(locked_dir, "gone", "d.xlsx"))),
+        "workbook was not written"
+    )
+    expect_error(build_model_record_table(record_key = "P1", key_source = character()), "key_source")
+})

@@ -113,6 +113,9 @@ build_model_record_table <- function(record_key = character(),
                                      field = character(),
                                      current_value = character()) {
     n_records <- length(record_key)
+    if (n_records > 0L && length(key_source) == 0L) {
+        stop("Listed records need a key_source naming the identifier column.", call. = FALSE)
+    }
     data.frame(
         record_key = as.character(record_key),
         key_source = rep_len(as.character(key_source), n_records),

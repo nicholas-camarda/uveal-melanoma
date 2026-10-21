@@ -282,7 +282,11 @@ write_readable_xlsx <- function(x,
         stop("write_readable_xlsx() did not receive any non-null sheets to write", call. = FALSE)
     }
 
-    # openxlsx reports an unwritable path as a warning, so check that the file exists.
+    # openxlsx reports an unwritable path as a warning, so remove any earlier file and check
+    # that the new one exists; an old file must not pass for the one just written.
+    if (file.exists(path)) {
+        file.remove(path)
+    }
     openxlsx::saveWorkbook(wb, path, overwrite = TRUE)
     if (!file.exists(path)) {
         stop(sprintf("The workbook was not written: %s", path), call. = FALSE)

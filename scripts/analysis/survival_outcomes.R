@@ -2164,7 +2164,6 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
 
 
     # Run Cox regression and generate regression table
-    cox_result <- NULL
     cox_analysis_name <- paste0(ylab, "_cox")
     if (cox_ready) {
         logger::log_info(sprintf("DEBUG: About to call generate_regression_table for %s", paste0(ylab, "_cox")))

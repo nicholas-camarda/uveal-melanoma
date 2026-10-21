@@ -1553,16 +1553,36 @@ build_model_variable_table <- function(predictor_vars, confounders, data, refere
             return(NA_character_)
         }
         raw_level <- reference_levels_info$reference_level[match(variable, reference_levels_info$variable)]
-        if (raw_level %in% c("(continuous)", "(unknown)")) NA_character_ else sub(paste0("^", variable), "", raw_level)
+        if (raw_level %in% c("(continuous)", "(unknown)") || !startsWith(raw_level, variable)) {
+            NA_character_
+        } else {
+            substring(raw_level, nchar(variable) + 1L)
+        }
     }
-    is_continuous <- vapply(variables, function(variable) is.numeric(data[[variable]]), logical(1))
+    type <- vapply(variables, function(variable) model_variable_type(data[[variable]]), character(1))
     data.frame(
         variable = variables,
         role = ifelse(variables %in% predictor_vars, "Predictor", "Confounder"),
-        type = ifelse(is_continuous, "continuous", "categorical"),
-        reference_level = ifelse(is_continuous, NA_character_, vapply(variables, reference_for, character(1))),
+        type = unname(type),
+        reference_level = ifelse(type == "categorical", vapply(variables, reference_for, character(1)), NA_character_),
         stringsAsFactors = FALSE
     )
+}
+
+#' Classify a model variable as categorical, continuous or a binary indicator
+#'
+#' A numeric variable with more than two distinct values is continuous (one coefficient per
+#' unit); a numeric variable with at most two (a 0/1 flag) is a binary indicator whose levels
+#' are still counted, because a level without events signals separation; anything else is
+#' categorical.
+#'
+#' @param values Vector holding one model variable.
+#' @return One of `"continuous"`, `"binary indicator"`, `"categorical"`.
+model_variable_type <- function(values) {
+    if (!is.numeric(values)) {
+        return("categorical")
+    }
+    if (dplyr::n_distinct(stats::na.omit(values)) > 2L) "continuous" else "binary indicator"
 }
 
 #' List the terms the principal table suppressed, with the reason
@@ -1608,7 +1628,8 @@ build_model_term_support_tab <- function(data, variable_table, model_kind, outco
     }
     type <- variable_table$type[match(support$variable, variable_table$variable)]
     reference <- variable_table$reference_level[match(support$variable, variable_table$variable)]
-    term <- ifelse(type == "continuous", support$variable, paste0(support$variable, support$level))
+    # A numeric variable has one coefficient named after the variable; a factor has one per level.
+    term <- ifelse(type == "categorical", paste0(support$variable, support$level), support$variable)
     suppressed_reason <- suppressed_terms$reason[match(term, suppressed_terms$term)]
     is_level_row <- support$level != "Missing"
     status <- ifelse(
@@ -1699,7 +1720,10 @@ build_model_specification_sheet <- function(diagnostics) {
             item = variables$variable,
             value = ifelse(
                 variables$type == "continuous", "continuous (effect per one-unit increase)",
-                paste0("categorical; reference level: ", variables$reference_level)
+                ifelse(
+                    variables$type == "binary indicator", "binary indicator (effect of 1 versus 0)",
+                    paste0("categorical; reference level: ", variables$reference_level)
+                )
             ),
             stringsAsFactors = FALSE
         )
@@ -1716,7 +1740,8 @@ build_model_specification_sheet <- function(diagnostics) {
             item = c("Method", "Outcome", "Formula", "Effect measure", "How to read", "Estimated coefficients",
                      "Log-likelihood", "AIC", "BIC"),
             value = c(
-                reading$method, spec$outcome_var, spec$formula, spec$effect_measure, reading$reading,
+                reading$method, spec$outcome_var, sub("^surv_obj ~", "survival response (time, event) ~", spec$formula),
+                spec$effect_measure, reading$reading,
                 spec$n_parameters, round(fit$log_likelihood, 2), round(fit$aic, 2), round(fit$bic, 2)
             ),
             stringsAsFactors = FALSE
@@ -1848,31 +1873,38 @@ build_model_checks_sheet <- function(diagnostics) {
         events <- summary_row$n_events
         limiting <- if (identical(spec$kind, "cox")) events else min(events, summary_row$fitted_n - events)
         ratio <- limiting / spec$n_parameters
-        model_check_row(
-            "Events per estimated coefficient", "Model",
-            sprintf("%.1f (%d / %d)", ratio, as.integer(limiting), as.integer(spec$n_parameters)),
-            if (ratio >= MODEL_MIN_EVENTS_PER_PARAMETER) "no concern" else "concern",
-            sprintf(
-                "Fewer than %d %s per estimated coefficient makes the estimates unstable",
-                MODEL_MIN_EVENTS_PER_PARAMETER, if (identical(spec$kind, "cox")) "events" else "events or non-events"
+        if (!is.finite(ratio)) {
+            model_check_row(
+                "Events per estimated coefficient", "Model", "not available", "not assessed",
+                "The number of events in the fitted model is not recorded"
             )
-        )
+        } else {
+            model_check_row(
+                "Events per estimated coefficient", "Model",
+                sprintf("%.1f (%d / %d)", ratio, as.integer(limiting), as.integer(spec$n_parameters)),
+                if (ratio >= MODEL_MIN_EVENTS_PER_PARAMETER) "no concern" else "concern",
+                sprintf(
+                    "Fewer than %d %s per estimated coefficient makes the estimates unstable",
+                    MODEL_MIN_EVENTS_PER_PARAMETER, if (identical(spec$kind, "cox")) "events" else "events or non-events"
+                )
+            )
+        }
     }
 
     checks <- dplyr::bind_rows(
         convergence, reconciliation_check, suppressed_checks, removed_checks,
         model_check_row(
-            "Principal table has reportable content", "Model", isTRUE(filtering$table_has_meaningful_content),
+            "Principal table has reportable content", "Model", if (isTRUE(filtering$table_has_meaningful_content)) "yes" else "no",
             if (isTRUE(filtering$table_has_meaningful_content)) "no concern" else "concern",
             "Every coefficient was suppressed or uninterpretable"
         ),
         model_check_row(
-            "Main predictor kept in the principal table", "Model", !isTRUE(filtering$main_predictor_filtered),
+            "Main predictor kept in the principal table", "Model", if (isTRUE(filtering$main_predictor_filtered)) "no" else "yes",
             if (isTRUE(filtering$main_predictor_filtered)) "concern" else "no concern",
             "The main predictor was suppressed because of separation or extreme estimates"
         ),
         model_check_row(
-            "Confidence intervals computed", "Model", !isTRUE(filtering$confint_error),
+            "Confidence intervals computed", "Model", if (isTRUE(filtering$confint_error)) "no" else "yes",
             if (isTRUE(filtering$confint_error)) "concern" else "no concern",
             "Confidence intervals could not be computed for the model"
         ),
@@ -1946,7 +1978,14 @@ build_skipped_model_workbook_sheets <- function(diagnostics) {
     metric_rows <- function(metrics) skip_summary[skip_summary$metric %in% metrics, , drop = FALSE]
     label <- function(metric) gsub("_", " ", metric)
 
+    # Counts live in Denominators_Flow only, so context fields that are counts are left out here.
     context <- diagnostics$model_context
+    context_counts <- NULL
+    if (!is.null(context)) {
+        is_count <- context$field %in% SKIPPED_MODEL_COUNT_METRICS
+        context_counts <- data.frame(metric = context$field[is_count], value = context$value[is_count], stringsAsFactors = FALSE)
+        context <- context[!is_count, , drop = FALSE]
+    }
     context_rows <- if (is.null(context)) {
         NULL
     } else {
@@ -1976,6 +2015,7 @@ build_skipped_model_workbook_sheets <- function(diagnostics) {
     }
     count_rows <- metric_rows(SKIPPED_MODEL_COUNT_METRICS)
     count_rows <- count_rows[!count_rows$metric %in% c("input_n", "fitted_n") | is.null(stage_rows), , drop = FALSE]
+    count_rows <- rbind(count_rows, context_counts[!context_counts$metric %in% count_rows$metric, , drop = FALSE])
     flow <- dplyr::bind_rows(
         stage_rows,
         if (nrow(count_rows) > 0L) {
@@ -1994,11 +2034,17 @@ build_skipped_model_workbook_sheets <- function(diagnostics) {
     }
 
     check_rows <- metric_rows(SKIPPED_MODEL_CHECK_METRICS)
+    # The first row carries the skip reason once; a metric that found nothing wrong is not a concern.
     checks <- dplyr::bind_rows(
         model_check_row("Model fitted", "Model", "not fitted", "concern", diagnostics$reason),
         if (nrow(check_rows) > 0L) {
             dplyr::bind_rows(lapply(seq_len(nrow(check_rows)), function(i) {
-                model_check_row(label(check_rows$metric[i]), "Model", check_rows$value[i], "concern", diagnostics$reason)
+                nothing_found <- check_rows$value[i] %in% c("None", "None detected")
+                model_check_row(
+                    label(check_rows$metric[i]), "Model", check_rows$value[i],
+                    if (nothing_found) "no concern" else "concern",
+                    "Contributes to the skip; the reason is stated in the Model fitted row"
+                )
             }))
         }
     )

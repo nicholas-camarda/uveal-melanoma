@@ -612,9 +612,9 @@ coerce_binary_outcome_vector <- function(values) {
 #' @param variables Character vector of modeled variables to summarize.
 #' @param outcome_var Optional character scalar naming a binary outcome/event column.
 #'
-#' @return Tibble summarizing counts by variable level. A numeric variable is continuous
-#'   and has no levels: it is one `Continuous` row (its non-missing observations) plus a
-#'   `Missing` row when any value is missing, never one row per distinct value.
+#' @return Tibble summarizing counts by variable level. A continuous variable (numeric with
+#'   more than two distinct values) has no levels: it is one `Continuous` row (its non-missing
+#'   observations) plus a `Missing` row when any value is missing, never one row per value.
 build_level_support_tab <- function(data,
                                     variables,
                                     outcome_var = NULL) {
@@ -636,7 +636,7 @@ build_level_support_tab <- function(data,
 
     purrr::map_dfr(summarized_variables, function(variable_name) {
         level_values <- data[[variable_name]]
-        if (is.numeric(level_values)) {
+        if (identical(model_variable_type(level_values), "continuous")) {
             level_values <- ifelse(is.na(level_values), NA_character_, "Continuous")
         }
         support_df <- tibble::tibble(
