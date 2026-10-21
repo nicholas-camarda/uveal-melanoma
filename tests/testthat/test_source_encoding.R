@@ -54,3 +54,29 @@ test_that("loading the project fixes one locale whatever locale R started in", {
         )
     }
 })
+
+test_that("a missing project locale stops loading with instructions", {
+    # Run the locale block of load_all.R with a locale name no computer has,
+    # in a fresh process, and check the message tells the reader what to do.
+    load_all_lines <- readLines(here::here("scripts", "load_all.R"), warn = FALSE)
+    block_end <- grep("ANALYSIS SETTINGS", load_all_lines, fixed = TRUE)[[1]] - 2L
+    block <- load_all_lines[seq_len(block_end)]
+    block <- sub("^PROJECT_LOCALE <- .*$", 'PROJECT_LOCALE <- "xx_XX.UTF-8"', block)
+    script <- withr::local_tempfile(fileext = ".R")
+    writeLines(block, script)
+
+    output <- suppressWarnings(system2(
+        file.path(R.home("bin"), "Rscript"),
+        script,
+        stdout = TRUE,
+        stderr = TRUE
+    ))
+    message_text <- paste(output, collapse = "\n")
+
+    expect_gt(attr(output, "status") %||% 0L, 0L)
+    expect_match(message_text, "LOCALE ERROR", fixed = TRUE)
+    expect_match(message_text, "xx_XX.UTF-8", fixed = TRUE)
+    expect_match(message_text, "locale -a", fixed = TRUE)
+    expect_match(message_text, "locale-gen", fixed = TRUE)
+    expect_match(message_text, "scripts/load_all.R", fixed = TRUE)
+})

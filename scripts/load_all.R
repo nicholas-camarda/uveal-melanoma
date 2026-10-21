@@ -13,10 +13,31 @@ PROJECT_LOCALE <- "en_US.UTF-8"
 for (locale_category in c("LC_CTYPE", "LC_COLLATE")) {
     if (!nzchar(suppressWarnings(Sys.setlocale(locale_category, PROJECT_LOCALE)))) {
         stop(
-            sprintf(
-                "The %s locale is not available for %s; install it and rerun.",
-                PROJECT_LOCALE,
-                locale_category
+            paste(
+                "",
+                sprintf(
+                    "LOCALE ERROR: this project requires the %s locale, and this computer does not have it (%s could not be set).",
+                    PROJECT_LOCALE,
+                    locale_category
+                ),
+                "",
+                "Why it matters: without it, text such as the label '>= 63 years' is read",
+                "as raw bytes and sorting follows a different order, which can silently",
+                "change factor levels, labels and results. The project refuses to run",
+                "rather than risk wrong output.",
+                "",
+                "What to do:",
+                sprintf("  1. Check what is installed:   locale -a | grep -i en_US   (looking for %s)", PROJECT_LOCALE),
+                "  2. macOS: it is built in. If it is missing, run `locale -a` in Terminal and",
+                "     check that LANG is not set to something unusual in ~/.zshrc or ~/.Renviron.",
+                "  3. Debian/Ubuntu (including Docker and CI images):",
+                "       sudo apt-get install -y locales && sudo locale-gen en_US.UTF-8 && sudo update-locale",
+                "     then start a new shell. In a Dockerfile add:  ENV LANG=en_US.UTF-8",
+                "  4. Windows is not supported: R there names locales differently.",
+                "",
+                sprintf("Current session locale: %s", Sys.getlocale()),
+                "Where this check lives: the top of scripts/load_all.R.",
+                sep = "\n"
             ),
             call. = FALSE
         )
