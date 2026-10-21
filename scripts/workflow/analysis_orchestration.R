@@ -569,6 +569,9 @@ main_execution <- function() {
     initialize_runtime_dirs()
     set_log_context(replace = TRUE)
     log_phase("MAIN EXECUTION PHASE")
+    # Record the session locale so a run log shows the character handling and
+    # collation order that produced the outputs.
+    logger::log_info(sprintf("Session locale: %s", Sys.getlocale()))
 
     fatal_issues <- character()
     warning_issues <- character()

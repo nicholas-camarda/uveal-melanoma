@@ -1,3 +1,27 @@
+# The session must use a UTF-8 locale. In a non-UTF-8 session (for example a
+# plain C locale) R reads text such as "\u2265 63 years" as bytes, so label
+# lookups and factor levels built from it silently stop matching. LC_CTYPE sets
+# the character handling; LC_COLLATE is set to the same locale so sorted text
+# keeps the order of the published outputs (produced under en_US.UTF-8).
+# Sourcing any project file before this point would read it in the old locale.
+if (!isTRUE(l10n_info()[["UTF-8"]])) {
+    for (utf8_locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
+        if (nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", utf8_locale)))) {
+            Sys.setlocale("LC_COLLATE", utf8_locale)
+            break
+        }
+    }
+    if (!isTRUE(l10n_info()[["UTF-8"]])) {
+        stop(
+            paste(
+                "No UTF-8 locale (en_US.UTF-8, C.UTF-8 or UTF-8) is available",
+                "to set for this R session; install one and rerun."
+            ),
+            call. = FALSE
+        )
+    }
+}
+
 ########################################################
 ############### ANALYSIS SETTINGS #####################
 ########################################################

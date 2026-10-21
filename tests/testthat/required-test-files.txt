@@ -44,6 +44,7 @@ test_propensity_score_sensitivity.R
 test_publish_provenance_contract.R
 test_renv_worktree_library.R
 test_rmst_outputs.R
+test_source_encoding.R
 test_sparse_factor_handling.R
 test_survival_population_audit.R
 test_synthetic_fixture_contract.R
