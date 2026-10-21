@@ -17,6 +17,7 @@ test_generated_study_docs.R
 test_gep_calibration_curve_payload.R
 test_gep_output_consolidation.R
 test_gep_summary_metrics_display.R
+test_integration_runner.R
 test_integration_routing.R
 test_main_execution_clean_start.R
 test_model_utilities.R

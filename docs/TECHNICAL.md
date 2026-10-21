@@ -699,11 +699,20 @@ Rscript tests/testthat.R
 
 # Complete portable suite used by CI
 Rscript scripts/ci/run_portable_suite.R
-OCULAR_INTEGRATION_RAW_DATA_DIR='/absolute/path/to/raw-data' \
-OCULAR_INTEGRATION_PROCESSED_DATA_DIR='/absolute/path/to/processed-data' \
-Rscript scripts/ci/run_testthat.R tests/integration
+Rscript scripts/ci/run_integration_suite.R
 ```
 
-The actual-data lane fails before test execution unless both explicit input
-directories and all canonical inputs exist. It treats those directories as
+`scripts/ci/run_integration_suite.R` takes `RAW_DATA_DIR` and
+`PROCESSED_DATA_DIR` from `scripts/config/project_paths.R` (the paths
+`assert_required_input_paths()` checks) and sets `OCULAR_INTEGRATION_RAW_DATA_DIR`
+and `OCULAR_INTEGRATION_PROCESSED_DATA_DIR` for the test process only. The
+integration helper still requires both variables, so running it directly
+without them fails. The lane fails before test execution unless the raw
+spreadsheet and all canonical cohort files exist. It treats both directories as
 read-only and creates analysis outputs beneath the process temporary directory.
+
+R sessions started in a non-UTF-8 locale (for example `LC_ALL=C`) are handled
+automatically: `scripts/load_all.R` switches `LC_CTYPE` and `LC_COLLATE` to a
+UTF-8 locale before sourcing anything, `tests/testthat/test_source_encoding.R`
+keeps non-ASCII characters out of code (labels are written as `\u` escapes), and
+each run log records the session locale.
