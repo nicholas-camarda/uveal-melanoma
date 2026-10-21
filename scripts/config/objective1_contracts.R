@@ -87,9 +87,9 @@ OBJECTIVE1_SUBGROUP_OUTCOME_SPECS <- list(
         endpoint_type = "time_to_event",
         model_family = "Cox proportional hazards",
         effect_measure = "HR",
-        time_var = "tt_mets_months",
-        event_var = "mets_event",
-        estimand = "Cause-specific hazard of metastatic progression; death without metastasis is censored"
+        time_var = "tt_mets_months_analysis",
+        event_var = "mets_event_analysis",
+        estimand = "Cause-specific hazard of metastatic progression after treatment; death without metastasis is censored and patients with metastasis at or before treatment are excluded"
     ),
     overall_survival = list(
         outcome = "Overall Survival",

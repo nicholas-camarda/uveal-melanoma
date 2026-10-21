@@ -251,6 +251,8 @@ tt_mets_months = case_when(
 - Captures time to **distant** metastases (not local recurrence)
 - Used for metastasis-free survival analysis
 - `tt_mets_months_analysis` excludes patients metastatic at or before treatment.
+  The Objective 1 metastasis-free survival models, subgroup analyses and propensity
+  sensitivity use `tt_mets_months_analysis` and `mets_event_analysis`.
   For a patient who dies without recorded metastasis, it ends observation at
   the earlier of the last metastasis-free follow-up time and death.
 

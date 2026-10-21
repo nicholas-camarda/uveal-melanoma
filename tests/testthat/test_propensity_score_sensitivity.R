@@ -23,6 +23,8 @@ create_propensity_test_data <- function(n_per_arm = 40L) {
         recurrence_event = as.integer(arm_index %% 4L == 0L),
         tt_mets_months = 6 + arm_index * 2,
         mets_event = as.integer(arm_index %% 3L == 0L),
+        tt_mets_months_analysis = tt_mets_months,
+        mets_event_analysis = mets_event,
         tt_death_months = 7 + arm_index * 2,
         death_event = as.integer(arm_index %% 4L == 1L),
         tt_pfs_months = 4 + arm_index * 2,
