@@ -82,33 +82,15 @@ comparisons:
     type: text
     path: uveal_full/03_Repeat_Radiation/a_pfs2/04_rmst_analysis/full_cohort_pfs_2_probability_freedom_from_2nd_recurrence_rmst_summary_skipped.txt
 
-  - id: objective4-no-gep-validation
+  - id: objective4-gep-validation-full
     objective: objective4
-    domain: no-gep-prediction
-    expectation: must_change
-    type: workbook
-    path: uveal_full/04_GEP_Validation/d_exploratory_no_gep/full_cohort_exploratory_no_gep_report.xlsx
-  - id: objective4-mfs-sensitivity
-    objective: objective4
-    domain: metastasis-free-survival
+    domain: definitive-gep-validation
     expectation: may_change
     type: workbook
-    path: uveal_full/04_GEP_Validation/unified_summary/full_cohort_mfs_sensitivity_summary.xlsx
-  - id: objective4-mfs-consolidated
+    path: uveal_full/04_GEP_Validation/full_cohort_gep_validation_5yr.xlsx
+  - id: objective4-no-gep
     objective: objective4
-    domain: metastasis-free-survival
+    domain: no-gep-analysis
     expectation: may_change
     type: workbook
-    path: uveal_full/04_GEP_Validation/a_metastasis_free_survival/05_summary_tables/full_cohort_MFS_consolidated_summary.xlsx
-  - id: objective4-mss-consolidated
-    objective: objective4
-    domain: melanoma-specific-survival
-    expectation: may_change
-    type: workbook
-    path: uveal_full/04_GEP_Validation/b_melanoma_specific_survival/03_summary_tables/full_cohort_MSS_consolidated_summary.xlsx
-  - id: objective4-gep-distribution
-    objective: objective4
-    domain: imported-gep-facts
-    expectation: must_equal
-    type: workbook
-    path: uveal_full/04_GEP_Validation/a_metastasis_free_survival/05_summary_tables/full_cohort_gep_validation_distribution.xlsx
+    path: uveal_full/04_GEP_Validation/d_no_gep/full_cohort_no_gep_5yr.xlsx

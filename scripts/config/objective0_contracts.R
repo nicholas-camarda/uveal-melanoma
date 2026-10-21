@@ -24,12 +24,12 @@ OBJECTIVE0_DERIVED_OUTPUT_MANIFEST <- c(
     "treatment_year",
     "initial_tumor_height_binned",
     "initial_tumor_diameter_binned", "initial_stage_binary",
-    "gep_class_simple", "prame_status", "gep12_prame_status", "recurrence1_treatment_clean",
+    "prame_status", "gep12_prame_status", "recurrence1_treatment_clean",
     "retinopathy_burden_event", "nvg_burden_event", "srd_burden_event",
     "vision_change", "vision_line_change", "vision_line_change_bucket",
     "last_vision_followup_months_explicit", "last_vision_followup_months_proxy",
     "last_vision_followup_timing_source", "last_vision_followup_months",
-    "exploratory_gep_group", "no_gep_group", "ciliary_involvement",
+    "gep_group", "gep_test_days", "gep_test_timing", "mss_event_type_unknown_cause_melanoma", "ciliary_involvement",
     "optic_nerve_involvement", "mets_at_or_before_treatment",
     "mets_free_at_baseline", "mets_event_analysis"
 )
@@ -113,9 +113,8 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "biopsy1_gep", "GEP class display endpoint", "present", "optional", "hard_error",
     "objective4", "biopsy1_gep_mfs", "GEP expected MFS source", "probability", "optional", "hard_error",
     "objective4", "biopsy1_gep_mss", "GEP expected MSS source", "probability", "optional", "hard_error",
-    "objective4", "gep_class_simple", "GEP class endpoint", "gep_class_simple", "optional", "hard_error",
-    "objective4", "exploratory_gep_group", "exploratory GEP group", "gep_class_simple", "optional", "warning",
-    "objective4", "no_gep_group", "no-GEP exploratory group", "no_gep_group", "optional", "warning",
+    "objective4", "gep_group", "GEP availability group", "gep_group", "optional", "hard_error",
+    "objective4", "gep_test_timing", "Timing of the GEP biopsy relative to treatment", "gep_test_timing", "optional", "warning",
     "objective4", "ciliary_involvement", "ciliary involvement exploratory predictor", "binary_01", "optional", "warning",
     "objective4", "optic_nerve_involvement", "optic-nerve involvement exploratory predictor", "binary_01", "optional", "warning",
     "objective4", "prame_status", "PRAME endpoint", "prame_status", "optional", "hard_error",
@@ -124,36 +123,25 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective4", "mfs_analysis_eligible", "MFS analysis eligibility flag", "logical", "complete", "hard_error",
     "objective4", "mss_analysis_eligible", "MSS analysis eligibility flag", "logical", "complete", "hard_error",
     "objective4", "expected_mfs_5yr", "5-year expected MFS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mfs_7yr", "7-year expected MFS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mfs_10yr", "10-year expected MFS probability", "probability", "optional", "hard_error",
     "objective4", "expected_mss_5yr", "5-year expected MSS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mss_7yr", "7-year expected MSS probability", "probability", "optional", "hard_error",
-    "objective4", "expected_mss_10yr", "10-year expected MSS probability", "probability", "optional", "hard_error",
     "objective4", "metastasis_by_5yr", "Metastasis by 5 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "metastasis_by_7yr", "Metastasis by 7 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "metastasis_by_10yr", "Metastasis by 10 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
     "objective4", "melanoma_death_by_5yr", "Melanoma death by 5 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "melanoma_death_by_7yr", "Melanoma death by 7 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
-    "objective4", "melanoma_death_by_10yr", "Melanoma death by 10 years (1=yes, 0=known no, NA=unknown)", "binary_01", "optional", "hard_error",
     "objective4", "mfs_event_type", "Incident-MFS process: 0=censored (including death before metastasis), 1=metastasis", "event_type_012", "optional", "hard_error",
     "objective4", "mss_event_type", "MSS process: 0=censored, 1=melanoma death, 2=other death including unknown cause", "event_type_012", "optional", "hard_error",
+    "objective4", "mss_event_type_unknown_cause_melanoma", "Sensitivity MSS process: unknown-cause deaths counted as melanoma deaths", "event_type_012", "optional", "warning",
     "objective4", "tt_mets_months_analysis", "Incident-MFS time to metastasis or censoring, including censoring at death before metastasis", "nonnegative_numeric", "optional", "hard_error",
     "objective4", "tt_death_months", "death follow-up time", "nonnegative_numeric", "optional", "hard_error",
     "objective4", "tt_death_years", "death follow-up time", "nonnegative_numeric", "optional", "hard_error",
     "objective4", "melanoma_death_event", "Melanoma-death indicator: 1 only for recorded Metastatic_Uveal_Melanoma cause", "binary_01", "complete", "hard_error",
     "objective4", "competing_death_event", "Other-death indicator, including death with unknown recorded cause", "binary_01", "complete", "hard_error",
     "objective4", "predicted_mfs_risk_5yr", "5-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mfs_risk_7yr", "7-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mfs_risk_10yr", "10-year predicted metastasis risk (1 - expected MFS)", "probability", "optional", "hard_error",
     "objective4", "predicted_mss_risk_5yr", "5-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mss_risk_7yr", "7-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error",
-    "objective4", "predicted_mss_risk_10yr", "10-year predicted melanoma-specific mortality risk (1 - expected MSS)", "probability", "optional", "hard_error"
 )
 
 # Factor variables that must have proper levels
 CRITICAL_FACTORS <- c(
     "treatment_group", "sex", "location",
-    "biopsy1_gep", "gep_class_simple", "prame_status", "gep12_prame_status"
+    "biopsy1_gep", "gep_group", "prame_status", "gep12_prame_status"
 )
 
 # Variables to check for missing data

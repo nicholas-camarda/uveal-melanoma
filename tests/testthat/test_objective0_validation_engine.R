@@ -28,20 +28,12 @@ make_objective0_validation_dataset <- function() {
         initial_tumor_height_binned = factor(c("<=10", "<=10", "<=10")),
         initial_tumor_diameter_binned = factor(c("<=20", "<=20", "<=20")),
         initial_stage_binary = factor(c("Stage I-III", "Stage I-III", "Stage I-III"), levels = c("Stage I-III", "Stage IV")),
-        gep_class_simple = factor(c("Class 1", "Class 2", "Class 1"), levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")),
         prame_status = factor(c("Negative", "Positive", "Negative"), levels = c("Negative", "Positive", "Unknown", "Not Available")),
         gep12_prame_status = factor(c("Negative", "Positive", "Negative"), levels = c("Negative", "Positive")),
         recurrence1_treatment_clean = factor(c(NA, "GKSRS", NA), levels = c("GKSRS", "Enucleation", "TTT")),
         biopsy1_gep = factor(
-            c("Class 1 PRAME Negative", "Class 2 PRAME Positive", "Class 1 PRAME Negative"),
-            levels = c(
-                "Class 1 PRAME Negative",
-                "Class 1 PRAME Positive",
-                "Class 2 PRAME Negative",
-                "Class 2 PRAME Positive",
-                "GEP Failed/Indeterminate",
-                "GEP Not Tested"
-            )
+            GEP_VALIDATION_GROUP_LEVELS[c(1, 4, 1)],
+            levels = GEP_DETAIL_LEVELS
         ),
         biopsy1_gep_mfs = c(0.95, 0.55, 0.90),
         biopsy1_gep_mss = c(0.96, 0.60, 0.92),
@@ -93,14 +85,13 @@ make_objective0_validation_dataset <- function() {
         last_vision_followup_months_proxy = c(60, 60, 60),
         last_vision_followup_timing_source = rep("explicit_last_followup", 3),
         last_vision_followup_months = c(60, 60, 60),
-        exploratory_gep_group = factor(
+        gep_group = factor(
             c("Class 1", "Class 2", "Class 1"),
-            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested")
+            levels = GEP_GROUP_LEVELS
         ),
-        no_gep_group = factor(
-            rep(NA_character_, 3),
-            levels = c("GEP Failed/Indeterminate", "GEP Not Tested")
-        ),
+        gep_test_days = c(0, 5, -3),
+        gep_test_timing = factor(rep("Within 31 days of treatment", 3), levels = GEP_TEST_TIMING_LEVELS),
+        mss_event_type_unknown_cause_melanoma = c(0L, 0L, 0L),
         ciliary_involvement = c(0L, 1L, 0L),
         optic_nerve_involvement = c(0L, 0L, 0L),
         consort_group = c("eligible_both", "eligible_both", "eligible_both"),
@@ -109,23 +100,11 @@ make_objective0_validation_dataset <- function() {
         mfs_analysis_eligible = c(TRUE, TRUE, TRUE),
         mss_analysis_eligible = c(TRUE, TRUE, TRUE),
         expected_mfs_5yr = c(0.95, 0.55, 0.90),
-        expected_mfs_7yr = c(0.95, 0.55, 0.90)^(7 / 5),
-        expected_mfs_10yr = c(0.95, 0.55, 0.90)^(10 / 5),
         expected_mss_5yr = c(0.96, 0.60, 0.92),
-        expected_mss_7yr = c(0.96, 0.60, 0.92)^(7 / 5),
-        expected_mss_10yr = c(0.96, 0.60, 0.92)^(10 / 5),
         predicted_mfs_risk_5yr = c(0.05, 0.45, 0.10),
-        predicted_mfs_risk_7yr = 1 - c(0.95, 0.55, 0.90)^(7 / 5),
-        predicted_mfs_risk_10yr = 1 - c(0.95, 0.55, 0.90)^(10 / 5),
         predicted_mss_risk_5yr = c(0.04, 0.40, 0.08),
-        predicted_mss_risk_7yr = 1 - c(0.96, 0.60, 0.92)^(7 / 5),
-        predicted_mss_risk_10yr = 1 - c(0.96, 0.60, 0.92)^(10 / 5),
         metastasis_by_5yr = c(NA_integer_, NA_integer_, 1L),
-        metastasis_by_7yr = c(NA_integer_, NA_integer_, 1L),
-        metastasis_by_10yr = c(NA_integer_, NA_integer_, 1L),
         melanoma_death_by_5yr = c(NA_integer_, NA_integer_, 1L),
-        melanoma_death_by_7yr = c(NA_integer_, NA_integer_, 1L),
-        melanoma_death_by_10yr = c(NA_integer_, NA_integer_, 1L),
         mfs_event_type = c(0L, 0L, 1L),
         mss_event_type = c(0L, 0L, 1L)
     )
@@ -271,8 +250,6 @@ test_that("adjudicated baseline metastasis is informational and incomplete sourc
     baseline_mets_data$tt_pfs_months[1] <- 0
     baseline_mets_data$tt_pfs_months_analysis[1] <- 0
     baseline_mets_data$metastasis_by_5yr[1] <- NA_integer_
-    baseline_mets_data$metastasis_by_7yr[1] <- NA_integer_
-    baseline_mets_data$metastasis_by_10yr[1] <- NA_integer_
     baseline_mets_data$mfs_event_type[1] <- NA_integer_
     baseline_mets_data$mfs_analysis_eligible[1] <- FALSE
 
@@ -620,8 +597,6 @@ test_that("Objective 1 endpoint invariants include metastatic progression in PFS
     invariant_data$tt_pfs_months[1] <- 10
     invariant_data$tt_pfs_months_analysis[1] <- 10
     invariant_data$metastasis_by_5yr[1] <- 1L
-    invariant_data$metastasis_by_7yr[1] <- 1L
-    invariant_data$metastasis_by_10yr[1] <- 1L
     invariant_data$mfs_event_type[1] <- 1L
 
     validation_result <- validate_processing_pipeline(
@@ -657,7 +632,7 @@ test_that("Objective 3 PFS-2 derivation contract handles death-before-second-rec
 
 test_that("Objective 4 GEP derivation contract catches formula and split-label drift", {
     gep_data <- make_objective0_validation_dataset()
-    gep_data$expected_mfs_7yr[1] <- gep_data$biopsy1_gep_mfs[1]
+    gep_data$expected_mfs_5yr[1] <- 0.5 * gep_data$biopsy1_gep_mfs[1]
     gep_data$gep_validation_set[2] <- "Training"
 
     validation_result <- validate_processing_pipeline(
@@ -669,7 +644,7 @@ test_that("Objective 4 GEP derivation contract catches formula and split-label d
         dplyr::filter(.data$detail_sheet == "Objective4_GEP_Derivation")
 
     expect_false(validation_result$success)
-    expect_true(any(gep_details$field_name == "expected_mfs_7yr"))
+    expect_true(any(gep_details$field_name == "expected_mfs_5yr"))
     expect_true(any(gep_details$field_name == "gep_validation_set"))
 })
 
@@ -745,7 +720,7 @@ test_that("config_constants remains the only public config source entry point", 
         "PROJECT_ROOT", "INPUT_FILENAME", "OBJECTIVE0_GLOBAL_REQUIRED_VARIABLES",
         "OBJECTIVE0_DERIVED_OUTPUT_MANIFEST", "OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT",
         "OBJECTIVE2_TOXICITY_ENDPOINT_MAP", "OBJECTIVE3_PFS2_DERIVATION_CONTRACT",
-        "OBJECTIVE4_GEP_DERIVATION_CONTRACT", "GEP_VALIDATION_TIMEPOINTS",
+        "OBJECTIVE4_GEP_DERIVATION_CONTRACT", "GEP_VALIDATION_HORIZON_MONTHS",
         "STANDARD_TABLE_LABELS"
     )
     expect_true(all(vapply(required_objects, exists, logical(1), inherits = TRUE)))

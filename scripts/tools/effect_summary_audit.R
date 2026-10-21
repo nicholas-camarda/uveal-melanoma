@@ -23,20 +23,6 @@ parse_listed_covariates <- function(covariates_used_norm) {
     unique(listed_covariates)
 }
 
-#' Determine whether workbook-specific confounder expectations should apply
-#'
-#' @param effect_summary_path Character path to an effect-summary workbook.
-#'
-#' @return Logical scalar indicating whether expected confounders should be
-#'   enforced for this workbook.
-workbook_requires_expected_confounders <- function(effect_summary_path) {
-    grepl(
-        "/04_GEP_Validation/a_metastasis_free_survival/",
-        effect_summary_path,
-        fixed = TRUE
-    )
-}
-
 #' Extract modeled sample-size metadata from a paired diagnostics workbook
 #'
 #' @param effect_summary_path Character path to an effect-summary workbook.
@@ -78,18 +64,12 @@ extract_effect_summary_diagnostics_metadata <- function(effect_summary_path) {
 #' Audit one effect-summary workbook for silent metadata and adjustment issues
 #'
 #' @param effect_summary_path Character path to an effect-summary workbook.
-#' @param expected_confounders Optional character vector of expected covariates
-#'   for adjusted models.
 #'
 #' @return A tibble of audit findings with one row per detected issue.
-audit_effect_summary_workbook <- function(effect_summary_path,
-                                          expected_confounders = NULL) {
+audit_effect_summary_workbook <- function(effect_summary_path) {
     if (!file.exists(effect_summary_path)) {
         stop(sprintf("Effect summary workbook not found: %s", effect_summary_path))
     }
-
-    expected_confounders <- unique(stats::na.omit(as.character(expected_confounders)))
-    expected_confounders <- expected_confounders[nzchar(expected_confounders)]
 
     effect_summary <- readxl::read_xlsx(effect_summary_path)
     if (!nrow(effect_summary)) {
@@ -183,37 +163,6 @@ audit_effect_summary_workbook <- function(effect_summary_path,
         )
     findings[[length(findings) + 1L]] <- adjusted_formula_missing_listed_covariates
 
-    if (length(expected_confounders) > 0 &&
-        workbook_requires_expected_confounders(effect_summary_path)) {
-        adjusted_missing_expected <- effect_summary %>%
-            dplyr::filter(.data$is_adjusted) %>%
-            dplyr::rowwise() %>%
-            dplyr::mutate(
-                missing_expected_confounders = list(expected_confounders[!vapply(
-                    expected_confounders,
-                    function(confounder) {
-                        grepl(confounder, .data$covariates_used_norm, fixed = TRUE) ||
-                            grepl(confounder, .data$model_formula_norm, fixed = TRUE)
-                    },
-                    logical(1)
-                )])
-            ) %>%
-            dplyr::ungroup() %>%
-            dplyr::filter(lengths(.data$missing_expected_confounders) > 0) %>%
-            dplyr::transmute(
-                workbook_path = .data$workbook_path,
-                analysis_label = .data$analysis_label,
-                model_label = .data$model_label,
-                term = .data$term,
-                issue_type = "adjusted_model_formula_missing_expected_confounders",
-                expected_interpretation = paste(
-                    "Adjusted model should include expected confounders:",
-                    vapply(.data$missing_expected_confounders, paste, character(1), collapse = ", ")
-                )
-            )
-        findings[[length(findings) + 1L]] <- adjusted_missing_expected
-    }
-
     adjusted_matches_unadjusted <- effect_summary %>%
         dplyr::filter(.data$is_adjusted) %>%
         dplyr::select(
@@ -274,14 +223,10 @@ audit_effect_summary_workbook <- function(effect_summary_path,
 #'
 #' @param base_dir Character path to the directory containing effect-summary
 #'   workbooks.
-#' @param expected_confounders Optional character vector of expected covariates
-#'   for adjusted models.
 #' @param output_path Optional CSV path for a machine-readable audit artifact.
 #'
 #' @return A tibble of audit findings across all discovered workbooks.
-audit_effect_summary_directory <- function(base_dir,
-                                           expected_confounders = NULL,
-                                           output_path = NULL) {
+audit_effect_summary_directory <- function(base_dir, output_path = NULL) {
     workbook_paths <- list.files(
         path = base_dir,
         pattern = "_effect_summary\\.xlsx$",
@@ -291,10 +236,7 @@ audit_effect_summary_directory <- function(base_dir,
     workbook_paths <- workbook_paths[!grepl("/~\\$", workbook_paths)]
 
     findings <- lapply(workbook_paths, function(workbook_path) {
-        audit_effect_summary_workbook(
-            effect_summary_path = workbook_path,
-            expected_confounders = expected_confounders
-        )
+        audit_effect_summary_workbook(effect_summary_path = workbook_path)
     })
     findings <- Filter(function(x) is.data.frame(x) && nrow(x) > 0, findings)
 

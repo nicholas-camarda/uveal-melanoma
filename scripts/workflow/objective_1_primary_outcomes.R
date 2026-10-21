@@ -31,10 +31,7 @@ build_objective1_cohort_interpretation <- function(dataset_name) {
 #' @param prefix Character file prefix for the cohort.
 #' @return Path to the note file, invisibly.
 write_objective1_interpretation_note <- function(output_dirs, dataset_name, prefix) {
-    obj1_dir <- dirname(output_dirs$obj1_recurrence %||% output_dirs$obj1_os %||% getwd())
-    if (!dir.exists(obj1_dir)) {
-        dir.create(obj1_dir, recursive = TRUE, showWarnings = FALSE)
-    }
+    obj1_dir <- ensure_output_dir(get_output_dir(output_dirs, "obj1_root"))
     cohort_note <- build_objective1_cohort_interpretation(dataset_name)
     note_path <- file.path(obj1_dir, paste0(prefix, "objective1_interpretation_notes.txt"))
     note_lines <- c(
@@ -148,10 +145,7 @@ annotate_objective1_survival_effect_summary <- function(output_dir, prefix, outc
 #' @param prefix Character file prefix for the cohort.
 #' @return Path to the note file, invisibly.
 write_objective1_subgroup_contract_note <- function(output_dirs, dataset_name, prefix) {
-    subgroup_dir <- dirname(output_dirs$obj1_subgroup_primary %||% output_dirs$obj1_forest_plots %||% getwd())
-    if (!dir.exists(subgroup_dir)) {
-        dir.create(subgroup_dir, recursive = TRUE, showWarnings = FALSE)
-    }
+    subgroup_dir <- ensure_output_dir(get_output_dir(output_dirs, "obj1_subgroup_root"))
     note_path <- file.path(subgroup_dir, paste0(prefix, "subgroup_analysis_contract_note.txt"))
     writeLines(c(
         "OBJECTIVE 1 SUBGROUP ARTIFACT CONTRACT",

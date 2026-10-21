@@ -8,6 +8,7 @@ This document explains how key derived variables are calculated in the analysis 
 
 - [Tumor Height Change](#tumor-height-change)
 - [Vision Change](#vision-change)
+- [GEP Variables](#gep-variables)
 - [Time-to-Event Variables](#time-to-event-variables)
 - [Event Indicators](#event-indicators)
 - [Age Calculations](#age-calculations)
@@ -186,16 +187,26 @@ For reader-facing interpretation of these outputs, see [INTERPRETATION_GUIDE.md]
 
 ---
 
-## Exploratory GEP Variables
+## GEP Variables
 
-Objective 0 creates the deterministic exploratory GEP fields used by the no-GEP and baseline-predictor reports:
+Objective 0 derives the GEP fields below from the laboratory source label and the imported group-level estimates. The group names, their order and the raw source labels are defined in `scripts/config/objective4_policy.R`.
 
-- `exploratory_gep_group` mirrors `gep_class_simple` with fixed levels for Class 1, Class 2, GEP Failed/Indeterminate, and GEP Not Tested.
-- `no_gep_group` retains the two unsupported GEP groups without pooling them.
-- `ciliary_involvement` identifies ciliary/cilio-choroidal location.
-- `optic_nerve_involvement` normalizes recognized yes/no or involved/not-involved source values to `1`/`0`; unrecognized values remain missing for Objective 0 validation.
+| Variable | Definition |
+|----------|------------|
+| `gep_group` | Availability group from `classify_gep_group()` applied to the source label: `Class 1`, `Class 2` (definitive call with PRAME reported), `Class known, PRAME not reported`, `Discordant result`, `Failed or unknown result`, `Not tested` (no result recorded). A source label outside the known set is an error. |
+| `biopsy1_gep` | Reader-facing detail from `classify_gep_detail()`: `Class 1, PRAME negative`, `Class 1, PRAME positive`, `Class 2, PRAME negative`, `Class 2, PRAME positive`, then the other four groups under their own names. |
+| `prame_status` | `Positive` or `Negative` when the source label carries a PRAME result, `Unknown` when the label says PRAME was not reported, `Not Available` otherwise. |
+| `gep12_prame_status` | `prame_status` restricted to the `Class 1` and `Class 2` groups; otherwise missing. |
+| `expected_mfs_5yr`, `expected_mss_5yr` | The imported 5-year survival values `biopsy1_gep_mfs`, `biopsy1_gep_mss`. |
+| `predicted_mfs_risk_5yr`, `predicted_mss_risk_5yr` | `1 - expected_*_5yr`. |
+| `gep_test_days` | First biopsy date minus treatment date, in days (negative = biopsy before treatment). |
+| `gep_test_timing` | `gep_test_days` classed as more than 31 days before treatment, within 31 days, 31 to 180 days after, more than 180 days after, or no biopsy date. |
+| `gep_validation_set`, `mfs_analysis_eligible`, `mss_analysis_eligible` | Eligibility for the validation: group `Class 1` or `Class 2`, imported value in [0, 1], and the endpoint's follow-up fields (metastasis-free at baseline for MFS). Defined once in `derive_gep_analysis_flags()`. |
+| `mss_event_type_unknown_cause_melanoma` | `mss_event_type` with deaths whose recorded cause is `Unknown` or `Unknown_Cancer` counted as melanoma deaths (cause-of-death sensitivity). |
+| `ciliary_involvement` | `1` for ciliary or cilio-choroidal location, otherwise `0`. |
+| `optic_nerve_involvement` | Recognized yes/no or involved/not-involved source values as `1`/`0`; unrecognized values stay missing for Objective 0 validation. |
 
-These fields are not pseudo-imputed and do not alter the canonical dataset during downstream diagnostic modeling. Cohort-dependent GEP thresholds remain diagnostic-only and are reported without overwriting observed GEP values.
+The groups are classified from the source label only; no prediction, PRAME value or class is imputed. The laboratory's earlier 1A/1B subclass wording exists only in the source strings; every derived field uses Class 1 and Class 2.
 
 ---
 
@@ -272,8 +283,8 @@ Objective 0 stores one untruncated process for each endpoint:
 - MSS: `tt_death_months` plus `mss_event_type` (`1` melanoma death,
   `2` other death, `0` censored). Other death is a competing event.
 
-The separate fixed-horizon fields `metastasis_by_*yr` and
-`melanoma_death_by_*yr` contain `1`, `0`, or `NA`:
+The separate fixed-horizon fields `metastasis_by_5yr` and
+`melanoma_death_by_5yr` contain `1`, `0`, or `NA`:
 
 - `1`: target event observed by the horizon
 - `0`: known non-case because the patient was observed through the horizon, or
@@ -359,13 +370,14 @@ All event indicators are coded as:
 
 - **0** = Event did not occur (censored)
 - **1** = Event occurred
+- **NA** = the source value is blank (never read as "no event"; the Objective 0 contract rejects it)
 
 **Examples:**
 
 ```r
-recurrence_event = if_else(recurrence1 == "Y", 1, 0, missing = 0)
-mets_event = if_else(mets_progression == "Y", 1, 0, missing = 0)
-death_event = if_else(!is.na(dod), 1, 0, missing = 0)
+recurrence_event = if_else(recurrence1 == "Y", 1, 0)
+mets_event = if_else(mets_progression == "Y", 1, 0)
+death_event = if_else(!is.na(dod), 1, 0)
 ```
 
 ---
@@ -377,6 +389,7 @@ death_event = if_else(!is.na(dod), 1, 0, missing = 0)
 ```r
 melanoma_death_event = case_when(
     cod == "Metastatic_Uveal_Melanoma" ~ 1,
+    !is.na(dod) & is.na(cod) ~ NA_real_,
     TRUE ~ 0
 )
 ```
@@ -385,13 +398,16 @@ melanoma_death_event = case_when(
 
 - Used in melanoma-specific survival (MSS) analysis
 - Distinguishes melanoma deaths from other causes of death
+- A death with no recorded cause is missing, not a competing death; deaths recorded as `Unknown` or `Unknown_Cancer` are competing and are recounted as melanoma deaths in the cause-of-death sensitivity
 
 **Competing Death Event:**
 
 ```r
 competing_death_event = case_when(
-    !is.na(dod) & cod != "Metastatic_Uveal_Melanoma" ~ 1,
-    TRUE ~ 0
+    is.na(melanoma_death_event) ~ NA_integer_,
+    death_event == 0 ~ 0L,
+    melanoma_death_event == 1 ~ 0L,
+    TRUE ~ 1L
 )
 ```
 

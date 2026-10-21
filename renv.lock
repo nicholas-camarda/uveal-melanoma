@@ -8,64 +8,7 @@
       }
     ]
   },
-  "Bioconductor": {
-    "Version": "3.20"
-  },
   "Packages": {
-    "BiocManager": {
-      "Package": "BiocManager",
-      "Version": "1.30.26",
-      "Source": "Repository",
-      "Title": "Access the Bioconductor Project Package Repository",
-      "Description": "A convenient tool to install and update Bioconductor packages.",
-      "Authors@R": "c( person(\"Martin\", \"Morgan\", email = \"martin.morgan@roswellpark.org\", role = \"aut\", comment = c(ORCID = \"0000-0002-5874-8148\")), person(\"Marcel\", \"Ramos\", email = \"marcel.ramos@sph.cuny.edu\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0002-3242-0582\")))",
-      "Imports": [
-        "utils"
-      ],
-      "Suggests": [
-        "BiocVersion",
-        "BiocStyle",
-        "remotes",
-        "rmarkdown",
-        "testthat",
-        "withr",
-        "curl",
-        "knitr"
-      ],
-      "URL": "https://bioconductor.github.io/BiocManager/",
-      "BugReports": "https://github.com/Bioconductor/BiocManager/issues",
-      "VignetteBuilder": "knitr",
-      "License": "Artistic-2.0",
-      "Encoding": "UTF-8",
-      "RoxygenNote": "7.3.2",
-      "NeedsCompilation": "no",
-      "Author": "Martin Morgan [aut] (ORCID: <https://orcid.org/0000-0002-5874-8148>), Marcel Ramos [aut, cre] (ORCID: <https://orcid.org/0000-0002-3242-0582>)",
-      "Maintainer": "Marcel Ramos <marcel.ramos@sph.cuny.edu>",
-      "Repository": "CRAN"
-    },
-    "BiocVersion": {
-      "Package": "BiocVersion",
-      "Version": "3.20.0",
-      "Source": "Bioconductor",
-      "Title": "Set the appropriate version of Bioconductor packages",
-      "Description": "This package provides repository information for the appropriate version of Bioconductor.",
-      "Authors@R": "c( person(\"Martin\", \"Morgan\", email = \"martin.morgan@roswellpark.org\", role = \"aut\"), person(\"Marcel\", \"Ramos\", email = \"marcel.ramos@roswellpark.org\", role = \"ctb\"), person(\"Bioconductor\", \"Package Maintainer\", email  = \"maintainer@bioconductor.org\", role = c(\"ctb\", \"cre\")))",
-      "biocViews": "Infrastructure",
-      "Depends": [
-        "R (>= 4.4.0)"
-      ],
-      "License": "Artistic-2.0",
-      "Encoding": "UTF-8",
-      "RoxygenNote": "6.0.1",
-      "git_url": "https://git.bioconductor.org/packages/BiocVersion",
-      "git_branch": "devel",
-      "git_last_commit": "43c716a",
-      "git_last_commit_date": "2024-04-30",
-      "Repository": "Bioconductor 3.20",
-      "NeedsCompilation": "no",
-      "Author": "Martin Morgan [aut], Marcel Ramos [ctb], Bioconductor Package Maintainer [ctb, cre]",
-      "Maintainer": "Bioconductor Package Maintainer <maintainer@bioconductor.org>"
-    },
     "DBI": {
       "Package": "DBI",
       "Version": "1.2.3",
@@ -696,27 +639,6 @@
       "Author": "Roger Koenker [cre, aut], Pin Tian Ng [ctb] (Contributions to Sparse QR code), Yousef Saad [ctb] (author of sparskit2), Ben Shaby [ctb] (author of chol2csr), Martin Maechler [ctb] (chol() tweaks; S4, <https://orcid.org/0000-0002-8685-9910>)",
       "Repository": "CRAN"
     },
-    "SuppDists": {
-      "Package": "SuppDists",
-      "Version": "1.1-9.9",
-      "Source": "Repository",
-      "Type": "Package",
-      "Title": "Supplementary Distributions",
-      "Date": "2025-03-23",
-      "Authors@R": "c(person(given = \"Bob\", family = \"Wheeler\",  role = \"aut\"), person(given = \"Thorsten\", family = \"Pohlert\", email = \"thorsten.pohlert@gmx.de\", comment = c(ORCID = \"0000-0003-3855-3025\"), role = c(\"ctb\", \"cre\")) )",
-      "Description": "Ten distributions supplementing those built into R. Inverse Gauss, Kruskal-Wallis, Kendall's Tau, Friedman's chi squared, Spearman's rho, maximum F ratio, the Pearson product moment correlation coefficient, Johnson distributions, normal scores and generalized hypergeometric distributions.",
-      "License": "GPL (>= 2)",
-      "NeedsCompilation": "yes",
-      "Depends": [
-        "R (>= 3.3.0)"
-      ],
-      "Suggests": [
-        "RcppZiggurat"
-      ],
-      "Author": "Bob Wheeler [aut], Thorsten Pohlert [ctb, cre] (<https://orcid.org/0000-0003-3855-3025>)",
-      "Maintainer": "Thorsten Pohlert <thorsten.pohlert@gmx.de>",
-      "Repository": "CRAN"
-    },
     "TH.data": {
       "Package": "TH.data",
       "Version": "1.1-3",
@@ -1174,26 +1096,6 @@
       "License": "Unlimited",
       "NeedsCompilation": "no",
       "Author": "Angelo Canty [aut] (author of original code for S), Brian Ripley [aut, trl] (conversion to R, maintainer 1999--2022, author of parallel support), Alessandra R. Brazzale [ctb, cre] (minor bug fixes)",
-      "Repository": "CRAN"
-    },
-    "bootstrap": {
-      "Package": "bootstrap",
-      "Version": "2019.6",
-      "Source": "Repository",
-      "Date": "2019-06-15",
-      "Title": "Functions for the Book \"An Introduction to the Bootstrap\"",
-      "Author": "S original, from StatLib, by Rob Tibshirani.  R port by Friedrich Leisch.",
-      "Maintainer": "Scott Kostyshak <scott.kostyshak@gmail.com>",
-      "Depends": [
-        "stats",
-        "R (>= 2.10.0)"
-      ],
-      "LazyData": "TRUE",
-      "Description": "Software (bootstrap, cross-validation, jackknife) and data for the book \"An Introduction to the Bootstrap\" by B. Efron and R. Tibshirani, 1993, Chapman and Hall. This package is primarily provided for projects already based on it, and for support of the book. New projects should preferentially use the recommended package \"boot\".",
-      "License": "BSD_3_clause + file LICENSE",
-      "URL": "https://gitlab.com/scottkosty/bootstrap",
-      "BugReports": "https://gitlab.com/scottkosty/bootstrap/issues",
-      "NeedsCompilation": "yes",
       "Repository": "CRAN"
     },
     "brio": {
@@ -8511,23 +8413,6 @@
       "RemoteRef": "84a11aff0e21793a834e1127968da644739c6bed",
       "RemoteSha": "84a11aff0e21793a834e1127968da644739c6bed"
     },
-    "rmeta": {
-      "Package": "rmeta",
-      "Version": "3.0",
-      "Source": "Repository",
-      "Author": "Thomas Lumley",
-      "Maintainer": "Thomas Lumley <t.lumley@auckland.ac.nz>",
-      "Description": "Functions for simple fixed and random effects meta-analysis for two-sample comparisons and cumulative meta-analyses. Draws standard summary plots, funnel plots, and computes summaries and tests for association and heterogeneity.",
-      "Title": "Meta-Analysis",
-      "License": "GPL-2",
-      "Imports": [
-        "grid",
-        "stats",
-        "graphics"
-      ],
-      "NeedsCompilation": "no",
-      "Repository": "CRAN"
-    },
     "rms": {
       "Package": "rms",
       "Version": "8.0-0",
@@ -9272,50 +9157,6 @@
       "NeedsCompilation": "no",
       "Repository": "CRAN"
     },
-    "survcomp": {
-      "Package": "survcomp",
-      "Version": "1.56.0",
-      "Source": "Bioconductor",
-      "Type": "Package",
-      "Title": "Performance Assessment and Comparison for Survival Analysis",
-      "Date": "2021-12-14",
-      "Description": "Assessment and Comparison for Performance of Risk Prediction (Survival) Models.",
-      "biocViews": "GeneExpression, DifferentialExpression, Visualization",
-      "Authors@R": "c( person(\"Benjamin\", \"Haibe-Kains\", email=\"benjamin.haibe.kains@utoronto.ca\", role=c(\"aut\", \"cre\")),  person(\"Markus\" , \"Schroeder\", email=\"markus.schroeder@ucdconnect.ie\", role=c(\"aut\")),  person(\"Catharina\", \"Olsen\", email=\"colsen@ulb.ac.be\",  role=c(\"aut\")), person(\"Christos\", \"Sotiriou\", role=c(\"aut\")), person(\"Gianluca\", \"Bontempi\", role=c(\"aut\")), person(\"John\", \"Quackenbush\", role=c(\"aut\")), person(\"Samuel\", \"Branders\", role=c(\"aut\")), person(\"Zhaleh\", \"Safikhani\", role=c(\"aut\")) )",
-      "Depends": [
-        "survival",
-        "prodlim",
-        "R (>= 3.4)"
-      ],
-      "Suggests": [
-        "Hmisc",
-        "clinfun",
-        "xtable",
-        "Biobase",
-        "BiocManager"
-      ],
-      "Imports": [
-        "ipred",
-        "SuppDists",
-        "KernSmooth",
-        "survivalROC",
-        "bootstrap",
-        "grid",
-        "rmeta",
-        "stats",
-        "graphics"
-      ],
-      "License": "Artistic-2.0",
-      "URL": "http://www.pmgenomics.ca/bhklab/",
-      "git_url": "https://git.bioconductor.org/packages/survcomp",
-      "git_branch": "RELEASE_3_20",
-      "git_last_commit": "1e00a05",
-      "git_last_commit_date": "2024-10-29",
-      "Repository": "Bioconductor 3.20",
-      "NeedsCompilation": "yes",
-      "Author": "Benjamin Haibe-Kains [aut, cre], Markus Schroeder [aut], Catharina Olsen [aut], Christos Sotiriou [aut], Gianluca Bontempi [aut], John Quackenbush [aut], Samuel Branders [aut], Zhaleh Safikhani [aut]",
-      "Maintainer": "Benjamin Haibe-Kains <benjamin.haibe.kains@utoronto.ca>"
-    },
     "survival": {
       "Package": "survival",
       "Version": "3.8-3",
@@ -9345,22 +9186,6 @@
       "Author": "Terry M Therneau [aut, cre], Thomas Lumley [ctb, trl] (original S->R port and R maintainer until 2009), Atkinson Elizabeth [ctb], Crowson Cynthia [ctb]",
       "Maintainer": "Terry M Therneau <therneau.terry@mayo.edu>",
       "Repository": "CRAN"
-    },
-    "survivalROC": {
-      "Package": "survivalROC",
-      "Version": "1.0.3.1",
-      "Source": "Repository",
-      "Date": "2013-01-13",
-      "Title": "Time-Dependent ROC Curve Estimation from Censored Survival Data",
-      "Author": "Patrick J. Heagerty <heagerty@u.washington.edu>, packaging by Paramita Saha-Chaudhuri <paramita.sahachaudhuri.work@gmail.com>",
-      "Maintainer": "Paramita Saha-Chaudhuri <paramita.sahachaudhuri.work@gmail.com>",
-      "Depends": [
-        "R (>= 1.6.1)"
-      ],
-      "Description": "Compute time-dependent ROC curve from censored survival data using Kaplan-Meier (KM) or Nearest Neighbor Estimation (NNE) method of Heagerty, Lumley & Pepe (Biometrics, Vol 56 No 2, 2000, PP 337-344).",
-      "License": "GPL (>= 2)",
-      "Repository": "CRAN",
-      "NeedsCompilation": "yes"
     },
     "survminer": {
       "Package": "survminer",

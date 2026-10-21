@@ -93,23 +93,22 @@ Time-to-event definition from the source planning document:
 
 The current repository implements this as the PFS-2 workflow under `03_Repeat_Radiation/a_pfs2/`.
 
-## Objective 4: Predictive Accuracy of Gene Expression Profile (GEP)
+## Objective 4: Gene Expression Profile (GEP) Validation
 
-Goal: evaluate how well externally supplied GEP predictions align with observed patient outcomes.
+Goal: describe how the laboratory's GEP results relate to observed 5-year outcomes, and where GEP is not available, what baseline clinical features add.
 
 Current pipeline objective: `04_GEP_Validation/`
 
-Key sub-objectives from the source planning document:
+| Subgoal | Question |
+|---------|----------|
+| 4a | Does each Class x PRAME group's imported 5-year metastasis-free and melanoma-specific survival lie within the risk observed in that group? (imported fields `biopsy1_gep_mfs`, `biopsy1_gep_mss`) |
+| 4b | How well does the imported risk order patients who have the event before those who do not? |
+| 4c | What are the 5-year outcomes of patients without a definitive Class 1/Class 2 call (class known with PRAME not reported, discordant, failed or unknown, not tested)? |
+| 4d | Do baseline clinical features rank 5-year risk better than T stage or tumor diameter alone in patients without a definitive call? |
 
-- compare actual versus expected 5-year metastasis-free survival (MFS) using the imported GEP prediction field `biopsy1_gep_mfs`
-- compare actual versus expected 5-year melanoma-specific survival (MSS) using the imported GEP prediction field `biopsy1_gep_mss`
+The imported values are published group-level estimates, so the analysis checks the fit of each group's estimate and the ordering of the four groups; it is descriptive. The pipeline analyzes the 5-year horizon only.
 
-Current pipeline interpretation:
-
-- the repository validates imported patient-level GEP predictions rather than fitting a new base molecular prognostic model
-- the current implementation extends the imported 5-year prediction framework into additional horizon-specific validation outputs, but the core scientific question remains whether reported GEP risk aligns with observed outcomes
-
-For the full validation framework and workbook structure, use [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#gep-validation-metrics) and [INTERPRETATION_GUIDE.md](INTERPRETATION_GUIDE.md#understanding-gep-analysis).
+For the validation methods and workbook structure, use [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#gep-validation) and [INTERPRETATION_GUIDE.md](INTERPRETATION_GUIDE.md#understanding-gep-analysis).
 
 ## Inclusion and Exclusion Criteria for Cohort Logic
 

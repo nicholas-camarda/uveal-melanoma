@@ -80,8 +80,9 @@ test_that("RMST, KM, and Cox models share filtered cohort", {
         dataset_name = "unit_test",
         ylab = "Unit Test Survival",
         legend_labels = c("PBT", "GKSRS"),
-        output_dirs = NULL,
-        prefix = "unit_"
+        output_dirs = build_peer_review_objective1_output_dirs(withr::local_tempdir()),
+        prefix = "unit_",
+        route_key = "obj1_os"
     ))
 
     skip_if(is.null(result$fit))

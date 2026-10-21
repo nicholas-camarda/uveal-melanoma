@@ -151,44 +151,83 @@ test_that("Objective 1 KM figures cap display at SURVIVAL_XAXIS_MAX_MONTHS while
     expect_gt(max(data$tt_pfs_months, na.rm = TRUE), SURVIVAL_XAXIS_MAX_MONTHS)
 })
 
-test_that("Survival route keys separate Objective 1 metastasis and Objective 4 MFS outputs", {
-    output_dirs <- list(
-        baseline_characteristics = tempfile("baseline"),
-        obj1_mets = tempfile("obj1_mets"),
-        obj4_mfs = tempfile("obj4_mfs")
-    )
+test_that("each route resolves to its own configured directory and nothing else", {
+    output_dirs <- create_output_structure(withr::local_tempdir())
 
-    expect_identical(
-        determine_survival_output_dir("Metastasis-Free Survival Probability", output_dirs, route_key = "obj4_mfs"),
-        output_dirs$obj4_mfs
-    )
-    expect_identical(
-        determine_survival_output_dir("Metastasis-Free Survival Probability", output_dirs, route_key = "obj1_mets"),
-        output_dirs$obj1_mets
-    )
-    expect_error(
-        determine_survival_output_dir("Metastasis-Free Survival Probability", output_dirs, route_key = "not_a_route"),
-        "Unknown survival output route_key"
-    )
+    expect_identical(resolve_route_output_dir(output_dirs, "obj1_mets"), output_dirs$obj1_mets)
+    expect_identical(resolve_route_output_dir(output_dirs, "obj1_mets", "cox"), output_dirs$obj1_mets_cox)
+    expect_identical(resolve_route_output_dir(output_dirs, "obj1_os", "km"), output_dirs$obj1_os_km)
+    expect_false(identical(
+        resolve_route_output_dir(output_dirs, "obj1_mets", "cox"),
+        resolve_route_output_dir(output_dirs, "obj1_os", "cox")
+    ))
+    expect_error(resolve_route_output_dir(output_dirs, "not_a_route"), "Unknown output route")
+    expect_error(resolve_route_output_dir(output_dirs, NULL), "Unknown output route")
+    # An artifact the route's profile does not define has no directory and is an error.
+    expect_error(resolve_route_output_dir(output_dirs, "obj2_nvg", "km"), "No output directory is configured for `obj2_nvg_km`")
 })
 
-test_that("recognized explicit survival routes fail when their directory is not configured", {
+test_that("a route whose directory is not configured fails instead of using a default location", {
     invalid_output_dirs <- list(
+        NULL,
         list(baseline_characteristics = tempfile("baseline")),
-        list(baseline_characteristics = tempfile("baseline"), obj1_os = NULL),
-        list(baseline_characteristics = tempfile("baseline"), obj1_os = ""),
-        list(baseline_characteristics = tempfile("baseline"), obj1_os = character())
+        list(obj1_os = NULL),
+        list(obj1_os = ""),
+        list(obj1_os = character()),
+        list(obj1_os = NA_character_)
     )
 
     for (output_dirs in invalid_output_dirs) {
         expect_error(
-            determine_survival_output_dir(
-                "Overall Survival Probability",
-                output_dirs,
-                route_key = "obj1_os"
-            ),
-            "Configured survival output route_key `obj1_os` has no non-empty directory",
+            resolve_route_output_dir(output_dirs, "obj1_os"),
+            "No output directory is configured for `obj1_os`",
             fixed = TRUE
         )
+    }
+    expect_error(get_output_dir(list(), "obj1_root"), "No output directory is configured for `obj1_root`", fixed = TRUE)
+})
+
+test_that("the survival analysis requires explicit directories and a route", {
+    data <- create_test_dataset()
+    arguments <- list(
+        data = data, time_var = "tt_death_months", event_var = "death_event",
+        ylab = "Overall Survival Probability", dataset_name = "unit", prefix = "unit_"
+    )
+    expect_error(do.call(analyze_time_to_event_outcomes, c(arguments, list(route_key = "obj1_os"))), "output_dirs")
+    expect_error(
+        do.call(analyze_time_to_event_outcomes, c(arguments, list(output_dirs = NULL, route_key = "obj1_os"))),
+        "No output directory is configured"
+    )
+    expect_error(
+        do.call(analyze_time_to_event_outcomes, c(arguments, list(output_dirs = create_output_structure(withr::local_tempdir()), route_key = "obj9_x"))),
+        "Unknown output route"
+    )
+})
+
+test_that("the output structure creates exactly the routes in use, with no Objective 4 survival folders", {
+    root <- withr::local_tempdir()
+    output_dirs <- create_output_structure(root)
+
+    legacy <- grep("^obj4_(mfs|mss|ph)", names(output_dirs), value = TRUE)
+    expect_identical(legacy, character(0))
+    expect_identical(output_dirs$obj4_gep, file.path(root, "04_GEP_Validation"))
+    expect_identical(output_dirs$obj4_no_gep, file.path(root, "04_GEP_Validation", "d_no_gep"))
+    created <- list.dirs(file.path(root, "04_GEP_Validation"), recursive = TRUE, full.names = FALSE)
+    expect_setequal(created[nzchar(created)], "d_no_gep")
+
+    # Every endpoint route registers one numbered folder per artifact type of its profile.
+    for (route_key in names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)) {
+        profile <- ENDPOINT_PROFILES[[ENDPOINT_PROFILE_BY_ROUTE_PREFIX[[route_key]]]]
+        expect_true(all(paste0(route_key, "_", profile) %in% names(output_dirs)), info = route_key)
+        expect_true(all(dir.exists(unlist(output_dirs[paste0(route_key, "_", profile)]))), info = route_key)
+    }
+})
+
+test_that("output routing code has no fallback directory", {
+    for (file in c("scripts/utils/output_utilities.R", "scripts/analysis/survival_outcomes.R", "scripts/analysis/rmst_visualization.R")) {
+        text <- paste(readLines(here::here(file), warn = FALSE), collapse = "\n")
+        expect_false(grepl("getwd()", text, fixed = TRUE), info = file)
+        expect_false(grepl('"test_output"', text, fixed = TRUE), info = file)
+        expect_false(grepl("determine_survival_output_dir|resolve_endpoint_output_dir|obj4_mfs|obj4_mss", text), info = file)
     }
 })

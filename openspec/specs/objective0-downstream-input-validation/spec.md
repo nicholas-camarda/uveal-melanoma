@@ -14,7 +14,7 @@ The initial registry MUST include, or explicitly justify excluding after impleme
 - Objective 1: `recurrence1`, `recurrence_event`, `tt_recurrence_months`, `tt_recurrence_months_analysis`, `mets_progression`, `mets_event`, `tt_mets_months`, `tt_mets_months_analysis`, `death_event`, `tt_death_months`, `tt_death_months_analysis`, `pfs_event`, `tt_pfs_months`, `tt_pfs_months_analysis`.
 - Objective 2: `vision_change`, `initial_vision`, `last_vision`, `recurrence1_pretreatment_vision`, `retinopathy`, `nvg`, `srd`, `retinopathy_burden_event`, `nvg_burden_event`, `srd_burden_event`.
 - Objective 3: `recurrence1`, `recurrence1_treatment_date`, `recurrence2`, `recurrence2_date`, `pfs2_event`, `tt_pfs2_months`, `tt_pfs2_years`, `recurrence1_treatment_clean`, `dod`, `last_known_alive_date`.
-- Objective 4: `biopsy1_gep`, `gep_class_simple`, `prame_status`, `gep12_prame_status`, `biopsy1_gep_mfs`, `biopsy1_gep_mss`, expected and predicted MFS/MSS risk fields at 5/7/10 years, MFS/MSS eligibility flags, MFS/MSS event fields at 5/7/10 years, MFS/MSS competing-risk status fields at 5/7/10 years, and MFS/MSS time fields at 5/7/10 years.
+- Objective 4: `biopsy1_gep`, `gep_group`, `gep_test_timing`, `prame_status`, `gep12_prame_status`, `biopsy1_gep_mfs`, `biopsy1_gep_mss`, expected and predicted MFS/MSS risk fields at 5 years, MFS/MSS eligibility flags, MFS/MSS event fields at 5 years, MFS/MSS competing-risk status fields, and MFS/MSS time fields.
 
 Implementation MAY use any number of subagents to audit the live Objective 1-4 code paths, tests, and documentation before finalizing the registry.
 

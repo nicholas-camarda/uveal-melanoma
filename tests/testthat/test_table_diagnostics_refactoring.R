@@ -596,11 +596,6 @@ test_that("filtering summary counts filtered coefficients from raw model output"
 })
 
 test_that("public APIs no longer expose other_map plumbing", {
-    expect_false("other_map" %in% names(formals(analyze_gep_mfs_validation)))
-    expect_false("other_map" %in% names(formals(analyze_gep_mss_validation)))
-    expect_false("other_map" %in% names(formals(create_mfs_gep_visuals)))
-    expect_false("other_map" %in% names(formals(create_mss_gep_visuals)))
-    expect_false("other_map" %in% names(formals(create_mss_cumulative_incidence_curves)))
     expect_false("other_map" %in% names(formals(create_forest_plot)))
     expect_false("other_map" %in% names(formals(create_single_cohort_forest_plot)))
     expect_false("other_map" %in% names(formals(create_forest_plot_diagnostics)))

@@ -11,8 +11,13 @@ test_that("synthetic CI fixture is deterministic and has the portable schema", {
     expect_identical(levels(first$treatment_group), SYNTHETIC_CI_TREATMENT_LEVELS)
     expect_true(is.factor(first$synthetic_cohort))
     expect_identical(levels(first$synthetic_cohort), SYNTHETIC_CI_COHORT_LEVELS)
-    expect_true(is.factor(first$gep_class_simple))
-    expect_identical(levels(first$gep_class_simple), SYNTHETIC_CI_GEP_LEVELS)
+    expect_true(is.factor(first$gep_group))
+    expect_identical(levels(first$gep_group), GEP_GROUP_LEVELS)
+    expect_true(is.factor(first$biopsy1_gep))
+    expect_identical(levels(first$biopsy1_gep), GEP_DETAIL_LEVELS)
+    # Patients without a reported PRAME result sit outside the definitive set.
+    expect_identical(first$mfs_analysis_eligible, as.character(first$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS)
+    expect_true(all(is.na(first$prame_status[!first$mfs_analysis_eligible])))
 })
 
 test_that("synthetic CI fixture covers treatments, cohorts, missingness, and censoring", {
@@ -36,7 +41,10 @@ test_that("synthetic fixture does not depend on private files or identifying fie
     data <- create_synthetic_ci_dataset()
 
     expect_false(grepl("read\\.(xlsx|csv|rds)|RAW_DATA_DIR|Original Files", generator_text, ignore.case = TRUE))
-    expect_false(any(grepl("(^|_)(patient|study|record|case)?_?id$|date", names(data), ignore.case = TRUE)))
+    # The only key is a generated one, so listed records stay traceable without a patient identifier.
+    expect_false(any(grepl("(patient|study|record|case)_id$|date", names(data), ignore.case = TRUE)))
+    expect_true(all(grepl("^SYN[0-9]{3}$", data$id)))
+    expect_false(anyDuplicated(data$id) > 0L)
     expect_false(any(vapply(data, is.list, logical(1))))
 })
 

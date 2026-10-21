@@ -59,44 +59,64 @@ test_that("standalone tools use the canonical workspace runtime", {
         envir = export_env
     )
     expect_equal(
-        export_env$resolve_runtime_analysis_root("uveal_melanoma"),
+        export_env$resolve_runtime_analysis_root(),
         file.path(path.expand("~/Workspaces"), "uveal-melanoma", "runtime", "Analysis")
     )
 })
 
-test_that("Objective 4 no-GEP exporter exposes every review-facing artifact", {
+test_that("Objective 4 exporter ships the same files as the publish registry and fails on an empty folder", {
     export_env <- new.env(parent = baseenv())
     sys.source(
         here::here("scripts", "tools", "export_gep_objective4_to_downloads.R"),
         envir = export_env
     )
 
-    manifest <- export_env$build_exploratory_no_gep_export_manifest(
-        tempfile("objective4-root-"),
-        "full_cohort_"
+    root <- withr::local_tempdir()
+    files <- c(
+        "full_cohort_gep_validation_5yr.xlsx",
+        "full_cohort_gep_validation_mfs_curves.png",
+        "full_cohort_gep_validation_diagnostics.xlsx",
+        "d_no_gep/full_cohort_no_gep_5yr.xlsx",
+        "d_no_gep/full_cohort_no_gep_group_risk.png",
+        "d_no_gep/full_cohort_no_gep_diagnostics.xlsx"
     )
+    # Excel owner-lock and hidden files are never part of the package.
+    lock_files <- c("~$full_cohort_gep_validation_5yr.xlsx", ".hidden.png")
+    for (file in c(files, lock_files)) {
+        dir.create(dirname(file.path(root, file)), recursive = TRUE, showWarnings = FALSE)
+        writeLines("x", file.path(root, file))
+    }
 
-    expect_setequal(
-        names(manifest),
-        c(
-            "no_gep_workbook",
-            "no_gep_summary",
-            "no_gep_mfs_km",
-            "no_gep_mss_cif",
-            "no_gep_surrogate_density",
-            "no_gep_mfs_density",
-            "no_gep_mss_density",
-            "no_gep_surrogate_bins",
-            "no_gep_mfs_bins",
-            "no_gep_mss_bins",
-            "no_gep_subgroup_outcomes",
-            "no_gep_availability",
-            "no_gep_model_auc_summary",
-            "no_gep_mfs_risk_ladder",
-            "no_gep_mss_risk_ladder",
-            "no_gep_direct_mfs_contributions",
-            "no_gep_direct_mss_contributions"
-        )
+    shared <- export_env$list_objective4_shareable_files(root)
+    shared_relative <- sub(paste0(root, "/"), "", shared, fixed = TRUE)
+    registry_relative <- files[vapply(
+        files,
+        function(file) is_publishable_relative_artifact(file.path("04_GEP_Validation", file), "cohort"),
+        logical(1)
+    )]
+    expect_setequal(shared_relative, registry_relative)
+    # Diagnostics workbooks (Record_Issues, by patient id) travel with the results.
+    expect_equal(sum(grepl("_diagnostics\\.xlsx$", shared)), 2L)
+
+    destination <- file.path(withr::local_tempdir(), "pack")
+    manifest <- export_env$copy_objective4_artifacts(shared, destination, "full")
+    expect_true(all(file.exists(manifest$destination_path)))
+    expect_setequal(manifest$category, c("excel", "diagnostics", "png"))
+    dry <- export_env$copy_objective4_artifacts(shared, file.path(destination, "dry"), "full", dry_run = TRUE)
+    expect_true(all(dry$status == "would_copy"))
+    expect_false(dir.exists(file.path(destination, "dry")))
+
+    expect_error(export_env$get_objective4_artifact_category("notes.md"), "Unsupported Objective 4 artifact type")
+    duplicate_dir <- withr::local_tempdir()
+    dir.create(file.path(duplicate_dir, "a"))
+    dir.create(file.path(duplicate_dir, "b"))
+    writeLines("x", file.path(duplicate_dir, "a", "same.png"))
+    writeLines("x", file.path(duplicate_dir, "b", "same.png"))
+    expect_error(
+        export_env$copy_objective4_artifacts(
+            export_env$list_objective4_shareable_files(duplicate_dir), withr::local_tempdir(), "full"
+        ),
+        "duplicate file names"
     )
 })
 
@@ -298,15 +318,16 @@ test_that("resolve_config_path rejects relative runtime or export overrides", {
 test_that("artifact registry allowlists only explicit publishable outputs", {
     expect_true(is_publishable_relative_artifact("01_Efficacy/summary.xlsx", "cohort"))
     expect_true(is_publishable_relative_artifact("merged_tables/final_table.csv", "merged_tables"))
-    expect_true(is_publishable_relative_artifact("merged_tables/objective4_poster_figures/three_panel.png", "merged_tables"))
-    expect_true(is_publishable_relative_artifact("merged_tables/objective4_poster_figures/three_panel_report.md", "merged_tables"))
-    expect_true(is_publishable_relative_artifact("04_GEP_Validation/unified_summary/full_cohort_simple_gep_validation_report.md", "cohort"))
+    expect_true(is_publishable_relative_artifact("merged_tables/objective4_cross_cohort_figures/three_panel.png", "merged_tables"))
+    expect_true(is_publishable_relative_artifact("merged_tables/objective4_cross_cohort_figures/three_panel_report.md", "merged_tables"))
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_5yr.xlsx", "cohort"))
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_group_risk.png", "cohort"))
+    # The GEP diagnostics workbooks carry the Record_Issues sheets and are part of the package.
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/full_cohort_gep_validation_diagnostics.xlsx", "cohort"))
+    expect_true(is_publishable_relative_artifact("04_GEP_Validation/d_no_gep/full_cohort_no_gep_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("01_Efficacy/model.rds", "cohort"))
-    expect_false(is_publishable_relative_artifact("01_Efficacy/summary_diagnostics.xlsx", "cohort"))
+    expect_true(is_publishable_relative_artifact("01_Efficacy/summary_diagnostics.xlsx", "cohort"))
     expect_false(is_publishable_relative_artifact("cache/intermediate.csv", "cohort"))
-    expect_false(is_publishable_relative_artifact("04_GEP_Validation/unified_summary/full_cohort_simple_gep_validation_report.txt", "cohort"))
-    expect_false(is_publishable_relative_artifact("04_GEP_Validation/a_metastasis_free_survival/05_summary_tables/full_cohort_mfs_validation_narrative_summary.txt", "cohort"))
-    expect_true(is_publishable_relative_artifact("04_GEP_Validation/c_proportional_hazards_diagnostics/full_cohort_mfs_proportional_hazards_summary.txt", "cohort"))
     expect_true(is_publishable_relative_artifact(
         "01_Efficacy/h_propensity_score_sensitivity/restricted_cohort_propensity_overlap_summary.md",
         "cohort"
@@ -413,8 +434,11 @@ test_that("publish_outputs dry run reports publishable outputs and excludes runt
     result <- publish_outputs(snapshot_id = "2026-03-25-unit", dry_run = TRUE)
 
     expect_true(result$dry_run)
-    expect_equal(result$summary$would_copy, 8)
+    expect_equal(result$summary$would_copy, 9)
     expect_equal(result$summary$copied, 0)
+    would_copy_sources <- result$manifest$source_path[result$manifest$status == "would_copy"]
+    expect_true(any(grepl("summary_diagnostics\\.xlsx$", would_copy_sources)))
+    expect_false(any(grepl("model\\.rds$|cache\\.csv$", would_copy_sources)))
     expect_true(any(result$manifest$status == "skipped_not_publishable"))
     expect_true(any(result$manifest$status == "optional_root_absent"))
     expect_equal(result$summary$missing, 0)
@@ -529,26 +553,25 @@ test_that("publish CLI main prints the concise report without manifest rows", {
     expect_false(grepl("source_path", output, fixed = TRUE))
 })
 
-test_that("publish_outputs prefers Objective 4 markdown summaries over legacy text duplicates", {
-    tmp_root <- tempfile("runtime-publish-obj4-md-")
+test_that("publish_outputs copies the Objective 4 workbooks, diagnostics workbooks and figures", {
+    tmp_root <- tempfile("runtime-publish-obj4-")
     install_publish_contract_fixture(tmp_root)
     runtime_root <- file.path(tmp_root, "runtime")
     output_root <- file.path(runtime_root, "Analysis")
     export_root <- file.path(tmp_root, "export")
     export_analysis_root <- file.path(export_root, "Analysis")
-    obj4_summary_dir <- file.path(output_root, "uveal_full", "04_GEP_Validation", "unified_summary")
-    obj4_mfs_summary_dir <- file.path(output_root, "uveal_full", "04_GEP_Validation", "a_metastasis_free_survival", "05_summary_tables")
-    obj4_diag_dir <- file.path(output_root, "uveal_full", "04_GEP_Validation", "c_proportional_hazards_diagnostics")
+    obj4_dir <- file.path(output_root, "uveal_full", "04_GEP_Validation")
+    obj4_no_gep_dir <- file.path(obj4_dir, "d_no_gep")
+    obj1_dir <- file.path(output_root, "uveal_full", "01_Efficacy")
 
-    dir.create(obj4_summary_dir, recursive = TRUE, showWarnings = FALSE)
-    dir.create(obj4_mfs_summary_dir, recursive = TRUE, showWarnings = FALSE)
-    dir.create(obj4_diag_dir, recursive = TRUE, showWarnings = FALSE)
-
-    writeLines("md summary", file.path(obj4_summary_dir, "full_cohort_simple_gep_validation_report.md"))
-    writeLines("legacy txt summary", file.path(obj4_summary_dir, "full_cohort_simple_gep_validation_report.txt"))
-    writeLines("md narrative", file.path(obj4_mfs_summary_dir, "full_cohort_mfs_validation_narrative_summary.md"))
-    writeLines("legacy txt narrative", file.path(obj4_mfs_summary_dir, "full_cohort_mfs_validation_narrative_summary.txt"))
-    writeLines("diagnostic txt", file.path(obj4_diag_dir, "full_cohort_mfs_proportional_hazards_summary.txt"))
+    dir.create(obj4_no_gep_dir, recursive = TRUE, showWarnings = FALSE)
+    dir.create(obj1_dir, recursive = TRUE, showWarnings = FALSE)
+    writeLines("model diagnostics", file.path(obj1_dir, "full_cohort_overall_survival_diagnostics.xlsx"))
+    writeLines("primary", file.path(obj4_dir, "full_cohort_gep_validation_5yr.xlsx"))
+    writeLines("figure", file.path(obj4_dir, "full_cohort_gep_validation_mfs_curves.png"))
+    writeLines("record identifiers", file.path(obj4_dir, "full_cohort_gep_validation_diagnostics.xlsx"))
+    writeLines("primary", file.path(obj4_no_gep_dir, "full_cohort_no_gep_5yr.xlsx"))
+    writeLines("record identifiers", file.path(obj4_no_gep_dir, "full_cohort_no_gep_diagnostics.xlsx"))
 
     old_output <- OUTPUT_DIR
     old_merged <- MERGED_TABLES_DIR
@@ -568,16 +591,18 @@ test_that("publish_outputs prefers Objective 4 markdown summaries over legacy te
     assign("EXPORT_ROOT", export_root, envir = .GlobalEnv)
     assign("EXPORT_ANALYSIS_DIR", export_analysis_root, envir = .GlobalEnv)
 
-    result <- publish_outputs(snapshot_id = "2026-04-02-obj4-md", dry_run = TRUE)
+    result <- publish_outputs(snapshot_id = "2026-04-02-obj4", dry_run = TRUE)
 
     would_copy_sources <- result$manifest$source_path[result$manifest$status == "would_copy"]
     skipped_sources <- result$manifest$source_path[result$manifest$status == "skipped_not_publishable"]
 
-    expect_true(any(grepl("full_cohort_simple_gep_validation_report\\.md$", would_copy_sources)))
-    expect_true(any(grepl("full_cohort_mfs_validation_narrative_summary\\.md$", would_copy_sources)))
-    expect_true(any(grepl("full_cohort_mfs_proportional_hazards_summary\\.txt$", would_copy_sources)))
-    expect_true(any(grepl("full_cohort_simple_gep_validation_report\\.txt$", skipped_sources)))
-    expect_true(any(grepl("full_cohort_mfs_validation_narrative_summary\\.txt$", skipped_sources)))
+    expect_true(any(grepl("full_cohort_gep_validation_5yr\\.xlsx$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_gep_validation_mfs_curves\\.png$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_no_gep_5yr\\.xlsx$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_gep_validation_diagnostics\\.xlsx$", would_copy_sources)))
+    expect_true(any(grepl("full_cohort_no_gep_diagnostics\\.xlsx$", would_copy_sources)))
+    # The model diagnostics workbooks of the other objectives travel with their results too.
+    expect_true(any(grepl("full_cohort_overall_survival_diagnostics\\.xlsx$", would_copy_sources)))
 })
 
 test_that("publish_outputs creates a new snapshot and rejects existing snapshot overwrite", {

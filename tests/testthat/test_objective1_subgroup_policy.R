@@ -235,20 +235,15 @@ test_that("forest plots label T4 not estimable only when the outcome-specific mo
 })
 
 test_that("all GEP Class levels remain visible with outcome-specific estimability", {
-    required_gep_levels <- c(
-        "Class 1",
-        "Class 2",
-        "GEP Failed/Indeterminate",
-        "GEP Not Tested"
-    )
-    expect_identical(FOREST_PLOT_REQUIRED_LEVELS$gep_class_simple, required_gep_levels)
+    required_gep_levels <- GEP_GROUP_LEVELS
+    expect_identical(FOREST_PLOT_REQUIRED_LEVELS$gep_group, required_gep_levels)
 
     subgroup_results <- list(
-        gep_class_simple = list(
+        gep_group = list(
             interaction_p = NA_real_,
             subgroup_effects = data.frame(
-                subgroup_variable = rep("gep_class_simple", 3),
-                subgroup_level = required_gep_levels[c(1, 2, 4)],
+                subgroup_variable = rep("gep_group", 3),
+                subgroup_level = required_gep_levels[c(1, 2, 6)],
                 n_total = c(55, 26, 160),
                 n_plaque = c(28, 13, 70),
                 n_gksrs = c(27, 13, 90),
@@ -262,23 +257,26 @@ test_that("all GEP Class levels remain visible with outcome-specific estimabilit
             ),
             interaction_diagnostics = list(
                 original_level_order = required_gep_levels,
-                level_statistics = list(
-                    "Class 1" = list(
-                        n_total = 55,
-                        n_plaque = 28,
-                        n_gksrs = 27,
-                        events_plaque = 2,
-                        events_gksrs = 0,
-                        exclusion_reason = "Event count: Requires ≥1 event per arm"
+                level_statistics = stats::setNames(
+                    list(
+                        list(
+                            n_total = 55,
+                            n_plaque = 28,
+                            n_gksrs = 27,
+                            events_plaque = 2,
+                            events_gksrs = 0,
+                            exclusion_reason = "Event count: Requires ≥1 event per arm"
+                        ),
+                        list(
+                            n_total = 8,
+                            n_plaque = 4,
+                            n_gksrs = 4,
+                            events_plaque = 2,
+                            events_gksrs = 1,
+                            exclusion_reason = ""
+                        )
                     ),
-                    "GEP Failed/Indeterminate" = list(
-                        n_total = 13,
-                        n_plaque = 6,
-                        n_gksrs = 7,
-                        events_plaque = 2,
-                        events_gksrs = 1,
-                        exclusion_reason = ""
-                    )
+                    c("Class 1", GEP_GROUP_TEST_FAILED)
                 )
             )
         )
@@ -286,18 +284,13 @@ test_that("all GEP Class levels remain visible with outcome-specific estimabilit
 
     plot_data <- create_forest_plot_data(
         subgroup_results = subgroup_results,
-        variable_order = "gep_class_simple",
+        variable_order = "gep_group",
         treatment_labels = TREATMENT_LABELS,
         effect_measure = "HR"
     )
     displayed_levels <- trimws(plot_data$data_frame$Subgroup[-1])
 
-    expect_identical(displayed_levels, c(
-        "Class 1",
-        "Class 2",
-        "Failed or Indeterminate",
-        "Not Tested"
-    ))
+    expect_identical(displayed_levels, GEP_GROUP_LEVELS)
     class1_row <- displayed_levels == "Class 1"
     expect_identical(plot_data$data_frame$`HR (95% CI)`[-1][class1_row], "Not estimable")
     expect_match(
