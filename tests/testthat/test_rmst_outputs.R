@@ -55,6 +55,7 @@ test_that("RMST, KM, and Cox models share filtered cohort", {
     )
 
     sample_data <- tibble::tibble(
+        id = sprintf("P%02d", 1:7),
         time_months = c(24, 22, 20, 18, 16, 14, 12),
         status = c(1, 1, 0, 1, 0, 0, 1),
         treatment_group = factor(

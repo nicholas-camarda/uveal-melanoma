@@ -282,7 +282,15 @@ write_readable_xlsx <- function(x,
         stop("write_readable_xlsx() did not receive any non-null sheets to write", call. = FALSE)
     }
 
+    # openxlsx reports an unwritable path as a warning, so remove any earlier file and check
+    # that the new one exists; an old file must not pass for the one just written.
+    if (file.exists(path)) {
+        file.remove(path)
+    }
     openxlsx::saveWorkbook(wb, path, overwrite = TRUE)
+    if (!file.exists(path)) {
+        stop(sprintf("The workbook was not written: %s", path), call. = FALSE)
+    }
     invisible(path)
 }
 
@@ -461,6 +469,15 @@ create_output_structure <- function(cohort_dir, include_propensity_sensitivity =
     }
 
     dirs
+}
+
+#' Keep the reason text only for checks that raise a concern or were not assessed
+#'
+#' @param checks Data frame with `status` and `reason`.
+#' @return `checks` with `reason` set to "No issue found" where the status is `no concern`.
+describe_check_reasons <- function(checks) {
+    checks$reason <- ifelse(checks$status == "no concern", "No issue found", checks$reason)
+    checks
 }
 
 #' Ensure a directory exists, creating it if needed

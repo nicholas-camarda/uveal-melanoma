@@ -229,6 +229,7 @@ analyze_tumor_height_changes <- function(data, output_dirs, prefix, confounders)
                 distinct_treatment_groups = length(unique(stats::na.omit(data_model_ready$treatment_group)))
             )),
             sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+            prefit_records = exclusion_result$filter_stats$removed_records,
             level_support = build_level_support_tab(data_model_ready, unique(c("treatment_group", confounders))),
             raw_model_output = "Model skipped: insufficient data after sparse-level exclusions."
         )
@@ -297,6 +298,7 @@ analyze_tumor_height_changes <- function(data, output_dirs, prefix, confounders)
                 distinct_treatment_groups = length(unique(stats::na.omit(data_model_ready$treatment_group)))
             )),
             sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+            prefit_records = exclusion_result$filter_stats$removed_records,
             level_support = build_level_support_tab(data_model_ready, unique(c("treatment_group", confounders, "initial_tumor_height"))),
             raw_model_output = "Model skipped: insufficient data after sparse-level exclusions."
         )

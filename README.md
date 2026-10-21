@@ -234,7 +234,7 @@ publish_outputs(dry_run = TRUE)
 publish_outputs(dry_run = FALSE)
 ```
 
-The publish step copies only registry-approved deliverables. It excludes `.rds`, caches, logs, test output, and ad hoc intermediate files by design. Diagnostics workbooks (`*_diagnostics.xlsx`) are included because they list, by patient id (for example the Objective 4 `Record_Issues` sheets and the model `Model_excluded_rows` sheets), the patients left out of or flagged in each analysis; share snapshots only with people who have access to the study data.
+The publish step copies only registry-approved deliverables. It excludes `.rds`, caches, logs, test output, and ad hoc intermediate files by design. Diagnostics workbooks (`*_diagnostics.xlsx`) are included because they list, by patient id (for example the `Record_Issues` sheets of the Objective 4 and model diagnostics workbooks), the patients left out of or flagged in each analysis; share snapshots only with people who have access to the study data.
 
 The direct command interface is dry-run by default:
 

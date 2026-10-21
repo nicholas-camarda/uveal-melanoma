@@ -36,29 +36,25 @@ extract_effect_summary_diagnostics_metadata <- function(effect_summary_path) {
         return(tibble::tibble())
     }
 
-    model_summary <- tryCatch(
-        readxl::read_xlsx(diagnostics_path, sheet = "Model_summary"),
-        error = function(e) NULL
+    # The workbook exists, so a sheet that is missing or reshaped is an error, not "no metadata".
+    specification <- readxl::read_xlsx(diagnostics_path, sheet = "Specification_Coding")
+    if (any(specification$section == "Analysis" & specification$item == "Status")) {
+        # A skipped-model workbook records a status and has no fitted-model counts to audit.
+        return(tibble::tibble())
+    }
+    flow <- readxl::read_xlsx(diagnostics_path, sheet = "Denominators_Flow")
+    analysis_name <- specification$value[specification$section == "Analysis" & specification$item == "Analysis"]
+    fitted_n <- flow$n[flow$stage == "Fitted model-frame rows"]
+    events_n <- flow$n[flow$stage == "Events in the fitted model"]
+    if (length(analysis_name) != 1L || length(fitted_n) != 1L || length(events_n) != 1L) {
+        stop(sprintf("Diagnostics workbook %s does not hold one analysis, fitted-row and event count.", basename(diagnostics_path)), call. = FALSE)
+    }
+
+    tibble::tibble(
+        analysis_label = gsub("_cox$", "", analysis_name),
+        diagnostics_n_total = as.numeric(fitted_n),
+        diagnostics_n_events = as.numeric(events_n)
     )
-    if (is.null(model_summary) || !nrow(model_summary)) {
-        return(tibble::tibble())
-    }
-
-    required_cols <- c("analysis_type", "n_total", "n_events")
-    if (!all(required_cols %in% names(model_summary))) {
-        return(tibble::tibble())
-    }
-
-    model_summary %>%
-        dplyr::transmute(
-            analysis_label = gsub(
-                "_cox$",
-                "",
-                gsub("^unified_", "", .data$analysis_type)
-            ),
-            diagnostics_n_total = as.numeric(.data$n_total),
-            diagnostics_n_events = as.numeric(.data$n_events)
-        )
 }
 
 #' Audit one effect-summary workbook for silent metadata and adjustment issues

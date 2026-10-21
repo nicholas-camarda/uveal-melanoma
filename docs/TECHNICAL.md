@@ -482,6 +482,19 @@ Objective 2a latest-VA reviewer-predictor sensitivity uses `last_vision` as the 
 
 **Objective 2 output convention:** adjusted analyses now always live inside their own side-effect subfolder. When an adjusted model is skipped because of insufficient events, no usable variation, or fit failure, the pipeline writes a `_SKIPPED.html` explanation file plus the diagnostics workbook instead of leaving the folder without an adjusted-analysis artifact.
 
+**Model diagnostics workbooks (Objectives 1-3):** every fitted-model and skipped-model `*_diagnostics.xlsx` is written by `write_diagnostics_workbook()` (`scripts/tables/table_io.R`) from one sheet family, so each fact appears in exactly one sheet:
+
+| Sheet | Fitted model | Skipped model |
+|---|---|---|
+| `Specification_Coding` | Method, outcome, formula, effect measure and how to read it, fit statistics, each variable with its role, type and reference level | Analysis, status, model context |
+| `Denominators_Flow` | Initial cohort, model input, fitted rows, events or non-events or outcome levels | Same stages, or the count metrics of the skip when no stage table exists |
+| `Checks` | `check`, `scope`, `result`, `status` (no concern / concern / not assessed), `reason` | The skip reason and its thresholds |
+| `Term_support` | Patients, events and event rate per variable level (continuous variables are one row), reference-level flag, inclusion status and reason when the principal table suppressed an estimate | Counts by level that show separation risk |
+| `Warnings_Limitations` | not written | Why the model was not fit |
+| `Record_Issues` | One row per patient and issue: `record_key`, `key_source`, `step`, `reason`, `field`, `current_value` | Same |
+
+The workbooks hold no estimate, interval or p-value; those are in the principal table. `Record_Issues` steps are the sparse or excluded factor level, other pre-fit filters (missing outcome or covariate) and the model fit's own complete-case drop. The distinct patients listed per stage must equal `prefit_excluded_n` and `complete_case_excluded_n`, and a removal from data without a patient id stops the run, so every excluded patient is traceable. A failed build or write fails the run; a model that cannot be fitted for data reasons is written as a skipped-model workbook instead.
+
 **Objective 2 source and derived-field roles:** The merged adverse-event display reads normalized source Y/N fields (`retinopathy`, `nvg`, and `srd`) from Objective 0-prepared cohort data. The Objective 2 statistical analyses read the corresponding Objective 0-derived 0/1 burden fields (`retinopathy_burden_event`, `nvg_burden_event`, and `srd_burden_event`). Objective 0 normalizes the source fields, derives the burden fields directly from them, and validates that each source/derived pair matches for included analytic rows. The merged display is not a separate estimator and does not redefine the Objective 2 endpoints.
 
 **Objective 2d scope:** SRD outputs keep all recorded SRD causes, including mass-induced SRD when present.

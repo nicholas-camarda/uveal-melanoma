@@ -26,6 +26,12 @@ LOG_SCALE_NEAR_PERFECT_SEPARATION_THRESHOLD <- 0.1 # Threshold for near-perfect 
 MINIMUM_ADJUSTED_LOGISTIC_EVENTS <- 10L # Minimum outcome events for adjusted binary logistic regression
 MINIMUM_SURVIVAL_EVENTS <- 5L # Minimum outcome events for survival analysis
 MINIMUM_PH_TEST_EVENTS <- 10L # Minimum events for proportional-hazards diagnostics/reporting
+MODEL_MIN_EVENTS_PER_PARAMETER <- 10L # Fewer events (or non-events) per estimated coefficient is flagged in model diagnostics
+
+# Steps under which Record_Issues lists the patients left out of a model.
+MODEL_RECORD_STEP_SPARSE_LEVEL <- "Pre-fit: sparse or excluded factor level"
+MODEL_RECORD_STEP_PREFIT_FILTER <- "Pre-fit: other filter"
+MODEL_RECORD_STEP_COMPLETE_CASE <- "Model fit: incomplete model data"
 
 # Tumor size thresholds for cohort eligibility
 TUMOR_HEIGHT_THRESHOLD <- 10 # mm

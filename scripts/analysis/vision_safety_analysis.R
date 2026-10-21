@@ -686,6 +686,11 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     line_change_filter_stats <- exclusion_result$filter_stats
     if (!is.null(line_change_filter_stats)) {
         line_change_removed_n <- nrow(vision_model_data) - nrow(line_change_model_data)
+        line_change_filter_stats <- append_prefit_filter_records(
+            line_change_filter_stats, vision_model_data, line_change_model_data,
+            columns = "vision_line_change", id_col = pick_sparse_level_id_col(vision_model_data),
+            reason = "Missing Snellen line-change outcome"
+        )
         line_change_filter_stats$model_n <- nrow(line_change_model_data)
         line_change_filter_stats$removed_n <- line_change_filter_stats$removed_n + line_change_removed_n
         line_change_filter_stats$removed_pct <- if (line_change_filter_stats$initial_n > 0) {
@@ -714,6 +719,11 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     ordinal_filter_stats <- exclusion_result$filter_stats
     if (!is.null(ordinal_filter_stats)) {
         ordinal_removed_n <- nrow(vision_model_data) - nrow(ordinal_model_data)
+        ordinal_filter_stats <- append_prefit_filter_records(
+            ordinal_filter_stats, vision_model_data, ordinal_model_data,
+            columns = "vision_line_change_bucket", id_col = pick_sparse_level_id_col(vision_model_data),
+            reason = "Missing Snellen line-change distribution outcome"
+        )
         ordinal_filter_stats$model_n <- nrow(ordinal_model_data)
         ordinal_filter_stats$removed_n <- ordinal_filter_stats$removed_n + ordinal_removed_n
         ordinal_filter_stats$removed_pct <- if (ordinal_filter_stats$initial_n > 0) {
@@ -1068,6 +1078,11 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     latest_va_sensitivity_covariates <- latest_va_rank_screen$supported_terms
     latest_va_sensitivity_vars <- unique(c("treatment_group", latest_va_sensitivity_covariates))
     latest_va_filter_stats <- latest_va_exclusion_result$filter_stats
+    latest_va_filter_stats <- append_prefit_filter_records(
+        latest_va_filter_stats, data_with_vision_change, latest_va_complete_data,
+        columns = latest_va_required_vars, id_col = pick_sparse_level_id_col(data_with_vision_change),
+        reason = "Missing latest visual acuity or a covariate required by the sensitivity model"
+    )
     latest_va_filter_stats$initial_n <- latest_va_initial_n
     latest_va_filter_stats$model_n <- nrow(latest_va_model_data)
     latest_va_filter_stats$removed_n <- latest_va_initial_n - nrow(latest_va_model_data)
@@ -1548,6 +1563,8 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
 #' @param minimum_events Integer minimum number of events required to attempt fitting
 #'   (defaults to `MINIMUM_ADJUSTED_LOGISTIC_EVENTS`).
 #' @param sparse_level_diagnostics Optional data frame of rows removed before modeling.
+#' @param prefit_records Optional data frame listing the patients removed before modeling
+#'   (`filter_stats$removed_records`).
 #' @param analysis_name Character scalar analysis identifier.
 #' @param dataset_name Character scalar dataset identifier.
 #'
@@ -1557,6 +1574,7 @@ build_binary_skip_diagnostics <- function(data,
                                           variables,
                                           minimum_events = MINIMUM_ADJUSTED_LOGISTIC_EVENTS,
                                           sparse_level_diagnostics = NULL,
+                                          prefit_records = NULL,
                                           analysis_name = "analysis",
                                           dataset_name = "unspecified_dataset") {
     modeled_n <- nrow(data)
@@ -1630,6 +1648,7 @@ build_binary_skip_diagnostics <- function(data,
             }
         )),
         sparse_level_diagnostics = sparse_level_diagnostics,
+        prefit_records = prefit_records,
         event_support = event_support,
         raw_model_output = sprintf(
             "Model skipped: only %d events available after sparse-level exclusions.",
@@ -1857,6 +1876,7 @@ analyze_radiation_complications <- function(data, sequela_type, confounders = NU
             variables = unique(c("treatment_group", confounders_for_model)),
             minimum_events = MINIMUM_ADJUSTED_LOGISTIC_EVENTS,
             sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+            prefit_records = exclusion_result$filter_stats$removed_records,
             analysis_name = logistic_analysis_name,
             dataset_name = dataset_name
         )
