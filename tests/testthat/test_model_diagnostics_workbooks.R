@@ -254,3 +254,25 @@ test_that("a patient with baseline metastasis is removed from the model with a s
     expect_match(issues$reason[issues$record_key == baseline_id], "incident endpoint undefined|Metastasis dated")
     expect_true(!is.null(result$cox_model))
 })
+
+test_that("the metastasis event-support sheet states how many baseline-metastasis patients it excludes", {
+    data <- synthetic_model_cohort(n = 120L)
+    data$tt_death_months <- data$time + 5
+    data$death_event <- 0L
+    data$mets_at_or_before_treatment <- FALSE
+    data$mets_at_or_before_treatment[4] <- TRUE
+    data$time[4] <- data$event[4] <- NA
+
+    output_dirs <- build_peer_review_objective1_output_dirs(withr::local_tempdir())
+    result <- suppressWarnings(analyze_binary_outcome_rates(
+        data, outcome_var = "mets_progression", time_var = "time", event_var = "event",
+        confounders = "location", analysis_type = "post_treatment_only", dataset_name = "unit_test",
+        output_dirs = output_dirs, prefix = "unit_"
+    ))
+    expect_equal(sum(result$rates$n), nrow(data) - 1L)
+
+    workbook <- list.files(output_dirs$obj1_mets, "event_support_summary\\.xlsx$", recursive = TRUE, full.names = TRUE)
+    expect_length(workbook, 1L)
+    notes <- openxlsx::read.xlsx(workbook, "estimand_notes")
+    expect_match(notes$interpretation[notes$estimand == "baseline_metastasis_excluded"], "1 patient\\(s\\) with metastasis dated on or before treatment")
+})
