@@ -5,9 +5,9 @@ test_that("Objective 1 writes a separate age-decade subgroup sensitivity workboo
             age_decade_data$age_at_diagnosis,
             breaks = c(-Inf, 40, 50, 60, 70, 80, Inf),
             right = FALSE,
-            labels = c("< 40 years", "40-49 years", "50-59 years", "60-69 years", "70-79 years", "≥ 80 years")
+            labels = c("< 40 years", "40-49 years", "50-59 years", "60-69 years", "70-79 years", "\u2265 80 years")
         ),
-        levels = c("< 40 years", "40-49 years", "50-59 years", "60-69 years", "70-79 years", "≥ 80 years")
+        levels = c("< 40 years", "40-49 years", "50-59 years", "60-69 years", "70-79 years", "\u2265 80 years")
     )
     pipeline <- run_objective1_test(age_decade_data, output_tag = "objective1_age_decade_sensitivity")
     withr::defer(unlink(pipeline$test_output_dir, recursive = TRUE), envir = parent.frame())

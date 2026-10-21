@@ -110,7 +110,7 @@ plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dir
             Significance_Label = dplyr::case_when(
                 is.na(RMST_P_Value) ~ "p-value unavailable",
                 RMST_P_Value < 0.05 ~ "p < 0.05",
-                TRUE ~ "p ≥ 0.05"
+                TRUE ~ "p \u2265 0.05"
             ),
             Advantage_Label = dplyr::case_when(
                 is.na(RMST_Diff_Value) ~ "Advantage unavailable",
@@ -134,7 +134,7 @@ plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dir
         plot_data$Significance_Label,
         levels = c(
             "p < 0.05",
-            "p ≥ 0.05",
+            "p \u2265 0.05",
             "p-value unavailable"
         )
     )
@@ -203,7 +203,7 @@ plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dir
     )
     significance_colors <- c(
         "p < 0.05" = "#08306B",
-        "p ≥ 0.05" = "#c7dcee",
+        "p \u2265 0.05" = "#c7dcee",
         "p-value unavailable" = "#ededed"
     )
 

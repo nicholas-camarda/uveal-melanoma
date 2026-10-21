@@ -127,7 +127,7 @@ analyze_gep_mfs_validation <- function(data,
     names(events_per_timepoint) <- paste0(timepoints, "yr")
     logger::log_info(formatted("Events per timepoint:", indent = 1))
     for (i in seq_along(events_per_timepoint)) {
-        ep_status <- ifelse(events_per_timepoint[i] >= 100, "✓", "⚠ <100")
+        ep_status <- ifelse(events_per_timepoint[i] >= 100, "\u2713", "\u26A0 <100")
         logger::log_info(formatted(sprintf("%s: %d events %s", names(events_per_timepoint)[i], events_per_timepoint[i], ep_status), indent = 2))
     }
     missing_data_analysis <- assess_gep_missing_data(data)
@@ -495,7 +495,7 @@ analyze_gep_mss_validation <- function(data,
     names(events_per_timepoint) <- paste0(timepoints, "yr")
     logger::log_info(formatted("Events per timepoint:", indent = 1))
     for (i in seq_along(events_per_timepoint)) {
-        ep_status <- ifelse(events_per_timepoint[i] >= 100, "✓", "⚠ <100")
+        ep_status <- ifelse(events_per_timepoint[i] >= 100, "\u2713", "\u26A0 <100")
         logger::log_info(formatted(sprintf("%s: %d events %s", names(events_per_timepoint)[i], events_per_timepoint[i], ep_status), indent = 2))
     }
     missing_data_analysis <- assess_gep_missing_data(data)

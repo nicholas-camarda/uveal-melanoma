@@ -1983,7 +1983,7 @@ create_mss_cumulative_incidence_curves <- function(data, timepoint, output_dir, 
                 caption_lines <- c(
                     caption_lines,
                     sprintf(
-                        " • %s: SHR = %.2f (%.2f-%.2f), p %s%s",
+                        " \u2022 %s: SHR = %.2f (%.2f-%.2f), p %s%s",
                         result$GEP_Class, result$SHR, result$CI_Lower, result$CI_Upper, p_formatted, sig_indicator
                     )
                 )
@@ -2009,7 +2009,7 @@ create_mss_cumulative_incidence_curves <- function(data, timepoint, output_dir, 
                 caption_lines <- c(
                     caption_lines,
                     sprintf(
-                        " • %s: HR = %.2f (%.2f-%.2f), p %s%s",
+                        " \u2022 %s: HR = %.2f (%.2f-%.2f), p %s%s",
                         result$GEP_Class, result$HR, result$CI_Lower, result$CI_Upper, p_formatted, sig_indicator
                     )
                 )

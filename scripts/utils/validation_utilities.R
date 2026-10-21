@@ -27,7 +27,7 @@ validate_cohort_integrity <- function(cohort_list) {
         logger::log_error(sprintf("VALIDATION FAILED: Missing expected cohort names: %s", paste(missing_names, collapse = ", ")))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ All expected cohort names present")
+        logger::log_info("\u2713 All expected cohort names present")
     }
 
     # Only proceed with detailed validation if all expected cohorts exist
@@ -47,7 +47,7 @@ validate_cohort_integrity <- function(cohort_list) {
         logger::log_error("VALIDATION FAILED: Full cohort should be largest")
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ Full cohort is largest as expected")
+        logger::log_info("\u2713 Full cohort is largest as expected")
     }
 
     # Restricted + GKSRS-only should approximately equal full (allowing for exclusions)
@@ -58,11 +58,11 @@ validate_cohort_integrity <- function(cohort_list) {
             n_full, total_subsets, abs(n_full - total_subsets)
         ))
     } else {
-        logger::log_info("✓ Cohort size relationships are reasonable")
+        logger::log_info("\u2713 Cohort size relationships are reasonable")
     }
 
     # Check 3: GEP variables will be validated in the comprehensive validation pipeline
-    logger::log_info("✓ GEP variables will be validated in comprehensive validation pipeline")
+    logger::log_info("\u2713 GEP variables will be validated in comprehensive validation pipeline")
 
     # Check 4: Verify cohort definitions match consort_group assignments
     restricted_data <- cohort_list$uveal_melanoma_restricted_cohort
@@ -77,7 +77,7 @@ validate_cohort_integrity <- function(cohort_list) {
         ))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ Restricted cohort contains only eligible_both patients")
+        logger::log_info("\u2713 Restricted cohort contains only eligible_both patients")
     }
 
     # All GKSRS-only cohort patients should have consort_group == "gksrs_only"
@@ -89,7 +89,7 @@ validate_cohort_integrity <- function(cohort_list) {
         ))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ GKSRS-only cohort contains only gksrs_only patients")
+        logger::log_info("\u2713 GKSRS-only cohort contains only gksrs_only patients")
     }
 
     # Check 4: Verify eligibility criteria are correctly applied
@@ -106,7 +106,7 @@ validate_cohort_integrity <- function(cohort_list) {
         print(restricted_violations %>% select(id, initial_tumor_diameter, initial_tumor_height, optic_nerve))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ Restricted cohort eligibility criteria correctly applied")
+        logger::log_info("\u2713 Restricted cohort eligibility criteria correctly applied")
     }
 
     # GKSRS-only cohort: diameter > 20 OR height > 10 OR optic nerve involvement
@@ -124,7 +124,7 @@ validate_cohort_integrity <- function(cohort_list) {
         ))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ GKSRS-only cohort ineligibility criteria correctly applied")
+        logger::log_info("\u2713 GKSRS-only cohort ineligibility criteria correctly applied")
     }
 
     # Check 5: Verify no patient overlap between restricted and GKSRS-only
@@ -136,7 +136,7 @@ validate_cohort_integrity <- function(cohort_list) {
         ))
         validation_passed <- FALSE
     } else {
-        logger::log_info("✓ No patient overlap between cohorts")
+        logger::log_info("\u2713 No patient overlap between cohorts")
     }
 
     # Check 6: Verify treatment assignments make sense
@@ -228,7 +228,7 @@ validate_factor_level_consistency <- function(cohort_list, phase = "data_process
             expected_levels <- expected_config$levels
 
             if (identical(actual_levels, expected_levels)) {
-                logger::log_info(sprintf("✓ Factor levels correct for '%s' in %s", factor_name, cohort_display_name))
+                logger::log_info(sprintf("\u2713 Factor levels correct for '%s' in %s", factor_name, cohort_display_name))
             } else if (length(actual_levels) == 1 && all(actual_levels %in% expected_levels)) {
                 # Relaxed rule: if only a single level is present, warn but do not fail
                 logger::log_warn(sprintf(
@@ -337,13 +337,13 @@ validate_factor_level_consistency <- function(cohort_list, phase = "data_process
     # Validation summary
     if (validation_passed) {
         logger::log_info("=== FACTOR LEVEL VALIDATION PASSED: All factor levels consistent ===")
-        logger::log_info(sprintf("✓ Treatment reference group: %s", TREATMENT_REFERENCE_LEVEL))
-        logger::log_info(sprintf("✓ Treatment comparison group: %s", TREATMENT_COMPARISON_LEVEL))
-        logger::log_info("✓ All critical factor levels match expected configuration")
+        logger::log_info(sprintf("\u2713 Treatment reference group: %s", TREATMENT_REFERENCE_LEVEL))
+        logger::log_info(sprintf("\u2713 Treatment comparison group: %s", TREATMENT_COMPARISON_LEVEL))
+        logger::log_info("\u2713 All critical factor levels match expected configuration")
     } else {
         logger::log_info("=== FACTOR LEVEL VALIDATION FAILED: See errors above ===")
-        logger::log_error("⚠️  CRITICAL: Factor level inconsistencies detected.")
-        logger::log_error("⚠️  This will cause incorrect model results and interpretation.")
+        logger::log_error("\u26A0\uFE0F  CRITICAL: Factor level inconsistencies detected.")
+        logger::log_error("\u26A0\uFE0F  This will cause incorrect model results and interpretation.")
     }
 
     return(validation_passed)
@@ -601,7 +601,7 @@ validate_single_cohort_comprehensive <- function(data, cohort_name) {
             
             # Log validation results
             if (validation_passed) {
-                logger::log_info(formatted(sprintf("✓ GEP validation status configured: %d Eligible, %d No GEP Data",
+                logger::log_info(formatted(sprintf("\u2713 GEP validation status configured: %d Eligible, %d No GEP Data",
                                                  eligible_count, no_gep_count), indent = 3))
             }
         } else {
@@ -671,9 +671,9 @@ validate_single_cohort_comprehensive <- function(data, cohort_name) {
 
     # Final validation result
     if (validation_passed) {
-        logger::log_info(formatted(sprintf("✓ All validations passed for %s", cohort_name), indent = 1))
+        logger::log_info(formatted(sprintf("\u2713 All validations passed for %s", cohort_name), indent = 1))
     } else {
-        logger::log_error(formatted(sprintf("✗ Validation failed for %s", cohort_name), indent = 1))
+        logger::log_error(formatted(sprintf("\u2717 Validation failed for %s", cohort_name), indent = 1))
     }
 
     return(validation_passed)
@@ -718,7 +718,7 @@ validate_processed_files_exist <- function(cohort_list) {
     }
 
     if (validation_passed) {
-        logger::log_info(formatted("✓ All processed files exist", indent = 2))
+        logger::log_info(formatted("\u2713 All processed files exist", indent = 2))
     }
 
     return(validation_passed)

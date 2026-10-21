@@ -1118,7 +1118,7 @@ save_table_outputs <- function(table_result, raw_output, model_fit, analysis_nam
                     if (!is.null(diagnostics) && !is.null(diagnostics$filtering_summary)) {
                         main_predictor_filtered <- diagnostics$filtering_summary$main_predictor_filtered
                         if (main_predictor_filtered) {
-                            warning_text <- "⚠️ WARNING: Main predictor variable was filtered out due to perfect separation or extreme estimates"
+                            warning_text <- "\u26A0\uFE0F WARNING: Main predictor variable was filtered out due to perfect separation or extreme estimates"
                             html_content <- readLines(html_path)
                             footnote_pattern <- '<tfoot class="gt_sourcenotes">'
                             footnote_index <- grep(footnote_pattern, html_content)

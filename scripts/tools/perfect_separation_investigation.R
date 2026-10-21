@@ -65,14 +65,14 @@ analyze_event_counts <- function(data, cohort_name) {
                     zero_event_groups <- names(events_per_group[events_per_group == 0])
 
                     if (length(zero_event_groups) > 0) {
-                        cat("⚠️  PERFECT SEPARATION DETECTED!\n")
+                        cat("\u26A0\uFE0F  PERFECT SEPARATION DETECTED!\n")
                         cat("Groups with zero events:", paste(zero_event_groups, collapse = ", "), "\n")
                         cat("This will cause statistical problems in regression analysis.\n")
                     } else {
-                        cat("✅ No perfect separation detected\n")
+                        cat("\u2705 No perfect separation detected\n")
                     }
                 } else {
-                    cat("⚠️  Cannot determine event column for perfect separation check\n")
+                    cat("\u26A0\uFE0F  Cannot determine event column for perfect separation check\n")
                 }
             }
         }

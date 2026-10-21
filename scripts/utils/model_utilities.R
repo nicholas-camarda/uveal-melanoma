@@ -22,7 +22,7 @@ enforce_unordered_factors <- function(data, verbose = FALSE) {
 
     if (!is.data.frame(data) || ncol(data) == 0) {
         if (verbose) {
-            logger::log_info("✓ No columns available - skipping factor normalization")
+            logger::log_info("\u2713 No columns available - skipping factor normalization")
         }
         return(data)
     }
@@ -52,9 +52,9 @@ enforce_unordered_factors <- function(data, verbose = FALSE) {
     }
 
     if (verbose && converted_count > 0) {
-        logger::log_info(sprintf("✓ Converted %d ordered factors to unordered for modeling", converted_count))
+        logger::log_info(sprintf("\u2713 Converted %d ordered factors to unordered for modeling", converted_count))
     } else if (verbose) {
-        logger::log_info("✓ No ordered factors found - all factors already unordered")
+        logger::log_info("\u2713 No ordered factors found - all factors already unordered")
     }
 
     return(data)
