@@ -297,25 +297,14 @@ create_deterministic_fold_ids <- function(strata, folds, seed, stable_id) {
         stop("Every stratum must contain at least folds rows.", call. = FALSE)
     }
 
-    random_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (random_seed_exists) {
-        previous_random_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    }
-    on.exit({
-        if (random_seed_exists) {
-            assign(".Random.seed", previous_random_seed, envir = .GlobalEnv)
-        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-            rm(".Random.seed", envir = .GlobalEnv)
-        }
-    }, add = TRUE)
-    set.seed(as.integer(seed))
-
     fold_id <- integer(length(strata))
-    for (stratum in sort(unique(strata))) {
-        stratum_rows <- which(strata == stratum)
-        keyed_rows <- stratum_rows[order(stable_id[stratum_rows], method = "radix")]
-        fold_id[keyed_rows] <- sample(rep(seq_len(as.integer(folds)), length.out = length(keyed_rows)))
-    }
+    with_local_seed(as.integer(seed), {
+        for (stratum in sort(unique(strata))) {
+            stratum_rows <- which(strata == stratum)
+            keyed_rows <- stratum_rows[order(stable_id[stratum_rows], method = "radix")]
+            fold_id[keyed_rows] <- sample(rep(seq_len(as.integer(folds)), length.out = length(keyed_rows)))
+        }
+    })
 
     fold_id
 }

@@ -187,8 +187,10 @@ source(here("scripts", "workflow", "objective_2_safety_toxicity.R"))
 source(here("scripts", "workflow", "objective_3_repeat_radiation.R"))
 source(here("scripts", "workflow", "objective_4_gep_analysis.R"))
 
-# Set seed for reproducibility
-set.seed(123)
+# No global seed is set: every random draw (simulated tests, figure jitter, GEP
+# bootstrap resampling, cross-validation folds) runs under its own local seed,
+# so outputs do not depend on the session's random-number stream. Seeds are in
+# scripts/config/rng_policy.R and scripts/config/objective4_policy.R.
 
 ######################################################################
 ############### CENTRALIZED OUTPUT DIRECTORY MANAGEMENT ###############

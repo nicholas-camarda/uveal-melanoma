@@ -223,8 +223,9 @@ walk_calls <- function(expr, visit, ancestors = character()) {
     invisible(NULL)
 }
 
-test_that("every simulated test and every jitter in scripts/ is seeded locally", {
-    seeded_wrappers <- c("with_local_seed", "add_p_seeded", "safe_add_p_to_summary")
+test_that("every random draw in scripts/ runs under a local seed", {
+    seeded_wrappers <- c("with_local_seed", "with_seed", "add_p_seeded", "safe_add_p_to_summary")
+    random_draws <- c("sample", "sample.int", "runif", "rnorm", "rbinom", "rexp", "rpois", "rmultinom")
     script_files <- list.files(
         here::here("scripts"),
         pattern = "\\.R$",
@@ -235,31 +236,43 @@ test_that("every simulated test and every jitter in scripts/ is seeded locally",
     script_files <- script_files[!grepl("rng_utilities\\.R$", script_files)]
 
     unseeded <- character()
-    simulated_calls <- 0L
-    jitter_calls <- 0L
+    scanned_calls <- c(simulated = 0L, jitter = 0L, draws = 0L)
 
     for (path in script_files) {
         label <- sub(paste0("^", here::here(), "/"), "", path)
         visit <- function(call, name, ancestors) {
             argument_names <- names(call)
+            is_seeded <- any(seeded_wrappers %in% c(name, ancestors))
             if (!is.null(argument_names) && "simulate.p.value" %in% argument_names) {
-                simulated_calls <<- simulated_calls + 1L
-                if (!any(seeded_wrappers %in% c(name, ancestors))) {
+                scanned_calls[["simulated"]] <<- scanned_calls[["simulated"]] + 1L
+                if (!is_seeded) {
                     unseeded <<- c(unseeded, paste(label, "simulate.p.value outside a seeded wrapper"))
                 }
             }
             if (name == "geom_jitter") {
-                jitter_calls <<- jitter_calls + 1L
+                scanned_calls[["jitter"]] <<- scanned_calls[["jitter"]] + 1L
                 if (!"position" %in% argument_names || any(c("width", "height") %in% argument_names)) {
                     unseeded <<- c(unseeded, paste(label, "geom_jitter without a seeded position_jitter"))
                 }
             }
             if (name == "position_jitter") {
-                jitter_calls <<- jitter_calls + 1L
+                scanned_calls[["jitter"]] <<- scanned_calls[["jitter"]] + 1L
                 seed_argument <- if ("seed" %in% argument_names) call[["seed"]] else NULL
                 if (is.null(seed_argument) || (is.logical(seed_argument) && is.na(seed_argument))) {
                     unseeded <<- c(unseeded, paste(label, "position_jitter without a fixed seed"))
                 }
+            }
+            if (name %in% random_draws) {
+                scanned_calls[["draws"]] <<- scanned_calls[["draws"]] + 1L
+                if (!is_seeded) {
+                    unseeded <<- c(unseeded, paste(label, name, "outside with_local_seed or withr::with_seed"))
+                }
+            }
+            if (name == "set.seed") {
+                unseeded <<- c(unseeded, paste(label, "set.seed on the global stream; use with_local_seed"))
+            }
+            if (name == "cv.glmnet" && !"foldid" %in% argument_names) {
+                unseeded <<- c(unseeded, paste(label, "cv.glmnet without foldid draws its own folds"))
             }
         }
         for (expression in parse(path, keep.source = FALSE)) {
@@ -268,7 +281,24 @@ test_that("every simulated test and every jitter in scripts/ is seeded locally",
     }
 
     # The scan must actually see the call sites, or it would pass vacuously.
-    expect_gte(simulated_calls, 10L)
-    expect_gte(jitter_calls, 2L)
+    expect_gte(scanned_calls[["simulated"]], 10L)
+    expect_gte(scanned_calls[["jitter"]], 2L)
+    expect_gte(scanned_calls[["draws"]], 4L)
     expect_identical(unseeded, character())
+})
+
+test_that("cross-validation fold assignment ignores earlier RNG use", {
+    strata <- rep(c("event", "no_event"), times = c(12L, 24L))
+    stable_id <- sprintf("patient_%02d", seq_along(strata))
+    compute_folds <- function() {
+        create_deterministic_fold_ids(strata, folds = 3L, seed = GEP_EXPLORATORY_CV_SEED, stable_id = stable_id)
+    }
+
+    folds <- evaluate_after_unrelated_draws(compute_folds)
+    expect_identical(folds$first, folds$second)
+
+    set.seed(99)
+    stream_before <- .Random.seed
+    invisible(compute_folds())
+    expect_identical(.Random.seed, stream_before)
 })
