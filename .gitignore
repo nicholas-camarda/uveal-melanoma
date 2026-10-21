@@ -38,8 +38,8 @@ scripts/old/*
 .Ruserdata
 tmp/
 
-# Version OpenSpec planning artifacts for broad research-methods changes.
-openspec/changes/archive/
+# OpenSpec planning records are archived in the Project Vault, not versioned here.
+openspec/
 
 # Ignore original files
 final_data/*
