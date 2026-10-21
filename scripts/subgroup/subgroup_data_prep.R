@@ -40,11 +40,11 @@ get_cutoff_value <- function(var_name, data, percentile_cut = 0.5) {
 #' @return Factor of bin labels
 create_clinical_bins <- function(values, cutoffs, var_name) {
     if (length(cutoffs) == 1) {
-        bin_labels <- c(paste0("< ", cutoffs), paste0("≥ ", cutoffs))
+        bin_labels <- c(paste0("< ", cutoffs), paste0("\u2265 ", cutoffs))
         bins <- ifelse(values < cutoffs, bin_labels[1], bin_labels[2])
     } else {
         bin_labels <- character(length(cutoffs) + 1)
-        bin_labels[1] <- paste0("≤ ", cutoffs[1])
+        bin_labels[1] <- paste0("\u2264 ", cutoffs[1])
         for (i in 2:length(cutoffs)) bin_labels[i] <- paste0(cutoffs[i - 1] + 0.1, "-", cutoffs[i])
         bin_labels[length(cutoffs) + 1] <- paste0("> ", cutoffs[length(cutoffs)])
         bins <- cut(values, breaks = c(-Inf, cutoffs, Inf), labels = bin_labels, include.lowest = TRUE)
@@ -59,7 +59,7 @@ get_subgroup_levels <- function(var_name) {
     if (USE_CLINICAL_BINNING_CONTINUOUS && var_name %in% c("initial_tumor_height", "initial_tumor_diameter")) {
         if (var_name == "initial_tumor_height") {
             return(c(
-                paste0("≤ ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
+                paste0("\u2264 ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
                 paste0(T_STAGE_HEIGHT_CUTOFFS[1] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[2], " mm"),
                 paste0(T_STAGE_HEIGHT_CUTOFFS[2] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[3], " mm"),
                 paste0(T_STAGE_HEIGHT_CUTOFFS[3] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[4], " mm"),
@@ -68,7 +68,7 @@ get_subgroup_levels <- function(var_name) {
             ))
         } else {
             return(c(
-                paste0("≤ ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
+                paste0("\u2264 ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
                 paste0(T_STAGE_DIAMETER_CUTOFFS[1] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[2], " mm"),
                 paste0(T_STAGE_DIAMETER_CUTOFFS[2] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[3], " mm"),
                 paste0(T_STAGE_DIAMETER_CUTOFFS[3] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[4], " mm"),
@@ -78,7 +78,7 @@ get_subgroup_levels <- function(var_name) {
             ))
         }
     } else if (var_name == "age_at_diagnosis") {
-        return(c(paste0("< ", LEGACY_CUTOFFS$age_at_diagnosis), paste0("≥ ", LEGACY_CUTOFFS$age_at_diagnosis)))
+        return(c(paste0("< ", LEGACY_CUTOFFS$age_at_diagnosis), paste0("\u2265 ", LEGACY_CUTOFFS$age_at_diagnosis)))
     } else {
         return(NULL)
     }
@@ -189,8 +189,8 @@ process_subgroup_data <- function(data, subgroup_var, confounders, include_basel
                 cutoff_value <- cutoff_val
             } else {
                 processed_data[[subgroup_var_binned]] <- factor(
-                    ifelse(data[[subgroup_var]] < cutoff_val, paste0("< ", round(cutoff_val, 1)), paste0("≥ ", round(cutoff_val, 1))),
-                    levels = c(paste0("< ", round(cutoff_val, 1)), paste0("≥ ", round(cutoff_val, 1)))
+                    ifelse(data[[subgroup_var]] < cutoff_val, paste0("< ", round(cutoff_val, 1)), paste0("\u2265 ", round(cutoff_val, 1))),
+                    levels = c(paste0("< ", round(cutoff_val, 1)), paste0("\u2265 ", round(cutoff_val, 1)))
                 )
                 subgroup_var_to_use <- subgroup_var_binned
                 cutoff_value <- cutoff_val
@@ -385,10 +385,10 @@ fit_subgroup_model <- function(data, outcome_config, subgroup_var_to_use, confou
             sample_ok <- n_plaque >= 2 && n_gksrs >= 2
             events_ok <- !is.null(event_var) && !is.na(plaque_events) && !is.na(gksrs_events) && plaque_events >= 1 && gksrs_events >= 1
             if (!sample_ok) {
-                reason_parts <- c(reason_parts, sprintf("Sample size: Requires ≥2 patients per arm; observed PBT=%d, GKSRS=%d", n_plaque, n_gksrs))
+                reason_parts <- c(reason_parts, sprintf("Sample size: Requires \u22652 patients per arm; observed PBT=%d, GKSRS=%d", n_plaque, n_gksrs))
             }
             if (!events_ok) {
-                reason_parts <- c(reason_parts, sprintf("Event count: Requires ≥1 event per arm; observed PBT events=%s, GKSRS events=%s",
+                reason_parts <- c(reason_parts, sprintf("Event count: Requires \u22651 event per arm; observed PBT events=%s, GKSRS events=%s",
                     ifelse(is.na(plaque_events), "NA", plaque_events), ifelse(is.na(gksrs_events), "NA", gksrs_events)))
             }
             if (sample_ok && events_ok) {
@@ -410,7 +410,7 @@ fit_subgroup_model <- function(data, outcome_config, subgroup_var_to_use, confou
                 }
             }
             if (!sample_ok) {
-                reason_parts <- c(reason_parts, sprintf("Sample size: Requires ≥2 patients per arm; observed PBT=%d, GKSRS=%d", n_plaque, n_gksrs))
+                reason_parts <- c(reason_parts, sprintf("Sample size: Requires \u22652 patients per arm; observed PBT=%d, GKSRS=%d", n_plaque, n_gksrs))
             }
             if (sample_ok && events_ok) {
                 valid_levels <- c(valid_levels, level)

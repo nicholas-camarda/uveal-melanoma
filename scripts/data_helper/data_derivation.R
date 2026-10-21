@@ -624,29 +624,29 @@ create_binned_continuous_variables <- function(data) {
                     age_at_diagnosis < 60 ~ "50-59 years",
                     age_at_diagnosis < 70 ~ "60-69 years",
                     age_at_diagnosis < 80 ~ "70-79 years",
-                    age_at_diagnosis >= 80 ~ "≥ 80 years",
+                    age_at_diagnosis >= 80 ~ "\u2265 80 years",
                     TRUE ~ NA_character_
                 ),
                 levels = c(
                     "< 40 years", "40-49 years", "50-59 years",
-                    "60-69 years", "70-79 years", "≥ 80 years"
+                    "60-69 years", "70-79 years", "\u2265 80 years"
                 )
             ),
             age_at_diagnosis_general_pop_median = factor(
                 case_when(
                     is.na(age_at_diagnosis) ~ NA_character_,
                     age_at_diagnosis < OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF ~ paste0("< ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years"),
-                    TRUE ~ paste0("≥ ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years")
+                    TRUE ~ paste0("\u2265 ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years")
                 ),
                 levels = c(
                     paste0("< ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years"),
-                    paste0("≥ ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years")
+                    paste0("\u2265 ", OBJECTIVE1_GENERAL_POP_MEDIAN_AGE_CUTOFF, " years")
                 )
             ),
             initial_tumor_height_binned = if (USE_CLINICAL_BINNING_CONTINUOUS) {
                 factor(
                     case_when(
-                        initial_tumor_height <= T_STAGE_HEIGHT_CUTOFFS[1] ~ paste0("≤ ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
+                        initial_tumor_height <= T_STAGE_HEIGHT_CUTOFFS[1] ~ paste0("\u2264 ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
                         initial_tumor_height <= T_STAGE_HEIGHT_CUTOFFS[2] ~ paste0(T_STAGE_HEIGHT_CUTOFFS[1] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[2], " mm"),
                         initial_tumor_height <= T_STAGE_HEIGHT_CUTOFFS[3] ~ paste0(T_STAGE_HEIGHT_CUTOFFS[2] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[3], " mm"),
                         initial_tumor_height <= T_STAGE_HEIGHT_CUTOFFS[4] ~ paste0(T_STAGE_HEIGHT_CUTOFFS[3] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[4], " mm"),
@@ -655,7 +655,7 @@ create_binned_continuous_variables <- function(data) {
                         TRUE ~ NA_character_
                     ),
                     levels = c(
-                        paste0("≤ ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
+                        paste0("\u2264 ", T_STAGE_HEIGHT_CUTOFFS[1], " mm"),
                         paste0(T_STAGE_HEIGHT_CUTOFFS[1] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[2], " mm"),
                         paste0(T_STAGE_HEIGHT_CUTOFFS[2] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[3], " mm"),
                         paste0(T_STAGE_HEIGHT_CUTOFFS[3] + 0.1, "-", T_STAGE_HEIGHT_CUTOFFS[4], " mm"),
@@ -667,18 +667,18 @@ create_binned_continuous_variables <- function(data) {
                 factor(
                     ifelse(initial_tumor_height < LEGACY_CUTOFFS$initial_tumor_height,
                         paste0("< ", LEGACY_CUTOFFS$initial_tumor_height, " mm"),
-                        paste0("≥ ", LEGACY_CUTOFFS$initial_tumor_height, " mm")
+                        paste0("\u2265 ", LEGACY_CUTOFFS$initial_tumor_height, " mm")
                     ),
                     levels = c(
                         paste0("< ", LEGACY_CUTOFFS$initial_tumor_height, " mm"),
-                        paste0("≥ ", LEGACY_CUTOFFS$initial_tumor_height, " mm")
+                        paste0("\u2265 ", LEGACY_CUTOFFS$initial_tumor_height, " mm")
                     )
                 )
             },
             initial_tumor_diameter_binned = if (USE_CLINICAL_BINNING_CONTINUOUS) {
                 factor(
                     case_when(
-                        initial_tumor_diameter <= T_STAGE_DIAMETER_CUTOFFS[1] ~ paste0("≤ ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
+                        initial_tumor_diameter <= T_STAGE_DIAMETER_CUTOFFS[1] ~ paste0("\u2264 ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
                         initial_tumor_diameter <= T_STAGE_DIAMETER_CUTOFFS[2] ~ paste0(T_STAGE_DIAMETER_CUTOFFS[1] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[2], " mm"),
                         initial_tumor_diameter <= T_STAGE_DIAMETER_CUTOFFS[3] ~ paste0(T_STAGE_DIAMETER_CUTOFFS[2] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[3], " mm"),
                         initial_tumor_diameter <= T_STAGE_DIAMETER_CUTOFFS[4] ~ paste0(T_STAGE_DIAMETER_CUTOFFS[3] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[4], " mm"),
@@ -688,7 +688,7 @@ create_binned_continuous_variables <- function(data) {
                         TRUE ~ NA_character_
                     ),
                     levels = c(
-                        paste0("≤ ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
+                        paste0("\u2264 ", T_STAGE_DIAMETER_CUTOFFS[1], " mm"),
                         paste0(T_STAGE_DIAMETER_CUTOFFS[1] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[2], " mm"),
                         paste0(T_STAGE_DIAMETER_CUTOFFS[2] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[3], " mm"),
                         paste0(T_STAGE_DIAMETER_CUTOFFS[3] + 0.1, "-", T_STAGE_DIAMETER_CUTOFFS[4], " mm"),
@@ -701,11 +701,11 @@ create_binned_continuous_variables <- function(data) {
                 factor(
                     ifelse(initial_tumor_diameter < LEGACY_CUTOFFS$initial_tumor_diameter,
                         paste0("< ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm"),
-                        paste0("≥ ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm")
+                        paste0("\u2265 ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm")
                     ),
                     levels = c(
                         paste0("< ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm"),
-                        paste0("≥ ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm")
+                        paste0("\u2265 ", LEGACY_CUTOFFS$initial_tumor_diameter, " mm")
                     )
                 )
             }

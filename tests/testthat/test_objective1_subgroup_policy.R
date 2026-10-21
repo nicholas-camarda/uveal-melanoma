@@ -12,8 +12,8 @@ test_that("Objective 1 age subgroup policy uses the 63-year split without changi
         data = tibble::tibble(
             age_at_diagnosis = c(50, 60, 70, 80),
             age_at_diagnosis_general_pop_median = factor(
-                c("< 63 years", "< 63 years", "≥ 63 years", "≥ 63 years"),
-                levels = c("< 63 years", "≥ 63 years")
+                c("< 63 years", "< 63 years", "\u2265 63 years", "\u2265 63 years"),
+                levels = c("< 63 years", "\u2265 63 years")
             ),
             treatment_group = factor(c("PBT", "GKSRS", "PBT", "GKSRS")),
             sex = factor(c("Female", "Male", "Female", "Male"))
@@ -90,7 +90,7 @@ test_that("the configured 63-year age split renders as ordinary forest-plot leve
                         "age_at_diagnosis_general_pop_median",
                         2
                     ),
-                    subgroup_level = c("< 63 years", "≥ 63 years"),
+                    subgroup_level = c("< 63 years", "\u2265 63 years"),
                     n_total = c(90, 110),
                     n_plaque = c(45, 55),
                     n_gksrs = c(45, 55),
@@ -112,7 +112,7 @@ test_that("the configured 63-year age split renders as ordinary forest-plot leve
 
     expect_identical(
         trimws(plot_data$data_frame$Subgroup),
-        c("Age at Diagnosis", "< 63 years", "≥ 63 years")
+        c("Age at Diagnosis", "< 63 years", "\u2265 63 years")
     )
     expect_identical(plot_data$data_frame$`Int p`[[1]], "0.42")
     expect_identical(names(plot_data$data_frame)[2:3], c("PBT n/N", "GKSRS n/N"))
@@ -131,11 +131,11 @@ test_that("the existing general-population age factor remains available without 
     expect_false("age_at_diagnosis_subgroup_cutoff" %in% names(derived))
     expect_identical(
         levels(derived$age_at_diagnosis_general_pop_median),
-        c("< 63 years", "≥ 63 years")
+        c("< 63 years", "\u2265 63 years")
     )
     expect_identical(
         as.character(derived$age_at_diagnosis_general_pop_median),
-        c("≥ 63 years", "≥ 63 years", "≥ 63 years")
+        c("\u2265 63 years", "\u2265 63 years", "\u2265 63 years")
     )
 })
 
@@ -211,7 +211,7 @@ test_that("forest plots label T4 not estimable only when the outcome-specific mo
                         n_gksrs = 4,
                         events_plaque = 11,
                         events_gksrs = 0,
-                        exclusion_reason = "Event count: Requires ≥1 event per arm; observed PBT events=11, GKSRS events=0"
+                        exclusion_reason = "Event count: Requires \u22651 event per arm; observed PBT events=11, GKSRS events=0"
                     )
                 )
             )
@@ -269,7 +269,7 @@ test_that("all GEP Class levels remain visible with outcome-specific estimabilit
                         n_gksrs = 27,
                         events_plaque = 2,
                         events_gksrs = 0,
-                        exclusion_reason = "Event count: Requires ≥1 event per arm"
+                        exclusion_reason = "Event count: Requires \u22651 event per arm"
                     ),
                     "GEP Failed/Indeterminate" = list(
                         n_total = 13,
@@ -344,7 +344,7 @@ test_that("both PRAME status levels remain visible with outcome-specific estimab
                         n_gksrs = 13,
                         events_plaque = 0,
                         events_gksrs = 0,
-                        exclusion_reason = "Event count: Requires ≥1 event per arm"
+                        exclusion_reason = "Event count: Requires \u22651 event per arm"
                     )
                 )
             )

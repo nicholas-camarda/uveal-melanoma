@@ -342,7 +342,7 @@ if (length(significant_vars) > 0) {
         ))
 
         if (stage4_count < 10) {
-            cat("→ Stage IV has low numbers - consider binary stage variable or exclude\n")
+            cat("\u2192 Stage IV has low numbers - consider binary stage variable or exclude\n")
         }
     }
 

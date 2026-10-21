@@ -110,13 +110,13 @@ assign_line_change_bucket <- function(line_counts) {
 
     categories <- case_when(
         is.na(line_counts) ~ NA_character_,
-        line_counts >= 3 ~ "≥3-line improvement",
+        line_counts >= 3 ~ "\u22653-line improvement",
         line_counts == 2 ~ "2-line improvement",
         line_counts == 1 ~ "1-line improvement",
     line_counts == 0 ~ "Stable (0-line change)",
         line_counts == -1 ~ "1-line loss",
         line_counts == -2 ~ "2-line loss",
-        line_counts <= -3 ~ "≥3-line loss"
+        line_counts <= -3 ~ "\u22653-line loss"
     )
 
     factor(categories, levels = VISION_LINE_CHANGE_CATEGORY_LEVELS, ordered = TRUE)

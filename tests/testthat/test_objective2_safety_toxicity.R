@@ -214,7 +214,7 @@ test_that("Objective 2 writes adjusted outputs in each side-effect subfolder", {
     ordinal_html <- paste(ordinal_html, collapse = "\n")
     expect_match(
         ordinal_html,
-        "GKSRS</td>\\s*<td headers=\"estimate\" class=\"gt_row gt_center\">—</td>",
+        "GKSRS</td>\\s*<td headers=\"estimate\" class=\"gt_row gt_center\">\u2014</td>",
         perl = TRUE
     )
     expect_match(

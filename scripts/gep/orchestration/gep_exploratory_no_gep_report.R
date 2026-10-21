@@ -3690,7 +3690,7 @@ create_exploratory_gep_availability_plot <- function(risk_ladder,
         n = as.integer(c(usable_n, not_tested_n + failed_n)),
         detail = c(
             sprintf("Class 1 or Class 2: n=%d", usable_n),
-            sprintf("Not tested: n=%d  ·  Failed/indeterminate: n=%d", not_tested_n, failed_n)
+            sprintf("Not tested: n=%d  \u00b7  Failed/indeterminate: n=%d", not_tested_n, failed_n)
         )
     ) %>%
         dplyr::mutate(
@@ -3889,7 +3889,7 @@ create_exploratory_fixed_horizon_risk_ladder_plot <- function(risk_ladder,
                 event_label
             ),
             detail_label = sprintf(
-                "%.1f%% · %d %s · n=%d",
+                "%.1f%% \u00b7 %d %s \u00b7 n=%d",
                 100 * .data$estimate,
                 as.integer(round(.data$observed_events)),
                 .data$event_word,
