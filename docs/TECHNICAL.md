@@ -697,6 +697,11 @@ locale. A literal character would be read in the session's encoding, so a
 C-locale session would write `<U+2265>` into the analytic datasets.
 `tests/testthat/test_source_encoding.R` enforces this for `scripts/` and `tests/`.
 
+`scripts/load_all.R` also sets a UTF-8 `LC_CTYPE` for the session when R was
+started in another locale, because label lookups on text such as `"\u2265 80 years"`
+(model coefficient names, plot color scales) silently fail in a non-UTF-8 session.
+Runs therefore do not need `LC_ALL` set in the shell.
+
 Run tests with the shell entry points used elsewhere in the repository:
 
 ```sh

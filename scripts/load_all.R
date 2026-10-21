@@ -1,3 +1,19 @@
+# The session must use a UTF-8 character locale. In a non-UTF-8 session (for
+# example a plain C locale), lookups keyed on labels such as "\u2265 80 years"
+# silently fail: the age-decade subgroup picked the wrong interaction term and
+# the RMST figure markers lost their fill color. Setting LC_CTYPE here makes the
+# results independent of how R was started.
+if (!isTRUE(l10n_info()[["UTF-8"]])) {
+    for (utf8_locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
+        if (nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", utf8_locale)))) {
+            break
+        }
+    }
+    if (!isTRUE(l10n_info()[["UTF-8"]])) {
+        stop("No UTF-8 locale is available to set for this R session.", call. = FALSE)
+    }
+}
+
 ########################################################
 ############### ANALYSIS SETTINGS #####################
 ########################################################

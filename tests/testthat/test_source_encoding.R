@@ -16,3 +16,8 @@ test_that("project R sources keep non-ASCII text out of code", {
     # encoding; written as ≥ it is the same string in every locale.
     expect_identical(offenders, character())
 })
+
+test_that("loading the project sets a UTF-8 session locale", {
+    # Label lookups on text such as "≥ 80 years" depend on a UTF-8 session.
+    expect_true(isTRUE(l10n_info()[["UTF-8"]]))
+})
