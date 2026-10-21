@@ -251,7 +251,7 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     out_dir <- withr::local_tempdir()
     paths <- write_gep_validation_outputs(
         results, cohort, "uveal_melanoma_full_cohort",
-        output_dirs = list(obj4_mfs = file.path(out_dir, "04_GEP_Validation", "a_metastasis_free_survival")),
+        output_dirs = list(obj4_gep = file.path(out_dir, "04_GEP_Validation")),
         prefix = "test_"
     )
 
@@ -313,6 +313,18 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     checks <- readxl::read_excel(paths$diagnostics, sheet = "Checks")
     expect_true(all(checks$status %in% c("no concern", "concern", "not assessed")))
     expect_false(anyNA(checks$status))
+
+    # Each fact lives in one sheet: Checks holds the thresholded results, Warnings_Limitations only
+    # statements that hold for every run, and the timing and discrimination detail stays in the
+    # flow, Record_Issues and the primary workbook.
+    expect_true(all(unique(checks$check) %in% c(
+        "Followed to the horizon", "Patients known event-free at the horizon", "Events by the horizon",
+        "Discrimination estimable", "Bootstrap draws", "Events supporting discrimination",
+        "Proportional hazards (Schoenfeld, imported risk)"
+    )))
+    limitations <- readxl::read_excel(paths$diagnostics, sheet = "Warnings_Limitations")
+    expect_identical(limitations$limitation, c("Imported predictions are group-level", "Overlapping cohorts"))
+    expect_false(any(vapply(GEP_VALIDATION_GROUP_LEVELS, grepl, logical(1), x = paste(limitations$detail, collapse = " "), fixed = TRUE)))
 })
 
 test_that("validation reporting fails clearly when the GEP group column is missing", {
@@ -322,7 +334,7 @@ test_that("validation reporting fails clearly when the GEP group column is missi
     expect_error(
         write_gep_validation_outputs(
             results, cohort, "uveal_melanoma_full_cohort",
-            output_dirs = list(obj4_mfs = file.path(withr::local_tempdir(), "a")), prefix = "t_"
+            output_dirs = list(obj4_gep = file.path(withr::local_tempdir(), "a")), prefix = "t_"
         ),
         "requires columns: gep_group, biopsy1_gep_raw"
     )

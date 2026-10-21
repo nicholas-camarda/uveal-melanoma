@@ -259,8 +259,9 @@ test_that("representative survival and CIF plots do not emit duplicate-scale mes
                 ylab = "Metastasis-Free Survival Probability",
                 analysis_type = "post_treatment_only",
                 dataset_name = "unit_test_duplicate_scale",
-                output_dirs = NULL,
-                prefix = NULL
+                output_dirs = create_output_structure(withr::local_tempdir()),
+                prefix = "unit_",
+                route_key = "obj1_mets"
             )
         )
     )

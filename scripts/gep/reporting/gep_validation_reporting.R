@@ -143,12 +143,6 @@ build_gep_validation_checks <- function(results) {
                 "No events: the observed risk is 0 and its interval cannot be estimated")
         }
         d <- part$discrimination
-        if (identical(endpoint, "MFS")) {
-            add(endpoint, "Tied pairs in Harrell's C", "All patients",
-                if (isTRUE(d$estimable)) sprintf("%.1f%% of comparable pairs tied on imported risk", 100 * d$tied_pair_share) else "not computed",
-                if (!isTRUE(d$estimable)) "not assessed" else if (d$tied_pair_share > 0) "concern" else "no concern",
-                "The imported risk has four values; tied pairs count one half, so C is a ranking of four groups")
-        }
         add(endpoint, "Discrimination estimable", "All patients",
             if (isTRUE(d$estimable)) "estimated" else d$reason,
             if (isTRUE(d$estimable)) "no concern" else "not assessed",
@@ -167,10 +161,6 @@ build_gep_validation_checks <- function(results) {
         add(endpoint, "Proportional hazards (Schoenfeld, imported risk)", "All patients",
             if (is.na(ph$p_value)) "not computed" else sprintf("p = %.2f", ph$p_value), ph$status, ph$reason)
     }
-    late_n <- results$late_biopsy_sensitivity$patients_excluded[["MFS"]]
-    add("MFS", "GEP sample taken more than 180 days after treatment", "Primary set",
-        sprintf("%d patients", late_n), if (late_n == 0L) "no concern" else "concern",
-        "Such a sample (for example at local recurrence) describes a different tumor state; see Sensitivity_Late_Biopsy")
     describe_check_reasons(dplyr::bind_rows(rows))
 }
 
@@ -199,7 +189,7 @@ build_gep_validation_specification <- function(horizon_months) {
         method = c(
             sprintf("Kaplan-Meier risk (1 - survival) at %d months, log-log 95%% interval", horizon_months),
             sprintf("Aalen-Johansen cumulative incidence at %d months, non-melanoma death competing, log-log interval", horizon_months),
-            "1 minus the imported 5-year survival probability for the group (laboratory class-level estimate, not a patient-level prediction)",
+            "1 minus the imported 5-year survival probability of the patient's Class x PRAME group",
             "Observed minus imported risk",
             "Group risks weighted by group size",
             sprintf("Concordance of imported risk with follow-up censored at %d months; ties count one half; patient-level bootstrap interval", horizon_months),
@@ -228,7 +218,7 @@ build_gep_validation_specification <- function(horizon_months) {
         interpretation = c(
             "Compare with the imported risk in the same row; wide intervals reflect few patients and events",
             "Compare with the imported risk in the same row; wide intervals reflect few patients and events",
-            "Four distinct values, so discrimination reflects ranking of four groups",
+            "One value per Class x PRAME group",
             "If the imported risk lies inside the observed 95% interval, the data are compatible with it",
             "No interval is reported; see group rows",
             "Because the predictor has four values, C describes how well the groups are ordered, not individual-level prediction",
@@ -243,21 +233,16 @@ build_gep_validation_specification <- function(horizon_months) {
 
 #' Compile the limitations that apply to this cohort's estimates
 #'
-#' @param checks Data frame from `build_gep_validation_checks()`.
+#' Only statements that hold for every run belong here; results that vary by group (sparse
+#' groups, groups without events, follow-up) are reported once, in `Checks`.
+#'
 #' @param dataset_name Character cohort identifier.
 #' @return Data frame with `limitation` and `detail`.
-build_gep_validation_limitations <- function(checks, dataset_name) {
-    sparse_groups <- unique(checks$scope[checks$check == "Patients known event-free at the horizon" & checks$status == "concern"])
-    no_event_groups <- unique(checks$scope[checks$check == "Events by the horizon" & checks$status == "concern"])
+build_gep_validation_limitations <- function(dataset_name) {
     data.frame(
-        limitation = c(
-            "Imported predictions are group-level", "No extrapolation", "Sparse groups", "Groups without events", "Overlapping cohorts"
-        ),
+        limitation = c("Imported predictions are group-level", "Overlapping cohorts"),
         detail = c(
             "Each patient carries one of four published class-level risks. Agreement with the imported values is not a patient-level calibration.",
-            "Only the 5-year horizon is reported. Risks are not carried past a group's last follow-up; a group not followed to 60 months has no observed risk.",
-            if (length(sparse_groups) > 0) paste("Fewer than", GEP_MIN_AT_RISK_AT_HORIZON, "patients known event-free at 60 months:", paste(sparse_groups, collapse = "; ")) else "None",
-            if (length(no_event_groups) > 0) paste("No events by 60 months, so the interval cannot be estimated:", paste(no_event_groups, collapse = "; ")) else "None",
             sprintf("%s is one of three overlapping analytic views of the same patients; the views are not independent replications.", dataset_name)
         ),
         stringsAsFactors = FALSE
@@ -368,7 +353,7 @@ plot_gep_observed_vs_imported <- function(group_tables, title = "Observed vs imp
 #' @param results Output of `run_gep_definitive_validation()`.
 #' @param data Cohort data frame.
 #' @param dataset_name Character cohort identifier.
-#' @param output_dirs List of output directories (uses `obj4_mfs` to locate the GEP root).
+#' @param output_dirs List of output directories (uses `obj4_gep`, the GEP validation folder).
 #' @param prefix Character file prefix.
 #' @return Invisibly, a list of written file paths.
 write_gep_validation_outputs <- function(results, data, dataset_name, output_dirs, prefix) {
@@ -380,8 +365,7 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
     if (anyNA(data$gep_group)) {
         stop(sprintf("gep_group is missing for %d patient(s); every patient must be classified.", sum(is.na(data$gep_group))), call. = FALSE)
     }
-    gep_root <- dirname(output_dirs$obj4_mfs)
-    ensure_output_dir(gep_root)
+    gep_root <- ensure_output_dir(get_output_dir(output_dirs, "obj4_gep"))
     cohort_label <- switch(
         dataset_name,
         uveal_melanoma_full_cohort = "Full cohort",
@@ -425,7 +409,7 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
             Specification_Coding = build_gep_validation_specification(horizon),
             Denominators_Flow = summarize_gep_validation_flow(data, results),
             Checks = checks,
-            Warnings_Limitations = build_gep_validation_limitations(checks, dataset_name),
+            Warnings_Limitations = build_gep_validation_limitations(dataset_name),
             Record_Issues = build_gep_record_issues(data)
         ),
         diagnostics_path

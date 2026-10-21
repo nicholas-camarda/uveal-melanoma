@@ -209,6 +209,11 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
     expect_true(all(checks$status %in% c("no concern", "concern", "not assessed")))
     expect_false(anyNA(checks$status))
 
+    # Predictor screening, the treatment-era counts and the group follow-up are each reported once.
+    expect_false(any(c("Predictor retained", sprintf("Patients treated before %d", GEP_TESTING_ERA_START_YEAR)) %in% checks$check))
+    limitations <- readxl::read_excel(paths$diagnostics, sheet = "Warnings_Limitations")
+    expect_identical(limitations$limitation, c("Selection into testing", "Internal validation only", "Interval construction"))
+
     # One denominator per endpoint: the group outcome counts sum to the model analysis set.
     mfs_group_n <- sum(results$group_outcomes$n[results$group_outcomes$endpoint == "MFS"])
     expect_identical(mfs_group_n, flow$candidates[flow$analysis_set == "MFS"] - flow$not_eligible_for_endpoint[flow$analysis_set == "MFS"])
@@ -303,4 +308,25 @@ test_that("the model AUC figure keeps intervals that reach below the usual axis 
     expect_equal(nrow(bars), 2L)
     expect_false(anyNA(bars$xmin))
     expect_lte(built$layout$panel_params[[1]]$x.range[1], 0.22)
+})
+
+test_that("the model AUC figure marks comparators by the policy labels, not by their wording", {
+    comparator_labels <- c("Stage only" = "initial_t_stage_simple", "Diameter only" = "initial_tumor_diameter")
+    rlang::local_bindings(GEP_NO_GEP_COMPARATOR_PREDICTORS = comparator_labels, .env = .GlobalEnv)
+    performance <- data.frame(
+        endpoint = "MFS", performance_scope = "No GEP",
+        model = c("Penalized, all retained predictors", "Stage only", "Diameter only"),
+        auc = c(0.6, 0.7, 0.65), auc_ci_lower = c(0.5, 0.55, 0.5), auc_ci_upper = c(0.75, 0.8, 0.78),
+        stringsAsFactors = FALSE
+    )
+    points <- ggplot2::ggplot_build(plot_no_gep_model_auc(performance))$data[[3]]
+    # Shape 16 is the filled ridge-model dot and shape 5 the open comparator diamond.
+    expect_identical(sort(points$shape), c(5, 5, 16))
+})
+
+test_that("the no-GEP dataset is defined once in the policy", {
+    workflow_text <- paste(readLines(here::here("scripts", "workflow", "objective_4_gep_analysis.R"), warn = FALSE), collapse = "\n")
+    expect_true(grepl("GEP_NO_GEP_DATASET", workflow_text, fixed = TRUE))
+    expect_false(grepl("uveal_melanoma_full_cohort\"", workflow_text, fixed = TRUE))
+    expect_identical(GEP_NO_GEP_DATASET, PUBLISH_ANALYTIC_DATASET_IDS[[1]])
 })

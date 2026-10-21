@@ -26,12 +26,12 @@ run_objective_4 <- function(data, dataset_name, output_dirs, prefix, confounders
 
     no_gep_results <- NULL
     no_gep_files <- NULL
-    if (identical(dataset_name, "uveal_melanoma_full_cohort")) {
+    if (identical(dataset_name, GEP_NO_GEP_DATASET)) {
         logger::log_info(formatted("Executing run_no_gep_analysis for the full cohort", indent = 1))
         no_gep_results <- run_no_gep_analysis(data)
         no_gep_files <- write_no_gep_outputs(
             no_gep_results, no_gep_results$prepared,
-            output_dir = file.path(dirname(output_dirs$obj4_mfs), "d_no_gep"), prefix = prefix
+            output_dir = get_output_dir(output_dirs, "obj4_no_gep"), prefix = prefix
         )
         logger::log_info(formatted("No-GEP analysis completed", indent = 1))
     }

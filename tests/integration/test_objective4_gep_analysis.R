@@ -50,8 +50,9 @@ test_that("survival helper can separate KM display groups from Cox model groups"
             ylab = "Metastasis-Free Survival Probability",
             analysis_type = "post_treatment_only",
             dataset_name = "unit_test_display_model_split",
-            output_dirs = NULL,
-            prefix = NULL
+            output_dirs = create_output_structure(withr::local_tempdir()),
+            prefix = "unit_",
+            route_key = "obj1_mets"
         ),
         warning = function(warning_condition) {
             convergence_warnings <<- c(
@@ -99,8 +100,9 @@ test_that("risk table keeps displayed row labels aligned with their counts when 
         analysis_type = "post_treatment_only",
         dataset_name = "unit_test_risk_table_alignment",
         legend_labels = desired_order,
-        output_dirs = NULL,
-        prefix = NULL
+        output_dirs = create_output_structure(withr::local_tempdir()),
+        prefix = "unit_",
+        route_key = "obj1_mets"
     ))
 
     expect_equal(rev(extract_risk_table_y_limits(result$plot$table)), desired_order)
@@ -133,8 +135,9 @@ test_that("risk table preserves requested row order for a subset of present stra
         analysis_type = "post_treatment_only",
         dataset_name = "unit_test_risk_table_alignment_subset",
         legend_labels = desired_order,
-        output_dirs = NULL,
-        prefix = NULL
+        output_dirs = create_output_structure(withr::local_tempdir()),
+        prefix = "unit_",
+        route_key = "obj1_mets"
     ))
 
     expect_equal(rev(extract_risk_table_y_limits(result$plot$table)), present_order)

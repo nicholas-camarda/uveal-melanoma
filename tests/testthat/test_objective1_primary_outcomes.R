@@ -262,7 +262,8 @@ test_that("Objective 1 survival effect summaries separate modeled patients from 
             analysis_type = "post_treatment_only",
             dataset_name = "test_cohort",
             output_dirs = output_dirs,
-            prefix = "test_"
+            prefix = "test_",
+            route_key = "obj1_os"
         )
     })
 
@@ -299,7 +300,8 @@ test_that("Objective 1 writes patient-level KM risk-set audit workbooks", {
         analysis_type = "post_treatment_only",
         dataset_name = "test_cohort",
         output_dirs = output_dirs,
-        prefix = "test_"
+        prefix = "test_",
+        route_key = "obj1_os"
     )
 
     audit_path <- file.path(

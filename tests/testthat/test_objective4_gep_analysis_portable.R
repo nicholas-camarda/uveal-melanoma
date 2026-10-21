@@ -1,8 +1,7 @@
 build_objective4_output_dirs <- function(test_output_dir) {
     list(
-        obj4_mfs = file.path(test_output_dir, "04_GEP_Validation", "a_mfs_validation"),
-        obj4_mss = file.path(test_output_dir, "04_GEP_Validation", "b_mss_validation"),
-        obj4_ph_diagnostics = file.path(test_output_dir, "04_GEP_Validation", "c_proportional_hazards_diagnostics")
+        obj4_gep = file.path(test_output_dir, "04_GEP_Validation"),
+        obj4_no_gep = file.path(test_output_dir, "04_GEP_Validation", "d_no_gep")
     )
 }
 

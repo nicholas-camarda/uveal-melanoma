@@ -1,10 +1,6 @@
 test_that("portable smoke path writes GEP validation outputs and dry-run publish on synthetic data", {
     cohort_root <- file.path(OUTPUT_DIR, "uveal_restricted")
-    output_dirs <- list(
-        obj4_mfs = file.path(cohort_root, "04_GEP_Validation", "a_metastasis_free_survival"),
-        obj4_mss = file.path(cohort_root, "04_GEP_Validation", "b_melanoma_specific_survival"),
-        obj4_ph_diagnostics = file.path(cohort_root, "04_GEP_Validation", "c_proportional_hazards_diagnostics")
-    )
+    output_dirs <- list(obj4_gep = file.path(cohort_root, "04_GEP_Validation"))
 
     for (dir_path in output_dirs) {
         dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)

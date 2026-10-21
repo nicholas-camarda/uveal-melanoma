@@ -61,16 +61,6 @@ build_no_gep_checks <- function(results) {
             if (o$event_free_through_horizon >= GEP_MIN_AT_RISK_AT_HORIZON) "no concern" else "concern",
             sprintf("Fewer than %d known event-free patients makes the observed risk imprecise", GEP_MIN_AT_RISK_AT_HORIZON))
     }
-    era <- results$treatment_era_sensitivity
-    era <- era[era$endpoint == "MFS", , drop = FALSE]
-    for (i in seq_len(nrow(era))) {
-        e <- era[i, ]
-        if (e$patients == 0L) next
-        add("All", sprintf("Patients treated before %d", GEP_TESTING_ERA_START_YEAR), e$group,
-            sprintf("%d of %d patients", e$patients_before_era, e$patients),
-            if (e$patients_before_era == 0L) "no concern" else "concern",
-            "Testing appears in this cohort only from that year on, so the group's risk may mix eras; see Sensitivity_Treatment_Era")
-    }
     perf <- results$performance
     for (i in seq_len(nrow(perf))) {
         p <- perf[i, ]
@@ -101,10 +91,6 @@ build_no_gep_checks <- function(results) {
             sprintf("%d events / %d design columns = %.1f", cases, columns, cases / columns),
             if (cases / columns >= GEP_NO_GEP_MIN_EVENTS_PER_PARAMETER) "no concern" else "concern",
             sprintf("Fewer than %d events per design column makes an unpenalized fit unreliable; ridge shrinkage reduces but does not remove the problem", GEP_NO_GEP_MIN_EVENTS_PER_PARAMETER))
-    }
-    dropped <- results$predictor_screening[results$predictor_screening$status == "dropped", , drop = FALSE]
-    for (i in seq_len(nrow(dropped))) {
-        add("All", "Predictor retained", dropped$predictor[i], "dropped", "concern", dropped$reason[i])
     }
     describe_check_reasons(dplyr::bind_rows(rows))
 }
@@ -161,19 +147,17 @@ build_no_gep_specification <- function(horizon_months) {
 
 #' Limitations for the no-GEP results
 #'
-#' @param results Output of `run_no_gep_analysis()`.
+#' Only statements that hold for every run belong here; groups without a 5-year estimate and
+#' dropped predictors are reported once, in `Checks` and `Predictor_Screening`.
+#'
 #' @return Data frame with `limitation` and `detail`.
-build_no_gep_limitations <- function(results) {
-    outcomes <- results$group_outcomes
-    not_estimable <- unique(outcomes$group[!outcomes$estimable & outcomes$n > 0L])
+build_no_gep_limitations <- function() {
     data.frame(
-        limitation = c("Groups without a 5-year estimate", "Selection into testing", "Internal validation only", "Interval construction", "Predictors dropped"),
+        limitation = c("Selection into testing", "Internal validation only", "Interval construction"),
         detail = c(
-            if (length(not_estimable) > 0) paste("Not followed to 60 months, so no observed risk:", paste(not_estimable, collapse = "; ")) else "None",
             "Testing coverage depends on treatment era and tumor size (see Baseline_By_Group and Sensitivity_Treatment_Era); group differences describe who was tested, not the effect of testing.",
             "Performance is out-of-fold within this cohort; there is no external validation.",
-            "Bootstrap intervals resample patients and out-of-fold predictions; the model is not refit on each bootstrap sample.",
-            paste(results$predictor_screening$predictor[results$predictor_screening$status == "dropped"], collapse = "; ")
+            "Bootstrap intervals resample patients and out-of-fold predictions; the model is not refit on each bootstrap sample."
         ),
         stringsAsFactors = FALSE
     )
@@ -235,7 +219,7 @@ plot_no_gep_model_auc <- function(performance) {
         (performance$performance_scope %in% c("No GEP", "Definitive Class 1/2 patients")) & is.finite(performance$auc), ,
         drop = FALSE
     ]
-    plot_data$kind <- ifelse(grepl("alone", plot_data$model), "No-fit comparator", "Ridge model")
+    plot_data$kind <- ifelse(plot_data$model %in% names(GEP_NO_GEP_COMPARATOR_PREDICTORS), "No-fit comparator", "Ridge model")
     # The axis only zooms: setting scale limits would delete intervals reaching below the
     # lower bound, so the bound follows the lowest interval instead.
     lowest <- suppressWarnings(min(plot_data$auc_ci_lower, na.rm = TRUE))
@@ -321,7 +305,7 @@ write_no_gep_outputs <- function(results, data, output_dir, prefix) {
             Denominators_Flow = summarize_no_gep_flow(data, results),
             Predictor_Screening = results$predictor_screening,
             Checks = checks,
-            Warnings_Limitations = build_no_gep_limitations(results),
+            Warnings_Limitations = build_no_gep_limitations(),
             Record_Issues = removed
         ),
         diagnostics_path

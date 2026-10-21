@@ -40,6 +40,10 @@ GEP_NO_GEP_COMPARATOR_PREDICTORS <- c(
 GEP_NO_GEP_MIN_COMPLETENESS <- 0.9 # Minimum non-missing share for a candidate predictor
 GEP_NO_GEP_MIN_LEVEL_COUNT <- 5 # Minimum patients per retained factor level
 GEP_NO_GEP_MIN_EVENTS_PER_PARAMETER <- 10 # Fewer events per design column is flagged
+# The no-GEP analysis runs on the full cohort: the restricted and GKSRS-only cohorts are subsets of
+# it, so a second run would repeat the same patients.
+GEP_NO_GEP_DATASET <- "uveal_melanoma_full_cohort"
+
 # GEP testing appears in this cohort from this treatment year on. The treatment-era sensitivity
 # re-estimates every group's risk among patients treated in or after this year, so tested and
 # untested groups cover the same era; the baseline table reports the share treated in or after it.
