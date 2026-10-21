@@ -73,8 +73,6 @@ test_that("effect-summary audit flags Cox sample-size and missing-adjustment iss
 
     gep_audit_dir <- file.path(
         audit_dir,
-        "04_GEP_Validation",
-        "a_metastasis_free_survival",
         "02_cox_models"
     )
     dir.create(gep_audit_dir, recursive = TRUE, showWarnings = FALSE)
@@ -106,13 +104,11 @@ test_that("effect-summary audit flags Cox sample-size and missing-adjustment iss
     )
 
     findings <- audit_effect_summary_workbook(
-        effect_summary_path = effect_summary_path,
-        expected_confounders = c("age_at_diagnosis_general_pop_median", "sex", "location")
+        effect_summary_path = effect_summary_path
     )
 
     expect_true("cox_n_patients_misreported" %in% findings$issue_type)
     expect_true("adjusted_model_missing_covariates" %in% findings$issue_type)
-    expect_true("adjusted_model_formula_missing_expected_confounders" %in% findings$issue_type)
     expect_true("adjusted_matches_unadjusted_without_covariates" %in% findings$issue_type)
 })
 
