@@ -12,6 +12,9 @@
 PROJECT_LOCALE <- "en_US.UTF-8"
 for (locale_category in c("LC_CTYPE", "LC_COLLATE")) {
     if (!nzchar(suppressWarnings(Sys.setlocale(locale_category, PROJECT_LOCALE)))) {
+        # R cuts error messages at 1000 bytes by default, which would drop the
+        # end of the instructions below.
+        options(warning.length = 8170L)
         stop(
             paste(
                 "",
