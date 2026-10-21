@@ -14,6 +14,7 @@ CONFIG_MODULES <- c(
     "project_paths.R",
     "data_processing_policy.R",
     "modeling_policy.R",
+    "rng_policy.R",
     "objective0_contracts.R",
     "objective1_contracts.R",
     "objective2_contracts.R",

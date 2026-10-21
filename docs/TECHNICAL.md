@@ -611,9 +611,10 @@ Private config modules under `scripts/config/`:
 - `project_paths.R`: project roots, runtime/export paths, publish artifact registry, and path helpers
 - `data_processing_policy.R`: source workbook filename, manual exclusions, date/time constants, and data-quality thresholds
 - `modeling_policy.R`: treatment/factor levels, confounders, stage exclusions, sparse-level policy, and shared model settings
+- `rng_policy.R`: fixed seeds for simulated Fisher p-values (`SIMULATED_FISHER_SEED`) and figure jitter (`FIGURE_JITTER_SEED`); applied through `with_local_seed()` and `add_p_seeded()` in `scripts/utils/rng_utilities.R`
 - `objective0_contracts.R`: Objective 0 structural requirements, derived-output manifest, and centrally enforced downstream input contract for Objectives 1-4
 - `objective1_contracts.R`: Objective 1 population fingerprints, propensity-overlap settings, subgroup policy, and subgroup outcome contracts
-- `objective2_contracts.R`: Objective 2 toxicity source-to-burden mapping and reproducibility seed
+- `objective2_contracts.R`: Objective 2 toxicity source-to-burden mapping
 - `objective3_contracts.R`: Objective 3 PFS-2 derivation contract and PFS-2 feasibility/censoring thresholds
 - `objective4_policy.R`: Objective 4 GEP settings, availability groups and their source labels, and biopsy-timing windows
 - `objective4_contracts.R`: Objective 4 imported-probability and horizon-field derivation contract

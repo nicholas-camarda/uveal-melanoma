@@ -754,7 +754,7 @@ build_merged_baseline_cohort_table <- function(data, dataset_name = NULL) {
                 }
 
                 cohort_table %>%
-                    add_p(
+                    add_p_seeded(
                         include = any_of(testable_vars),
                         test = list(all_categorical() ~ "fisher.test"),
                         test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
@@ -1299,7 +1299,7 @@ merge_recurrence_metastatic_progression_tables <- function(full_cohort_data, res
                     )
                 ) %>%
                 add_overall() %>%
-                add_p(
+                add_p_seeded(
                     test = list(all_categorical() ~ "fisher.test"),
                     test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                 ) %>%
@@ -1332,7 +1332,7 @@ merge_recurrence_metastatic_progression_tables <- function(full_cohort_data, res
                     )
                 ) %>%
                 add_overall() %>%
-                add_p(
+                add_p_seeded(
                     test = list(all_categorical() ~ "fisher.test"),
                     test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                 ) %>%
@@ -1568,7 +1568,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                             digits = list(all_continuous() ~ 1, all_categorical() ~ 1)
                         ) %>%
                         add_overall() %>%
-                        add_p(
+                        add_p_seeded(
                             test = list(
                                 all_continuous() ~ "wilcox.test",
                                 all_categorical() ~ "fisher.test"
@@ -1648,7 +1648,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                                 label = list(vision_line_change_category ~ "Snellen Line Change Integer Distribution")
                             ) %>%
                             add_overall() %>%
-                            add_p(
+                            add_p_seeded(
                                 test = list(all_categorical() ~ "fisher.test"),
                                 test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                             ) %>%
@@ -1683,7 +1683,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                                 label = list(vision_line_change_bucket ~ "Snellen Line Change Distribution")
                             ) %>%
                             add_overall() %>%
-                            add_p(
+                            add_p_seeded(
                                 test = list(all_categorical() ~ "fisher.test"),
                                 test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                             ) %>%

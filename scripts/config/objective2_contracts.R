@@ -11,7 +11,3 @@ OBJECTIVE2_TOXICITY_ENDPOINT_MAP <- tibble::tribble(
     "nvg", "nvg_burden_event", "Neovascular Glaucoma",
     "srd", "srd_burden_event", "Serous Retinal Detachment"
 )
-
-# Objective 2 simulated Fisher p-values use a local seed so displayed
-# descriptive p-values are reproducible without perturbing unrelated RNG state.
-OBJECTIVE2_SIMULATED_FISHER_SEED <- 20260422L

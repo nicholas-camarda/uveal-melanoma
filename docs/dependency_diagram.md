@@ -152,6 +152,7 @@ flowchart LR
 - `publish_outputs.R`
 - `reporting`
 - `rmst_visualization.R`
+- `rng_utilities.R`
 - `scripts`
 - `study_doc_generators.R`
 - `subgroup`

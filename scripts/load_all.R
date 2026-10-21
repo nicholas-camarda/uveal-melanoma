@@ -103,6 +103,7 @@ load_project_package("glmnet") # Penalized generalized linear models for explora
 
 # Source the split configuration and utility files
 source(here("scripts", "utils", "config_constants.R"))
+source(here("scripts", "utils", "rng_utilities.R"))
 source(here("scripts", "tools", "factor_level_audit.R"))
 source(here("scripts", "utils", "output_utilities.R"))
 source(here("scripts", "utils", "markdown_utilities.R"))
