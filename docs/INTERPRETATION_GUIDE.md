@@ -966,7 +966,7 @@ After interpreting results:
 
 **Common Issues:**
 - Check logs in `logs/txt/` for error messages
-- Review diagnostics workbooks (`*_diagnostics.xlsx`)
+- Review diagnostics workbooks (`*_diagnostics.xlsx`); the sheets and how to read them are in [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#model-diagnostics-workbooks-objectives-1-3)
 - Verify input data quality
 - Confirm adequate sample sizes and event counts
 

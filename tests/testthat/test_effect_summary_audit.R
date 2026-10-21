@@ -89,15 +89,12 @@ test_that("effect-summary audit flags Cox sample-size and missing-adjustment iss
     writexl::write_xlsx(effect_summary_rows, effect_summary_path)
     writexl::write_xlsx(
         list(
-            Model_summary = tibble::tibble(
-                analysis_type = "unified_Metastasis-Free Survival Probability",
-                outcome = "mets_event",
-                n_total = 20,
-                n_events = 5,
-                n_outcome_levels = NA_real_,
-                model_fitted = TRUE,
-                confounders_used = "age_at_diagnosis_general_pop_median, sex, location",
-                notes = "Unit test diagnostics"
+            Specification_Coding = tibble::tibble(
+                section = "Analysis", item = c("Dataset", "Analysis"),
+                value = c("unit_test_dataset", "Metastasis-Free Survival Probability_cox")
+            ),
+            Denominators_Flow = tibble::tibble(
+                stage = c("Fitted model-frame rows", "Events in the fitted model"), n = c(20, 5)
             )
         ),
         diagnostics_path
@@ -110,6 +107,23 @@ test_that("effect-summary audit flags Cox sample-size and missing-adjustment iss
     expect_true("cox_n_patients_misreported" %in% findings$issue_type)
     expect_true("adjusted_model_missing_covariates" %in% findings$issue_type)
     expect_true("adjusted_matches_unadjusted_without_covariates" %in% findings$issue_type)
+})
+
+test_that("the audit reads a skipped-model workbook as having no counts and stops on a reshaped one", {
+    audit_dir <- withr::local_tempdir()
+    effect_summary_path <- file.path(audit_dir, "unit_effect_summary.xlsx")
+    diagnostics_path <- file.path(audit_dir, "unit_cox_diagnostics.xlsx")
+
+    writexl::write_xlsx(
+        list(Specification_Coding = tibble::tibble(
+            section = "Analysis", item = c("Dataset", "Analysis", "Status"), value = c("d", "unit_cox", "skipped")
+        )),
+        diagnostics_path
+    )
+    expect_equal(nrow(extract_effect_summary_diagnostics_metadata(effect_summary_path)), 0L)
+
+    writexl::write_xlsx(list(Model_summary = tibble::tibble(n_total = 1)), diagnostics_path)
+    expect_error(extract_effect_summary_diagnostics_metadata(effect_summary_path))
 })
 
 test_that("create_effect_summary_rows expands zero-length metadata safely", {

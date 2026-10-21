@@ -88,7 +88,7 @@ test_that("PFS-2 insufficient-event skips retain txt notes and add structured sk
   expect_true(length(ph_skipped_files) > 0)
 
   skip_sheets <- readxl::excel_sheets(file.path(output_dirs$obj3_pfs2_cox, "test_pfs2_analysis_diagnostics.xlsx"))
-  expect_true(all(c("Skip_summary", "Narrative_summary", "Event_support") %in% skip_sheets))
+  expect_true(all(c("Checks", "Warnings_Limitations", "Term_support", "Record_Issues") %in% skip_sheets))
 
   skip_html <- paste(
     readLines(file.path(output_dirs$obj3_pfs2_cox, "test_pfs2_analysis_SKIPPED.html"), warn = FALSE),
@@ -137,7 +137,7 @@ test_that("PFS-2 precheck requires the configured minimum analyzable patient cou
   expect_true(file.exists(file.path(output_dirs$obj3_pfs2_cox, "test_pfs2_analysis_diagnostics.xlsx")))
 
   skip_sheets <- readxl::excel_sheets(file.path(output_dirs$obj3_pfs2_cox, "test_pfs2_analysis_diagnostics.xlsx"))
-  expect_true(all(c("Skip_summary", "Narrative_summary", "Event_support", "Model_context") %in% skip_sheets))
+  expect_true(all(c("Specification_Coding", "Checks", "Warnings_Limitations", "Term_support", "Record_Issues") %in% skip_sheets))
 })
 
 test_that("PFS-2 derivation censors death before second recurrence", {
@@ -287,13 +287,13 @@ test_that("PH diagnostics are skipped below the configured event floor", {
   expect_true(file.exists(file.path(test_output_dir, "unit_proportional_hazards_diagnostics_diagnostics.xlsx")))
   expect_false(file.exists(file.path(test_output_dir, "unit_proportional_hazards_tests.xlsx")))
 
-  skip_summary <- readxl::read_xlsx(
+  flow <- readxl::read_xlsx(
     file.path(test_output_dir, "unit_proportional_hazards_diagnostics_diagnostics.xlsx"),
-    sheet = "Skip_summary"
+    sheet = "Denominators_Flow"
   )
-  expect_true(all(c("input_n", "fitted_n") %in% skip_summary$metric))
-  expect_equal(skip_summary$value[skip_summary$metric == "input_n"], "10")
-  expect_equal(skip_summary$value[skip_summary$metric == "fitted_n"], "10")
+  expect_true(all(c("input n", "fitted n") %in% flow$stage))
+  expect_equal(flow$n[flow$stage == "input n"], 10)
+  expect_equal(flow$n[flow$stage == "fitted n"], 10)
 })
 
 test_that("successful PH diagnostics report input and fitted N", {

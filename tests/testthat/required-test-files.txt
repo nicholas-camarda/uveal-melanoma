@@ -17,6 +17,7 @@ test_gep_group_classification.R
 test_gep_no_gep_analysis.R
 test_integration_routing.R
 test_main_execution_clean_start.R
+test_model_diagnostics_workbooks.R
 test_model_utilities.R
 test_objective0_data_processing_portable.R
 test_objective0_consolidation_contract.R

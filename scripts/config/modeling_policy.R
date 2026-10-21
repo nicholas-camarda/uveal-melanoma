@@ -75,6 +75,44 @@ confounders <- c(
 # preserving the confounding adjustment for stages with adequate sample sizes.
 STAGES_TO_EXCLUDE_FROM_MODIFIED <- c("3B", "3C", "4")
 
+# Plain-language method and effect-measure reading for the model diagnostics workbooks,
+# keyed by the type returned by detect_model_type(). Logistic and ordinal models both
+# report an odds ratio, so the reading is keyed by model type, not by effect measure.
+MODEL_EFFECT_READING <- list(
+    cox = list(
+        method = "Cox proportional hazards regression",
+        measure = "HR",
+        reading = "A hazard ratio above 1 means a higher hazard than the reference level (or per one-unit increase for a continuous variable); below 1 means a lower hazard."
+    ),
+    logistic = list(
+        method = "Logistic regression",
+        measure = "OR",
+        reading = "An odds ratio above 1 means higher odds of the outcome than the reference level (or per one-unit increase for a continuous variable); below 1 means lower odds."
+    ),
+    linear = list(
+        method = "Linear regression",
+        measure = "MD",
+        reading = "A mean difference is in the units of the outcome; a positive value means a higher mean than the reference level (or per one-unit increase for a continuous variable)."
+    ),
+    ordinal = list(
+        method = "Proportional-odds ordinal logistic regression",
+        measure = "OR",
+        reading = "A cumulative odds ratio above 1 means higher odds of a higher outcome category than the reference level (or per one-unit increase for a continuous variable)."
+    )
+)
+
+# Skip-summary metrics, by where they belong in the workbook. An unknown metric stops the
+# build so a new metric must be placed deliberately rather than copied into the wrong sheet.
+SKIPPED_MODEL_COUNT_METRICS <- c(
+    "input_n", "fitted_n", "modeled_n", "patients_in_model", "modeled_events", "modeled_non_events",
+    "events_observed", "total_events", "censored_n", "censoring_percent"
+)
+SKIPPED_MODEL_CHECK_METRICS <- c(
+    "minimum_required_events", "minimum_events_required", "events_shortfall", "distinct_treatment_groups",
+    "sparse_exclusions", "separation_risk_levels", "error", "recommendation"
+)
+SKIPPED_MODEL_CONTEXT_METRICS <- c("median_follow_up_months", "model_type", "status")
+
 # Centralized model-layer level exclusions for sparse-factor handling
 # These exclusions are applied only inside model-specific analysis copies.
 MODELING_LEVEL_EXCLUSIONS <- list(

@@ -718,6 +718,21 @@ Each cohort's analysis writes two workbooks. The **primary workbook** holds the 
 
 A check that cannot be run is recorded as "not assessed" with its reason, so it never appears to have passed.
 
+#### Model diagnostics workbooks (Objectives 1-3)
+
+Every adjusted model has a diagnostics workbook next to its principal table. The workbooks use the same sheets as above (`Specification_Coding`, `Denominators_Flow`, `Checks`, plus `Term_support` for the support behind each term and `Record_Issues`; skipped models add `Warnings_Limitations`). Estimates, intervals and p-values appear only in the principal table.
+
+**How to read it.**
+1. `Specification_Coding` says what was fitted and what a ratio means; the reference level of each categorical variable is the comparison group.
+2. `Denominators_Flow` gives the patients entering the model, the rows lost before the fit, the rows lost to missing data, and the events.
+3. `Checks` flags what could change the reading: a model that did not converge, estimates suppressed from the principal table because they were extreme or not estimable, a variable with no variation, missing data, and the events per estimated coefficient.
+4. `Term_support` shows how many patients and events sit behind each level; a level with few patients or no events explains an unstable or suppressed estimate.
+5. `Record_Issues` lists each patient left out, with the step and the field.
+
+**Worked example (generic).** A Cox model has 40 events and 4 estimated coefficients, so `Checks` reports 10.0 events per coefficient, at the threshold of 10 and not flagged; with 30 events it would read 7.5 and be flagged "concern", meaning the estimates may be unstable even though the model converged. If `Denominators_Flow` shows 3 rows removed before the fit, `Record_Issues` lists exactly 3 distinct patients with the factor level that was too sparse; a different number would stop the run.
+
+**How it could fail.** Events per coefficient counts events for Cox models and the smaller of events and non-events for logistic models, so it can still look adequate when a single level carries all the events; `Term_support` is where that shows.
+
 ---
 
 ## Statistical Metric Categorization

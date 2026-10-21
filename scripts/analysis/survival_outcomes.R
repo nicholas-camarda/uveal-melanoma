@@ -880,6 +880,7 @@ build_survival_skip_diagnostics <- function(data,
             median_follow_up_months = median_follow_up
         )),
         sparse_level_diagnostics = sparse_level_diagnostics,
+        prefit_records = filter_stats$removed_records,
         event_support = build_level_support_tab(data, variables, outcome_var = event_var),
         model_context = build_model_context_tab(list(
             event_var = event_var,
@@ -1367,8 +1368,13 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
     km_data <- fix_event_data %>%
         dplyr::select(all_of(c(time_var, event_var, plot_group_var)))
 
+    # The patient identifier travels with the model data so every row the sparse-level
+    # screen or the model fit removes can be listed by id in the diagnostics workbook.
     model_data <- fix_event_data %>%
-        dplyr::select(all_of(c(time_var, event_var, model_group_var, confounders_to_use)))
+        dplyr::select(
+            dplyr::any_of(pick_sparse_level_id_col(fix_event_data) %||% character()),
+            all_of(c(time_var, event_var, model_group_var, confounders_to_use))
+        )
 
     if (nrow(km_data) == 0 || length(unique(stats::na.omit(km_data[[plot_group_var]]))) < 2) {
         logger::log_warn(formatted(
@@ -2162,30 +2168,27 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
     cox_analysis_name <- paste0(ylab, "_cox")
     if (cox_ready) {
         logger::log_info(sprintf("DEBUG: About to call generate_regression_table for %s", paste0(ylab, "_cox")))
-        cox_result <- tryCatch({
-            cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
-            
-            generate_regression_table(
-                data = cox_data,
-                outcome_var = event_var,
-                predictor_vars = model_group_var,
-                confounders = confounders_to_use,
-                model_type = "cox",
-                effect_measure = "HR",
-                analysis_name = cox_analysis_name,
-                dataset_name = dataset_name,
-                output_dir = cox_dir,
-                prefix = prefix,
-                time_var = time_var,
-                event_var = event_var,
-                treatment_var = model_group_var,
-                sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
-                filter_stats = cox_exclusion_result$filter_stats
-            )
-        }, error = function(e) {
-            logger::log_error(sprintf("ERROR in generate_regression_table: %s", e$message))
-            return(NULL)
-        })
+        cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
+        # A fitting or writing error is not caught here: a failed analysis fails the run.
+        # Models that cannot be fitted for data reasons are skipped inside the shared
+        # regression layer, which writes the skipped-model diagnostics.
+        cox_result <- generate_regression_table(
+            data = cox_data,
+            outcome_var = event_var,
+            predictor_vars = model_group_var,
+            confounders = confounders_to_use,
+            model_type = "cox",
+            effect_measure = "HR",
+            analysis_name = cox_analysis_name,
+            dataset_name = dataset_name,
+            output_dir = cox_dir,
+            prefix = prefix,
+            time_var = time_var,
+            event_var = event_var,
+            treatment_var = model_group_var,
+            sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
+            filter_stats = cox_exclusion_result$filter_stats
+        )
     } else {
         cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
         diagnostics_stub <- build_survival_skip_diagnostics(
@@ -2209,43 +2212,6 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
             sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
             modeled_n = nrow(cox_data),
             status = "skipped",
-            time_var = time_var
-        )
-        save_skipped_model_outputs(
-            analysis_name = cox_analysis_name,
-            dataset_name = dataset_name %||% "unspecified_dataset",
-            output_dir = cox_dir,
-            prefix = prefix %||% "",
-            reason = diagnostics_stub$reason,
-            diagnostics = diagnostics_stub
-        )
-        cox_result <- list(
-            model = NULL,
-            table = NULL,
-            diagnostics = diagnostics_stub
-        )
-    }
-
-    if (is.null(cox_result)) {
-        cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
-        diagnostics_stub <- build_survival_skip_diagnostics(
-            data = cox_data,
-            event_var = event_var,
-            variables = survival_variables,
-            analysis_name = cox_analysis_name,
-            dataset_name = dataset_name %||% "unspecified_dataset",
-            reason = "Cox model fitting failed before a usable output could be generated.",
-            narrative_lines = c(
-                sprintf(
-                    "Cox fitting was attempted for `%s`, but the shared regression layer returned no result.",
-                    cox_analysis_name
-                ),
-                "Check the logs for the underlying fitting error or numerical failure."
-            ),
-            filter_stats = cox_exclusion_result$filter_stats,
-            sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
-            modeled_n = nrow(cox_data),
-            status = "unavailable",
             time_var = time_var
         )
         save_skipped_model_outputs(

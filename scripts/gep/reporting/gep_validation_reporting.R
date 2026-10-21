@@ -171,15 +171,6 @@ build_gep_validation_checks <- function(results) {
     describe_check_reasons(dplyr::bind_rows(rows))
 }
 
-#' Keep the reason text only for checks that raise a concern or were not assessed
-#'
-#' @param checks Data frame with `status` and `reason`.
-#' @return `checks` with `reason` set to "No issue found" where the status is `no concern`.
-describe_check_reasons <- function(checks) {
-    checks$reason <- ifelse(checks$status == "no concern", "No issue found", checks$reason)
-    checks
-}
-
 #' Describe the methods behind each reported quantity
 #'
 #' @param horizon_months Numeric horizon in months.

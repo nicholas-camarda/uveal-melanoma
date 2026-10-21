@@ -92,7 +92,58 @@ summarize_sparse_factor_levels <- function(values,
     )
 }
 
+#' Build the table of patients left out of a model, one row per patient and issue
+#'
+#' The shared shape behind the `Record_Issues` sheet of every model diagnostics
+#' workbook: the patient key, the step that removed the patient, the reason, the
+#' field and its current value. Zero rows keep the columns.
+#'
+#' @param record_key Character vector of patient identifiers.
+#' @param key_source Character scalar naming the identifier column.
+#' @param step Character scalar or vector; one of the `MODEL_RECORD_STEP_*` constants.
+#' @param reason Character scalar or vector explaining the exclusion.
+#' @param field Character scalar or vector naming the variable behind the exclusion.
+#' @param current_value Character scalar or vector with the value of `field`.
+#' @return Data frame with columns `record_key`, `key_source`, `step`, `reason`,
+#'   `field` and `current_value`.
+build_model_record_table <- function(record_key = character(),
+                                     key_source = character(),
+                                     step = character(),
+                                     reason = character(),
+                                     field = character(),
+                                     current_value = character()) {
+    n_records <- length(record_key)
+    data.frame(
+        record_key = as.character(record_key),
+        key_source = rep_len(as.character(key_source), n_records),
+        step = rep_len(as.character(step), n_records),
+        reason = rep_len(as.character(reason), n_records),
+        field = rep_len(as.character(field), n_records),
+        current_value = rep_len(as.character(current_value), n_records),
+        stringsAsFactors = FALSE
+    )
+}
+
 #' Apply sparse-level exclusions to a model-specific analysis copy
+#'
+#' Removes rows whose level of a categorical model variable is sparse (fewer than
+#' `min_level_count` observations) or explicitly excluded, and records every removed
+#' patient. A removed row must be traceable, so the function stops when it would
+#' remove rows from data that has no usable patient identifier.
+#'
+#' @param data Data frame for one model.
+#' @param variables Character vector of variables to screen; `NULL` screens every
+#'   factor and character column.
+#' @param analysis_name Character scalar naming the analysis in the diagnostics.
+#' @param min_level_count Minimum observations required to keep a level.
+#' @param id_col Name of the patient identifier column; `NULL` picks one with
+#'   `pick_sparse_level_id_col()`.
+#' @param level_exclusions Named list of levels excluded outright, by variable.
+#' @return List with `data` (rows kept), `sparse_level_diagnostics` (one row per
+#'   excluded level, with the comma-joined `row_ids`), `variable_screening`,
+#'   `removed_row_indices`, `removed_row_ids`, `removed_row_count` and `filter_stats`;
+#'   `filter_stats$removed_records` lists each removed patient and level
+#'   (see `build_model_record_table()`).
 apply_sparse_level_exclusions <- function(data,
                                           variables = NULL,
                                           analysis_name = "analysis",
@@ -123,7 +174,8 @@ apply_sparse_level_exclusions <- function(data,
                 model_n = initial_row_count,
                 removed_n = 0L,
                 removed_pct = 0,
-                removal_reason = "No sparse-level exclusions applied"
+                removal_reason = "No sparse-level exclusions applied",
+                removed_records = build_model_record_table()
             )
         ))
     }
@@ -131,6 +183,7 @@ apply_sparse_level_exclusions <- function(data,
     removal_mask <- rep(FALSE, nrow(data))
     diagnostics_rows <- list()
     screening_rows <- list()
+    record_rows <- list()
     exclusions_by_variable <- level_exclusions %||% list()
 
     for (var in variables) {
@@ -180,10 +233,20 @@ apply_sparse_level_exclusions <- function(data,
             level_count <- sparse_summary$counts$observed_n[
                 match(excluded_level, sparse_summary$counts$level)
             ]
-            row_ids <- if (!is.null(id_col) && id_col %in% names(data)) {
-                as.character(data[[id_col]][level_mask])
-            } else {
-                character(0)
+            # A removed patient must be listed by id; an unidentifiable exclusion would
+            # leave the diagnostics unable to account for the patient.
+            if (is.null(id_col) || !id_col %in% names(data)) {
+                stop(sprintf(
+                    "Sparse-level exclusion for `%s` in %s would remove rows from data without a patient identifier column.",
+                    var, analysis_name
+                ), call. = FALSE)
+            }
+            row_ids <- as.character(data[[id_col]][level_mask])
+            if (anyNA(row_ids)) {
+                stop(sprintf(
+                    "Sparse-level exclusion for `%s` in %s would remove rows with a missing patient identifier.",
+                    var, analysis_name
+                ), call. = FALSE)
             }
 
             n_plaque <- if ("treatment_group" %in% names(data)) {
@@ -196,6 +259,20 @@ apply_sparse_level_exclusions <- function(data,
             } else {
                 NA_integer_
             }
+
+            level_reason <- if (excluded_level %in% sparse_summary$explicit_exclusions) {
+                "Level excluded from the model by configuration"
+            } else {
+                sprintf(
+                    "Level has %d observation(s), below the minimum of %d%s",
+                    as.integer(level_count %||% 0L), as.integer(min_level_count),
+                    if (is.na(n_plaque)) "" else sprintf(" (PBT %d, GKSRS %d)", as.integer(n_plaque), as.integer(n_gksrs))
+                )
+            }
+            record_rows[[length(record_rows) + 1L]] <- build_model_record_table(
+                record_key = row_ids, key_source = id_col, step = MODEL_RECORD_STEP_SPARSE_LEVEL,
+                reason = level_reason, field = var, current_value = excluded_level
+            )
 
             diagnostics_rows[[length(diagnostics_rows) + 1L]] <- tibble::tibble(
                 analysis_name = analysis_name,
@@ -241,7 +318,8 @@ apply_sparse_level_exclusions <- function(data,
         model_n = nrow(filtered_data),
         removed_n = length(removed_indices),
         removed_pct = if (initial_row_count > 0) round(length(removed_indices) / initial_row_count * 100, 1) else 0,
-        removal_reason = "Excluded sparse categorical levels before modeling"
+        removal_reason = "Excluded sparse categorical levels before modeling",
+        removed_records = dplyr::bind_rows(c(list(build_model_record_table()), record_rows))
     )
 
     list(
@@ -253,6 +331,49 @@ apply_sparse_level_exclusions <- function(data,
         removed_row_count = length(removed_indices),
         filter_stats = filter_stats
     )
+}
+
+#' Record the patients a pre-fit missing-data filter removed
+#'
+#' Several analyses drop rows with a missing outcome or covariate before the model is
+#' fitted. Those rows are not sparse-level exclusions, so they are listed here, one row
+#' per patient, with the variables that were missing. The function checks that the
+#' rows it lists are exactly the rows the caller's filter removed.
+#'
+#' @param filter_stats List from `apply_sparse_level_exclusions()` holding `removed_records`.
+#' @param data_before Data frame before the filter.
+#' @param data_after Data frame after the filter (rows with no missing `columns`).
+#' @param columns Character vector of variables the filter required to be non-missing.
+#' @param id_col Name of the patient identifier column in `data_before`.
+#' @param reason Character scalar explaining the filter.
+#' @return `filter_stats` with the removed patients appended to `removed_records`
+#'   (step `MODEL_RECORD_STEP_PREFIT_FILTER`); the counts in `filter_stats` are left to the caller.
+append_prefit_filter_records <- function(filter_stats, data_before, data_after, columns, id_col, reason) {
+    keep <- stats::complete.cases(as.data.frame(data_before)[, columns, drop = FALSE])
+    if (sum(!keep) != nrow(data_before) - nrow(data_after)) {
+        stop(sprintf(
+            "The pre-fit filter on %s removed %d row(s) but %d were listed.",
+            paste(columns, collapse = ", "), nrow(data_before) - nrow(data_after), sum(!keep)
+        ), call. = FALSE)
+    }
+    if (!any(!keep)) {
+        return(filter_stats)
+    }
+    if (is.null(id_col) || !id_col %in% names(data_before) || anyNA(data_before[[id_col]][!keep])) {
+        stop("A pre-fit filter removed rows without a usable patient identifier.", call. = FALSE)
+    }
+    removed <- as.data.frame(data_before)[!keep, , drop = FALSE]
+    missing_fields <- vapply(seq_len(nrow(removed)), function(i) {
+        paste(columns[is.na(unlist(removed[i, columns, drop = FALSE]))], collapse = ", ")
+    }, character(1))
+    filter_stats$removed_records <- dplyr::bind_rows(
+        filter_stats$removed_records,
+        build_model_record_table(
+            record_key = removed[[id_col]], key_source = id_col, step = MODEL_RECORD_STEP_PREFIT_FILTER,
+            reason = reason, field = missing_fields, current_value = "missing"
+        )
+    )
+    filter_stats
 }
 
 #' Generate valid confounders

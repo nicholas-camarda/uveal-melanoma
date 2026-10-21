@@ -166,6 +166,7 @@ generate_regression_table <- function(data, outcome_var, predictor_vars, confoun
                 fitted_n = NA_integer_
             )),
             sparse_level_diagnostics = create_sparse_level_diagnostics_tab(sparse_level_diagnostics),
+            prefit_records = filter_stats$removed_records,
             event_support = if (identical(model_type, "logistic") || identical(model_type, "cox")) {
                 build_level_support_tab(data, support_variables, outcome_var = outcome_var)
             } else {
@@ -311,6 +312,7 @@ generate_regression_table <- function(data, outcome_var, predictor_vars, confoun
                 fitted_n = if (is.null(model_fit)) NA_integer_ else get_model_fitted_n(model_fit)
             )),
             sparse_level_diagnostics = sparse_level_diagnostics,
+            prefit_records = filter_stats$removed_records,
             event_support = if (identical(model_type, "logistic") || identical(model_type, "cox")) {
                 build_level_support_tab(data, support_variables, outcome_var = outcome_var)
             } else {

@@ -151,11 +151,13 @@ build_model_sample_size_audit <- function(model_fit, data, filter_stats = NULL) 
 #'
 #' @param model_fit Fitted model object.
 #' @param data Data frame passed to model fitting.
-#' @return Data frame with source row indices and stable IDs when available.
+#' @return Data frame with source row indices and the patient identifier of each excluded row;
+#'   stops when rows were excluded but the data has no identifier column.
 build_model_excluded_rows_tab <- function(model_fit, data) {
     empty <- data.frame(
         row_index = integer(),
         row_id = character(),
+        key_source = character(),
         exclusion_stage = character(),
         reason = character(),
         missing_model_terms = character(),
@@ -176,26 +178,30 @@ build_model_excluded_rows_tab <- function(model_fit, data) {
         return(empty)
     }
 
-    id_candidates <- c("id", "patient_id", "record_id", "case_id", "study_id")
-    id_matches <- intersect(id_candidates, names(data))
-    id_col <- if (length(id_matches) > 0) id_matches[[1]] else NULL
-    row_ids <- if (!is.null(id_col)) as.character(data[[id_col]][excluded_indices]) else rep(NA_character_, length(excluded_indices))
-
-    missing_terms <- rep(NA_character_, length(excluded_indices))
-    candidate_frame <- tryCatch(
-        stats::model.frame(stats::formula(model_fit), data = data, na.action = stats::na.pass),
-        error = function(e) NULL
-    )
-    if (!is.null(candidate_frame) && nrow(candidate_frame) == nrow(data)) {
-        missing_terms <- vapply(excluded_indices, function(row_index) {
-            missing <- names(candidate_frame)[vapply(candidate_frame, function(column) is.na(column[[row_index]]), logical(1))]
-            if (length(missing) == 0) NA_character_ else paste(missing, collapse = ", ")
-        }, character(1))
+    id_col <- pick_sparse_level_id_col(data)
+    # A row the model fit dropped must be listed by id; without one the diagnostics could
+    # not account for the patient.
+    if (is.null(id_col)) {
+        stop("The model fit excluded rows from data without a patient identifier column.", call. = FALSE)
     }
+    row_ids <- as.character(data[[id_col]][excluded_indices])
+    if (anyNA(row_ids)) {
+        stop("The model fit excluded rows with a missing patient identifier.", call. = FALSE)
+    }
+
+    # The model variables that are missing in each dropped row. Variables the data frame does
+    # not hold (a Cox response built outside `data`) cannot be checked; a row with none of the
+    # checkable variables missing is reported as not determined rather than guessed.
+    model_variables <- intersect(all.vars(stats::formula(model_fit)), names(data))
+    missing_terms <- vapply(excluded_indices, function(row_index) {
+        missing <- model_variables[vapply(model_variables, function(variable) is.na(data[[variable]][[row_index]]), logical(1))]
+        if (length(missing) == 0) NA_character_ else paste(missing, collapse = ", ")
+    }, character(1))
 
     data.frame(
         row_index = excluded_indices,
         row_id = row_ids,
+        key_source = rep(id_col, length(excluded_indices)),
         exclusion_stage = rep("model_fit", length(excluded_indices)),
         reason = rep("Excluded by model complete-case handling", length(excluded_indices)),
         missing_model_terms = missing_terms,
@@ -334,9 +340,37 @@ create_comprehensive_diagnostics <- function(model_fit, data, outcome_var, predi
         analysis_name = analysis_name
     )
 
+    # Ingredients for the workbook sheets (the in-memory tables above stay as they are).
+    model_kind <- detect_model_type(model_fit)
+    variable_table <- build_model_variable_table(predictor_vars, confounders, data, extreme_diagnostics$reference_levels_info)
+    suppressed_terms_tab <- build_suppressed_terms_tab(extreme_diagnostics)
+    fitted_rows <- setdiff(seq_len(nrow(data)), model_excluded_rows_tab$row_index)
+    term_support_tab <- build_model_term_support_tab(
+        data = data[fitted_rows, , drop = FALSE],
+        variable_table = variable_table,
+        model_kind = model_kind,
+        outcome_var = outcome_var,
+        suppressed_terms = suppressed_terms_tab,
+        removed_variables = extreme_diagnostics$completely_removed_variables
+    )
+    model_spec <- list(
+        kind = model_kind,
+        effect_measure = effect_measure,
+        formula = paste(deparse(stats::formula(model_fit)), collapse = " "),
+        outcome_var = outcome_var,
+        dataset_name = dataset_name,
+        analysis_name = analysis_name,
+        n_parameters = sum(!is.na(coefs) & names(coefs) != "(Intercept)"),
+        variable_table = variable_table
+    )
+
     return(list(
+        model_spec = model_spec,
+        term_support = term_support_tab,
+        suppressed_terms = suppressed_terms_tab,
+        prefit_records = (filter_stats %||% list())$removed_records %||% build_model_record_table(),
         model_summary = model_summary_tab,
-        model_diagnostics_tab = model_diagnostics_tab,
+        model_diagnostics = model_diagnostics_tab,
         data_characteristics = data_characteristics_tab,
         sparse_level_diagnostics = sparse_level_diagnostics_tab,
         raw_model_output = raw_model_output_tab,
@@ -398,7 +432,7 @@ build_sample_size_summary_tab <- function(filter_stats, dataset_name, analysis_n
         if (!is.finite(complete_case_excluded_n)) {
             "Model complete-case exclusions could not be determined"
         } else if (isTRUE(complete_case_excluded_n > 0L)) {
-            "Model complete-case exclusions; see Model_excluded_rows"
+            "Model complete-case exclusions; see Record_Issues"
         } else {
             "No model complete-case exclusions"
         }
@@ -1492,5 +1526,521 @@ calculate_factor_label_pvalue <- function(model_fit, variable_name, data, outcom
             warning(sprintf("Unsupported model type '%s' for variable '%s'", model_type, variable_name))
             NA
         }
+    )
+}
+
+# =============================================================================
+# MODEL DIAGNOSTICS WORKBOOK SHEETS
+# =============================================================================
+# One sheet family for every fitted-model and skipped-model diagnostics workbook:
+# Specification_Coding, Denominators_Flow, Checks, Term_support, (Warnings_Limitations
+# for skipped models), Record_Issues. Each fact is written in exactly one sheet.
+
+#' Describe the model variables: role, type and reference level
+#'
+#' @param predictor_vars Character vector of predictor variables.
+#' @param confounders Character vector of confounder variables (may be `NULL`).
+#' @param data Data frame the model was fitted on; decides whether a variable is continuous.
+#' @param reference_levels_info Data frame with `variable` and `reference_level` from the
+#'   extreme-estimate step (`NULL` when unavailable).
+#' @return Data frame with `variable`, `role`, `type` (`categorical`/`continuous`) and
+#'   `reference_level` (blank for continuous variables).
+build_model_variable_table <- function(predictor_vars, confounders, data, reference_levels_info = NULL) {
+    variables <- unique(c(predictor_vars, confounders))
+    variables <- variables[variables %in% names(data)]
+    reference_for <- function(variable) {
+        if (is.null(reference_levels_info) || !variable %in% reference_levels_info$variable) {
+            return(NA_character_)
+        }
+        raw_level <- reference_levels_info$reference_level[match(variable, reference_levels_info$variable)]
+        if (raw_level %in% c("(continuous)", "(unknown)")) NA_character_ else sub(paste0("^", variable), "", raw_level)
+    }
+    is_continuous <- vapply(variables, function(variable) is.numeric(data[[variable]]), logical(1))
+    data.frame(
+        variable = variables,
+        role = ifelse(variables %in% predictor_vars, "Predictor", "Confounder"),
+        type = ifelse(is_continuous, "continuous", "categorical"),
+        reference_level = ifelse(is_continuous, NA_character_, vapply(variables, reference_for, character(1))),
+        stringsAsFactors = FALSE
+    )
+}
+
+#' List the terms the principal table suppressed, with the reason
+#'
+#' @param extreme_diagnostics List from `process_extreme_estimates()` (may be `NULL`).
+#' @return Data frame with `term` and `reason`; stops if the two lists differ in length.
+build_suppressed_terms_tab <- function(extreme_diagnostics = NULL) {
+    terms <- as.character(extreme_diagnostics$extreme_terms %||% character())
+    reasons <- as.character(extreme_diagnostics$exclusion_reasons %||% character())
+    if (length(terms) != length(reasons)) {
+        stop("Suppressed terms and their reasons are not aligned.", call. = FALSE)
+    }
+    data.frame(term = terms, reason = reasons, stringsAsFactors = FALSE)
+}
+
+#' Count patients, events and inclusion status for each model variable level
+#'
+#' @param data Data frame of the rows the model was fitted on.
+#' @param variable_table Output of `build_model_variable_table()`.
+#' @param model_kind Model type from `detect_model_type()`; events are counted for
+#'   Cox and logistic models only.
+#' @param outcome_var Name of the event or binary outcome column.
+#' @param suppressed_terms Output of `build_suppressed_terms_tab()`.
+#' @param removed_variables Character vector of variables dropped from the principal table.
+#' @return Data frame with `variable`, `level`, `n`, `events`, `non_events`,
+#'   `event_rate_percent`, `support_flag`, `is_reference`, `inclusion_status` and
+#'   `filtering_reason`. Continuous variables have one `Continuous` row.
+build_model_term_support_tab <- function(data, variable_table, model_kind, outcome_var,
+                                         suppressed_terms, removed_variables = NULL) {
+    columns <- c("variable", "level", "n", "events", "non_events", "event_rate_percent",
+                 "support_flag", "is_reference", "inclusion_status", "filtering_reason")
+    support <- build_level_support_tab(
+        data, variable_table$variable,
+        outcome_var = if (model_kind %in% c("cox", "logistic")) outcome_var else NULL
+    )
+    if (is.null(support) || nrow(support) == 0) {
+        return(stats::setNames(data.frame(matrix(ncol = length(columns), nrow = 0)), columns))
+    }
+    for (column in c("n_events", "n_non_events", "event_rate_percent")) {
+        if (!column %in% names(support)) {
+            support[[column]] <- NA_real_
+        }
+    }
+    type <- variable_table$type[match(support$variable, variable_table$variable)]
+    reference <- variable_table$reference_level[match(support$variable, variable_table$variable)]
+    term <- ifelse(type == "continuous", support$variable, paste0(support$variable, support$level))
+    suppressed_reason <- suppressed_terms$reason[match(term, suppressed_terms$term)]
+    is_level_row <- support$level != "Missing"
+    status <- ifelse(
+        !is_level_row, "",
+        ifelse(!is.na(suppressed_reason), "Suppressed from the principal table",
+            ifelse(support$variable %in% removed_variables, "Variable removed from the principal table", "Included")
+        )
+    )
+    data.frame(
+        variable = support$variable,
+        level = support$level,
+        n = support$n_total,
+        events = support$n_events,
+        non_events = support$n_non_events,
+        event_rate_percent = support$event_rate_percent,
+        support_flag = if ("support_flag" %in% names(support)) support$support_flag else NA_character_,
+        is_reference = !is.na(reference) & support$level == reference,
+        inclusion_status = status,
+        filtering_reason = ifelse(is.na(suppressed_reason), "", suppressed_reason),
+        stringsAsFactors = FALSE
+    )[, columns]
+}
+
+#' Build one row of the Checks sheet
+#'
+#' @param check Character scalar naming the check.
+#' @param scope Character scalar: what the check applies to.
+#' @param result Value shown as the result.
+#' @param status One of `no concern`, `concern`, `not assessed`.
+#' @param reason Character scalar explaining a concern or a check that was not assessed.
+#' @return One-row data frame with `check`, `scope`, `result`, `status`, `reason`.
+model_check_row <- function(check, scope, result, status, reason) {
+    if (!status %in% c("no concern", "concern", "not assessed")) {
+        stop(sprintf("Unknown check status `%s`.", status), call. = FALSE)
+    }
+    data.frame(
+        check = check, scope = scope, result = as.character(result), status = status, reason = reason,
+        stringsAsFactors = FALSE
+    )
+}
+
+#' Check that the listed patients match the exclusion counts
+#'
+#' @param records Data frame from `build_model_record_table()`.
+#' @param prefit_excluded_n Rows removed before the fit (`NA` when unknown).
+#' @param complete_case_excluded_n Rows dropped by the model fit (`NA` when unknown).
+#' @param analysis_name Character scalar used in the error message.
+#' @return `NULL`, invisibly; stops when the distinct patients listed per stage differ
+#'   from the count the workbook reports.
+reconcile_model_record_counts <- function(records, prefit_excluded_n, complete_case_excluded_n, analysis_name) {
+    prefit_steps <- c(MODEL_RECORD_STEP_SPARSE_LEVEL, MODEL_RECORD_STEP_PREFIT_FILTER)
+    listed_prefit <- length(unique(records$record_key[records$step %in% prefit_steps]))
+    listed_complete_case <- length(unique(records$record_key[records$step == MODEL_RECORD_STEP_COMPLETE_CASE]))
+    if (is.finite(prefit_excluded_n) && listed_prefit != prefit_excluded_n) {
+        stop(sprintf(
+            "%s: %d patient(s) were removed before the fit but %d are listed in Record_Issues.",
+            analysis_name, as.integer(prefit_excluded_n), listed_prefit
+        ), call. = FALSE)
+    }
+    if (is.finite(complete_case_excluded_n) && listed_complete_case != complete_case_excluded_n) {
+        stop(sprintf(
+            "%s: %d patient(s) were dropped by the model fit but %d are listed in Record_Issues.",
+            analysis_name, as.integer(complete_case_excluded_n), listed_complete_case
+        ), call. = FALSE)
+    }
+    invisible(NULL)
+}
+
+#' Build the Specification_Coding sheet of a fitted-model workbook
+#'
+#' @param diagnostics List from `create_comprehensive_diagnostics()`.
+#' @return Data frame with `section`, `item` and `value`: method, outcome, formula,
+#'   effect measure and how to read it, fit statistics, and each variable with its role,
+#'   type and reference level.
+build_model_specification_sheet <- function(diagnostics) {
+    spec <- diagnostics$model_spec
+    reading <- MODEL_EFFECT_READING[[spec$kind]]
+    if (is.null(reading)) {
+        stop(sprintf("No method description is configured for model type `%s`.", spec$kind), call. = FALSE)
+    }
+    fit <- diagnostics$model_diagnostics
+    variables <- spec$variable_table
+    variable_rows <- if (nrow(variables) == 0L) {
+        NULL
+    } else {
+        data.frame(
+            section = variables$role,
+            item = variables$variable,
+            value = ifelse(
+                variables$type == "continuous", "continuous (effect per one-unit increase)",
+                paste0("categorical; reference level: ", variables$reference_level)
+            ),
+            stringsAsFactors = FALSE
+        )
+    }
+    dplyr::bind_rows(
+        data.frame(
+            section = "Analysis",
+            item = c("Dataset", "Analysis"),
+            value = c(spec$dataset_name, spec$analysis_name),
+            stringsAsFactors = FALSE
+        ),
+        data.frame(
+            section = "Model",
+            item = c("Method", "Outcome", "Formula", "Effect measure", "How to read", "Estimated coefficients",
+                     "Log-likelihood", "AIC", "BIC"),
+            value = c(
+                reading$method, spec$outcome_var, spec$formula, spec$effect_measure, reading$reading,
+                spec$n_parameters, round(fit$log_likelihood, 2), round(fit$aic, 2), round(fit$bic, 2)
+            ),
+            stringsAsFactors = FALSE
+        ),
+        variable_rows
+    )
+}
+
+#' Build the Denominators_Flow sheet of a fitted-model workbook
+#'
+#' @param diagnostics List from `create_comprehensive_diagnostics()`.
+#' @return Data frame with `stage`, `n`, `excluded_from_previous_n`, `excluded_pct` and
+#'   `exclusion_reason`: the three stages, then the events (Cox, logistic) or outcome
+#'   levels (ordinal) in the fitted model. The counts appear only here.
+build_model_denominators_sheet <- function(diagnostics) {
+    stages <- diagnostics$sample_size_summary[, c("stage", "n", "excluded_from_previous_n", "excluded_pct", "exclusion_reason")]
+    summary_row <- diagnostics$model_summary
+    kind <- diagnostics$model_spec$kind
+    extra <- switch(
+        kind,
+        cox = data.frame(
+            stage = c("Events in the fitted model", "Censored in the fitted model"),
+            n = c(summary_row$n_events, summary_row$fitted_n - summary_row$n_events)
+        ),
+        logistic = data.frame(
+            stage = c("Events in the fitted model", "Non-events in the fitted model"),
+            n = c(summary_row$n_events, summary_row$fitted_n - summary_row$n_events)
+        ),
+        ordinal = data.frame(stage = "Outcome levels in the fitted model", n = summary_row$n_outcome_levels),
+        NULL
+    )
+    if (!is.null(extra)) {
+        extra$excluded_from_previous_n <- NA_integer_
+        extra$excluded_pct <- NA_real_
+        extra$exclusion_reason <- ""
+    }
+    dplyr::bind_rows(stages, extra)
+}
+
+#' Build the Checks sheet of a fitted-model workbook
+#'
+#' @param diagnostics List from `create_comprehensive_diagnostics()`.
+#' @return Data frame with `check`, `scope`, `result`, `status` and `reason` (see
+#'   `model_check_row()`); the reason reads "No issue found" when the status is `no concern`.
+build_model_checks_sheet <- function(diagnostics) {
+    spec <- diagnostics$model_spec
+    summary_row <- diagnostics$model_summary
+    filtering <- diagnostics$filtering_summary
+    suppressed <- diagnostics$suppressed_terms
+    removed_variables <- unique(diagnostics$term_support$variable[
+        diagnostics$term_support$inclusion_status == "Variable removed from the principal table"
+    ])
+
+    convergence <- if (spec$kind %in% c("logistic", "ordinal")) {
+        converged <- isTRUE(diagnostics$model_diagnostics$model_converged)
+        model_check_row(
+            "Model converged", "Model", if (converged) "converged" else "did not converge",
+            if (converged) "no concern" else "concern",
+            "The optimiser did not report convergence, so the estimates may be unreliable"
+        )
+    } else if (identical(spec$kind, "cox")) {
+        model_check_row(
+            "Model converged", "Model", "not recorded", "not assessed",
+            "The Cox fit does not record convergence in the model summary"
+        )
+    }
+
+    reconciliation <- summary_row$sample_size_reconciliation
+    reconciliation_check <- model_check_row(
+        "Sample sizes reconcile", "Model", reconciliation,
+        if (identical(reconciliation, "reconciled") && !identical(summary_row$prefit_filter_reconciliation, "mismatch")) {
+            "no concern"
+        } else if (identical(reconciliation, "not_fitted")) {
+            "not assessed"
+        } else {
+            "concern"
+        },
+        "The initial, pre-fit, complete-case and fitted counts do not add up; see Denominators_Flow"
+    )
+
+    suppressed_checks <- if (nrow(suppressed) == 0L) {
+        model_check_row(
+            "Estimates suppressed from the principal table", "All terms", "none", "no concern",
+            "An estimate that is extreme or not estimable is left out of the principal table"
+        )
+    } else {
+        dplyr::bind_rows(lapply(seq_len(nrow(suppressed)), function(i) {
+            model_check_row(
+                "Estimates suppressed from the principal table", suppressed$term[i], "suppressed", "concern",
+                suppressed$reason[i]
+            )
+        }))
+    }
+
+    removed_checks <- dplyr::bind_rows(lapply(removed_variables, function(variable) {
+        model_check_row(
+            "Variable kept in the principal table", variable, "removed", "concern",
+            "Every estimate of this variable was suppressed, so the variable is absent from the principal table"
+        )
+    }))
+
+    variation <- diagnostics$covariate_variation
+    variation_checks <- if (is.null(variation) || nrow(variation) == 0L) {
+        model_check_row(
+            "Covariates vary in the data", "All covariates", "all vary", "no concern",
+            "A covariate with no variation is dropped from the model"
+        )
+    } else {
+        dplyr::bind_rows(lapply(seq_len(nrow(variation)), function(i) {
+            model_check_row("Covariates vary in the data", variation$variable[i], "dropped", "concern", variation$reason[i])
+        }))
+    }
+
+    assumption <- diagnostics$assumption_status
+    assumption_check <- if (!is.null(assumption) && nrow(assumption) > 0L) {
+        model_check_row(
+            "Proportional-odds assumption", "Model", "not formally tested", "not assessed", assumption$implication[1]
+        )
+    }
+
+    missing_pct <- diagnostics$data_characteristics$missing_data_pct
+    missing_check <- model_check_row(
+        "Missing model-variable cells", "Model input rows", sprintf("%.1f%%", missing_pct),
+        if (isTRUE(missing_pct > 0)) "concern" else "no concern",
+        "Rows with a missing model variable are dropped by the fit; they are listed in Record_Issues"
+    )
+
+    events_check <- if (spec$kind %in% c("cox", "logistic") && spec$n_parameters > 0) {
+        events <- summary_row$n_events
+        limiting <- if (identical(spec$kind, "cox")) events else min(events, summary_row$fitted_n - events)
+        ratio <- limiting / spec$n_parameters
+        model_check_row(
+            "Events per estimated coefficient", "Model",
+            sprintf("%.1f (%d / %d)", ratio, as.integer(limiting), as.integer(spec$n_parameters)),
+            if (ratio >= MODEL_MIN_EVENTS_PER_PARAMETER) "no concern" else "concern",
+            sprintf(
+                "Fewer than %d %s per estimated coefficient makes the estimates unstable",
+                MODEL_MIN_EVENTS_PER_PARAMETER, if (identical(spec$kind, "cox")) "events" else "events or non-events"
+            )
+        )
+    }
+
+    checks <- dplyr::bind_rows(
+        convergence, reconciliation_check, suppressed_checks, removed_checks,
+        model_check_row(
+            "Principal table has reportable content", "Model", isTRUE(filtering$table_has_meaningful_content),
+            if (isTRUE(filtering$table_has_meaningful_content)) "no concern" else "concern",
+            "Every coefficient was suppressed or uninterpretable"
+        ),
+        model_check_row(
+            "Main predictor kept in the principal table", "Model", !isTRUE(filtering$main_predictor_filtered),
+            if (isTRUE(filtering$main_predictor_filtered)) "concern" else "no concern",
+            "The main predictor was suppressed because of separation or extreme estimates"
+        ),
+        model_check_row(
+            "Confidence intervals computed", "Model", !isTRUE(filtering$confint_error),
+            if (isTRUE(filtering$confint_error)) "concern" else "no concern",
+            "Confidence intervals could not be computed for the model"
+        ),
+        variation_checks, assumption_check, missing_check, events_check
+    )
+    describe_check_reasons(checks)
+}
+
+#' Build the Record_Issues sheet of a fitted-model workbook
+#'
+#' One row per patient and issue: the patients removed before the fit (sparse factor
+#' level, missing-data filters) and the patients the model fit dropped. The distinct
+#' patients per stage must equal the counts in the model summary, otherwise the run stops.
+#'
+#' @param diagnostics List from `create_comprehensive_diagnostics()`.
+#' @return Data frame with `record_key`, `key_source`, `step`, `reason`, `field`,
+#'   `current_value`.
+build_model_record_issues_sheet <- function(diagnostics) {
+    complete_case <- diagnostics$model_excluded_rows
+    complete_case_records <- if (is.null(complete_case) || nrow(complete_case) == 0L) {
+        build_model_record_table()
+    } else {
+        build_model_record_table(
+            record_key = complete_case$row_id, key_source = complete_case$key_source,
+            step = MODEL_RECORD_STEP_COMPLETE_CASE, reason = "A variable required by the model is missing",
+            field = ifelse(is.na(complete_case$missing_model_terms), "not determined", complete_case$missing_model_terms),
+            current_value = "missing"
+        )
+    }
+    records <- dplyr::bind_rows(diagnostics$prefit_records, complete_case_records)
+    summary_row <- diagnostics$model_summary
+    reconcile_model_record_counts(
+        records, summary_row$prefit_excluded_n, summary_row$complete_case_excluded_n,
+        diagnostics$model_spec$analysis_name
+    )
+    records
+}
+
+#' Build the sheets of a fitted-model diagnostics workbook
+#'
+#' @param diagnostics List from `create_comprehensive_diagnostics()`.
+#' @return Named list of data frames in sheet order: `Specification_Coding`,
+#'   `Denominators_Flow`, `Checks`, `Term_support`, `Record_Issues`.
+build_fitted_model_workbook_sheets <- function(diagnostics) {
+    list(
+        Specification_Coding = build_model_specification_sheet(diagnostics),
+        Denominators_Flow = build_model_denominators_sheet(diagnostics),
+        Checks = build_model_checks_sheet(diagnostics),
+        Term_support = diagnostics$term_support,
+        Record_Issues = build_model_record_issues_sheet(diagnostics)
+    )
+}
+
+#' Build the sheets of a skipped-model diagnostics workbook
+#'
+#' @param diagnostics List from `build_skip_report_diagnostics()`.
+#' @return Named list of data frames in sheet order: `Specification_Coding`,
+#'   `Denominators_Flow`, `Checks`, `Term_support`, `Warnings_Limitations`, `Record_Issues`.
+build_skipped_model_workbook_sheets <- function(diagnostics) {
+    skip_summary <- diagnostics$skip_summary
+    if (is.null(skip_summary)) {
+        skip_summary <- data.frame(metric = character(), value = character(), stringsAsFactors = FALSE)
+    }
+    unknown <- setdiff(
+        skip_summary$metric,
+        c(SKIPPED_MODEL_COUNT_METRICS, SKIPPED_MODEL_CHECK_METRICS, SKIPPED_MODEL_CONTEXT_METRICS)
+    )
+    if (length(unknown) > 0L) {
+        stop(sprintf("Unplaced skip-summary metric(s): %s", paste(unknown, collapse = ", ")), call. = FALSE)
+    }
+    metric_rows <- function(metrics) skip_summary[skip_summary$metric %in% metrics, , drop = FALSE]
+    label <- function(metric) gsub("_", " ", metric)
+
+    context <- diagnostics$model_context
+    context_rows <- if (is.null(context)) {
+        NULL
+    } else {
+        data.frame(section = "Model context", item = context$field, value = context$value, stringsAsFactors = FALSE)
+    }
+    extra_context <- metric_rows(SKIPPED_MODEL_CONTEXT_METRICS)
+    extra_context <- extra_context[!extra_context$metric %in% c("status", context$field), , drop = FALSE]
+    specification <- dplyr::bind_rows(
+        data.frame(
+            section = "Analysis",
+            item = c("Dataset", "Analysis", "Status"),
+            value = c(diagnostics$dataset_name, diagnostics$analysis_name, diagnostics$status),
+            stringsAsFactors = FALSE
+        ),
+        context_rows,
+        if (nrow(extra_context) > 0L) {
+            data.frame(section = "Model context", item = label(extra_context$metric), value = extra_context$value, stringsAsFactors = FALSE)
+        }
+    )
+    specification <- specification[!duplicated(specification[c("section", "item")]), , drop = FALSE]
+
+    stage_rows <- diagnostics$sample_size_summary
+    stage_rows <- if (is.null(stage_rows)) {
+        NULL
+    } else {
+        stage_rows[, c("stage", "n", "excluded_from_previous_n", "excluded_pct", "exclusion_reason")]
+    }
+    count_rows <- metric_rows(SKIPPED_MODEL_COUNT_METRICS)
+    count_rows <- count_rows[!count_rows$metric %in% c("input_n", "fitted_n") | is.null(stage_rows), , drop = FALSE]
+    flow <- dplyr::bind_rows(
+        stage_rows,
+        if (nrow(count_rows) > 0L) {
+            data.frame(
+                stage = label(count_rows$metric), n = suppressWarnings(as.numeric(count_rows$value)),
+                excluded_from_previous_n = NA_integer_, excluded_pct = NA_real_, exclusion_reason = "",
+                stringsAsFactors = FALSE
+            )
+        }
+    )
+    if (is.null(flow) || nrow(flow) == 0L) {
+        flow <- data.frame(
+            stage = character(), n = numeric(), excluded_from_previous_n = numeric(),
+            excluded_pct = numeric(), exclusion_reason = character(), stringsAsFactors = FALSE
+        )
+    }
+
+    check_rows <- metric_rows(SKIPPED_MODEL_CHECK_METRICS)
+    checks <- dplyr::bind_rows(
+        model_check_row("Model fitted", "Model", "not fitted", "concern", diagnostics$reason),
+        if (nrow(check_rows) > 0L) {
+            dplyr::bind_rows(lapply(seq_len(nrow(check_rows)), function(i) {
+                model_check_row(label(check_rows$metric[i]), "Model", check_rows$value[i], "concern", diagnostics$reason)
+            }))
+        }
+    )
+
+    support <- diagnostics$event_support %||% diagnostics$level_support
+    term_support <- if (is.null(support)) {
+        stats::setNames(
+            data.frame(matrix(ncol = 10, nrow = 0)),
+            c("variable", "level", "n", "events", "non_events", "event_rate_percent", "support_flag",
+              "is_reference", "inclusion_status", "filtering_reason")
+        )
+    } else {
+        for (column in c("n_events", "n_non_events", "event_rate_percent", "support_flag")) {
+            if (!column %in% names(support)) {
+                support[[column]] <- NA
+            }
+        }
+        data.frame(
+            variable = support$variable, level = support$level, n = support$n_total,
+            events = support$n_events, non_events = support$n_non_events,
+            event_rate_percent = support$event_rate_percent, support_flag = support$support_flag,
+            is_reference = NA, inclusion_status = "", filtering_reason = "", stringsAsFactors = FALSE
+        )
+    }
+
+    narrative <- diagnostics$narrative_summary
+    limitations <- if (is.null(narrative) || nrow(narrative) == 0L) {
+        data.frame(limitation = character(), detail = character(), stringsAsFactors = FALSE)
+    } else {
+        data.frame(limitation = "Why the model was not fit", detail = narrative$detail, stringsAsFactors = FALSE)
+    }
+
+    records <- diagnostics$prefit_records %||% build_model_record_table()
+    prefit_row <- if (is.null(diagnostics$sample_size_summary)) NA_real_ else diagnostics$sample_size_summary$excluded_from_previous_n[2]
+    reconcile_model_record_counts(records, prefit_row, NA_real_, diagnostics$analysis_name)
+
+    list(
+        Specification_Coding = specification,
+        Denominators_Flow = flow,
+        Checks = describe_check_reasons(checks),
+        Term_support = term_support,
+        Warnings_Limitations = limitations,
+        Record_Issues = records
     )
 }
