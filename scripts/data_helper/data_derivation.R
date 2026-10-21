@@ -299,11 +299,18 @@ create_derived_variables <- function(data) {
             ),
             tt_recurrence_months_analysis = tt_recurrence_months,
             tt_death_months_analysis = tt_death_months,
-            tt_pfs_months_analysis = pmin(
-                tt_recurrence_months_analysis,
-                tt_mets_months,
-                tt_death_months_analysis,
-                na.rm = FALSE
+            # Incident PFS is undefined for metastatic disease present on or before
+            # treatment, as for incident MFS: the metastasis is not an event after
+            # treatment, and counting it would add a 0-month event.
+            tt_pfs_months_analysis = if_else(
+                mets_at_or_before_treatment,
+                NA_real_,
+                pmin(
+                    tt_recurrence_months_analysis,
+                    tt_mets_months,
+                    tt_death_months_analysis,
+                    na.rm = FALSE
+                )
             ),
             # Tumor height change: Per project goals 1e
             # Formula: last_height - initial_tumor_height (or recurrence1_pretreatment_height - initial)
@@ -376,6 +383,7 @@ create_derived_variables <- function(data) {
                 TRUE ~ mss_event_type
             ),
             pfs_event = if_else(recurrence_event == 1 | mets_event == 1 | death_event == 1, 1, 0),
+            pfs_event_analysis = if_else(mets_at_or_before_treatment, NA_real_, pfs_event),
             pfs2_event = case_when(
                 pfs2_second_recurrence_observed ~ 1,
                 recurrence1 == "Y" & !is.na(recurrence1_treatment_date) ~ 0,

@@ -63,6 +63,7 @@ make_objective0_validation_dataset <- function() {
         mets_event_analysis = c(0L, 0L, 1L),
         death_event = c(0, 0, 1),
         pfs_event = c(0L, 1L, 1L),
+        pfs_event_analysis = c(0L, 1L, 1L),
         melanoma_death_event = c(0L, 0L, 1L),
         competing_death_event = c(0L, 0L, 0L),
         pfs2_event = c(NA_integer_, 0L, NA_integer_),
@@ -171,6 +172,7 @@ test_that("Objective 1 PFS invariant uses recurrence, metastasis, or death as fi
     pfs_contract_data$mets_event <- c(0L, 1L, 0L)
     pfs_contract_data$death_event <- c(0L, 0L, 1L)
     pfs_contract_data$pfs_event <- c(1L, 1L, 1L)
+    pfs_contract_data$pfs_event_analysis <- c(1L, 1L, 1L)
     pfs_contract_data$tt_pfs_months <- c(12, 10, 8)
     pfs_contract_data$tt_pfs_months_analysis <- pfs_contract_data$tt_pfs_months
 
@@ -186,6 +188,7 @@ test_that("Objective 1 PFS invariant uses recurrence, metastasis, or death as fi
     invalid_contract_data$tt_pfs_months[[2]] <- 18
     invalid_contract_data$tt_pfs_months_analysis[[2]] <- 18
     invalid_contract_data$pfs_event[[2]] <- 0L
+    invalid_contract_data$pfs_event_analysis[[2]] <- 0L
 
     invalid_result <- validate_objective1_endpoint_invariants(invalid_contract_data, "pfs_contract")
     expect_true(any(invalid_result$details$field_name == "tt_pfs_months"))
@@ -247,8 +250,9 @@ test_that("adjudicated baseline metastasis is informational and incomplete sourc
     baseline_mets_data$mets_event_analysis[1] <- NA_integer_
     baseline_mets_data$tt_mets_months_analysis[1] <- NA_real_
     baseline_mets_data$pfs_event[1] <- 1L
+    baseline_mets_data$pfs_event_analysis[1] <- NA_integer_
     baseline_mets_data$tt_pfs_months[1] <- 0
-    baseline_mets_data$tt_pfs_months_analysis[1] <- 0
+    baseline_mets_data$tt_pfs_months_analysis[1] <- NA_real_
     baseline_mets_data$metastasis_by_5yr[1] <- NA_integer_
     baseline_mets_data$mfs_event_type[1] <- NA_integer_
     baseline_mets_data$mfs_analysis_eligible[1] <- FALSE
@@ -583,6 +587,29 @@ test_that("Objective 0 validates Objective 2 toxicity endpoint burden fields", {
     expect_true(any(toxicity_findings$check_id == "objective2_srd_burden_event_matches_source" & toxicity_findings$status == "fail"))
 })
 
+test_that("Objective 1 incident PFS fields must exclude baseline metastasis", {
+    baseline_pfs_data <- make_objective0_validation_dataset()
+    baseline_pfs_data$mets_progression[1] <- "Yes"
+    baseline_pfs_data$mets_progression_date[1] <- baseline_pfs_data$treatment_date[1]
+    baseline_pfs_data$mets_event[1] <- 1L
+    baseline_pfs_data$pfs_event[1] <- 1L
+    baseline_pfs_data$tt_mets_months[1] <- 0
+    baseline_pfs_data$tt_pfs_months[1] <- 0
+
+    retained <- baseline_pfs_data
+    retained$tt_pfs_months_analysis[1] <- 0
+    retained$pfs_event_analysis[1] <- 1L
+    retained_result <- validate_objective1_endpoint_invariants(retained, "baseline_pfs")
+    expect_true(any(retained_result$details$field_name == "pfs_event_analysis"))
+    expect_true(any(retained_result$details$field_name == "tt_pfs_months_analysis"))
+
+    excluded <- baseline_pfs_data
+    excluded$tt_pfs_months_analysis[1] <- NA_real_
+    excluded$pfs_event_analysis[1] <- NA_integer_
+    excluded_result <- validate_objective1_endpoint_invariants(excluded, "baseline_pfs")
+    expect_equal(nrow(excluded_result$details), 0)
+})
+
 test_that("Objective 1 endpoint invariants include metastatic progression in PFS", {
     invariant_data <- make_objective0_validation_dataset()
     invariant_data$mets_progression[1] <- "Yes"
@@ -592,6 +619,7 @@ test_that("Objective 1 endpoint invariants include metastatic progression in PFS
     invariant_data$mets_free_at_baseline[1] <- TRUE
     invariant_data$mets_event_analysis[1] <- 1L
     invariant_data$pfs_event[1] <- 1L
+    invariant_data$pfs_event_analysis[1] <- 1L
     invariant_data$tt_mets_months[1] <- 10
     invariant_data$tt_mets_months_analysis[1] <- 10
     invariant_data$tt_pfs_months[1] <- 10

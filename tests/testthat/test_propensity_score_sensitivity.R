@@ -26,7 +26,9 @@ create_propensity_test_data <- function(n_per_arm = 40L) {
         tt_death_months = 7 + arm_index * 2,
         death_event = as.integer(arm_index %% 4L == 1L),
         tt_pfs_months = 4 + arm_index * 2,
-        pfs_event = as.integer(arm_index %% 2L == 0L)
+        pfs_event = as.integer(arm_index %% 2L == 0L),
+        tt_pfs_months_analysis = tt_pfs_months,
+        pfs_event_analysis = pfs_event
     )
 }
 

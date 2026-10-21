@@ -105,9 +105,9 @@ OBJECTIVE1_SUBGROUP_OUTCOME_SPECS <- list(
         endpoint_type = "time_to_event",
         model_family = "Cox proportional hazards",
         effect_measure = "HR",
-        time_var = "tt_pfs_months",
-        event_var = "pfs_event",
-        estimand = "Hazard of first local recurrence, metastatic progression, or death"
+        time_var = "tt_pfs_months_analysis",
+        event_var = "pfs_event_analysis",
+        estimand = "Hazard of first local recurrence, metastatic progression, or death after treatment; patients with metastasis at or before treatment are excluded"
     )
 )
 

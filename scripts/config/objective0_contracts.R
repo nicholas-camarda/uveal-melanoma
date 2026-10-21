@@ -65,6 +65,7 @@ OBJECTIVE0_DOWNSTREAM_INPUT_CONTRACT <- tibble::tribble(
     "objective1", "tt_death_months_analysis", "overall survival analysis follow-up time", "nonnegative_numeric", "optional", "hard_error",
     "objective1", "pfs_event", "PFS binary endpoint", "binary_01", "complete", "hard_error",
     "objective1", "tt_pfs_months", "PFS follow-up time", "nonnegative_numeric", "optional", "hard_error",
+    "objective1", "pfs_event_analysis", "incident PFS event indicator", "binary_01", "optional", "hard_error",
     "objective1", "tt_pfs_months_analysis", "PFS analysis follow-up time", "nonnegative_numeric", "optional", "hard_error",
     "objective1", "height_change", "tumor height response endpoint", "numeric", "optional", "warning",
     "objective1", "vision_change", "vision change endpoint", "numeric", "optional", "warning",

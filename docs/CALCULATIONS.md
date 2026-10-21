@@ -303,13 +303,13 @@ against the fixed-horizon audit field.
 **Formula:**
 
 ```r
-tt_pfs_months_analysis = pmin(
-    tt_recurrence_months_analysis,
-    tt_mets_months_analysis,
-    tt_death_months_analysis,
-    na.rm = FALSE
+tt_pfs_months_analysis = if_else(
+    mets_at_or_before_treatment,
+    NA,
+    pmin(tt_recurrence_months_analysis, tt_mets_months, tt_death_months_analysis, na.rm = FALSE)
 )
 pfs_event = recurrence_event == 1 | mets_event == 1 | death_event == 1
+pfs_event_analysis = if_else(mets_at_or_before_treatment, NA, pfs_event)
 ```
 
 **Definition:**
@@ -320,6 +320,7 @@ pfs_event = recurrence_event == 1 | mets_event == 1 | death_event == 1
 - If metastatic progression occurs before recurrence or death, PFS time = time to metastatic progression
 - If death occurs before recurrence or metastatic progression, PFS time = time to death
 - Impossible negative component times are preserved and blocked by Objective 0 validation rather than normalized.
+- Incident PFS (`tt_pfs_months_analysis`, `pfs_event_analysis`) is undefined for patients with metastasis dated on or before the treatment date, as for incident MFS; the Objective 1 PFS models use these fields, so those patients are excluded. The unrestricted `tt_pfs_months` and `pfs_event` remain for audit.
 
 **Example:**
 
