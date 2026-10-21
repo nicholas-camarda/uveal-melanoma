@@ -1,4 +1,9 @@
-test_that("main_execution discovers datasets created during objective 0 preflight", {
+#' Run `main_execution()` with stubbed analyses
+#'
+#' @param cross_cohort_figure Function that replaces
+#'   `create_gep_observed_vs_imported_panel_report()` for the run.
+#' @return List with `result` (the `main_execution()` value) and `analyzed_datasets`.
+run_main_execution_with_stubs <- function(cross_cohort_figure) {
     temp_processed_dir <- tempfile("processed-clean-start-")
     dir.create(temp_processed_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -6,6 +11,7 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
     old_run_objective_0 <- run_objective_0
     old_run_my_analysis <- run_my_analysis
     old_merge_baseline_tables_with_data <- merge_baseline_tables_with_data
+    old_cross_cohort_figure <- create_gep_observed_vs_imported_panel_report
 
     analyzed_datasets <- character()
 
@@ -14,6 +20,7 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
         assign("run_objective_0", old_run_objective_0, envir = .GlobalEnv)
         assign("run_my_analysis", old_run_my_analysis, envir = .GlobalEnv)
         assign("merge_baseline_tables_with_data", old_merge_baseline_tables_with_data, envir = .GlobalEnv)
+        assign("create_gep_observed_vs_imported_panel_report", old_cross_cohort_figure, envir = .GlobalEnv)
         unlink(temp_processed_dir, recursive = TRUE, force = TRUE)
     }, add = TRUE)
 
@@ -41,20 +48,39 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
     assign("merge_baseline_tables_with_data", function(full_data, restricted_data, gksrs_only_data = NULL) {
         invisible(NULL)
     }, envir = .GlobalEnv)
+    assign("create_gep_observed_vs_imported_panel_report", cross_cohort_figure, envir = .GlobalEnv)
 
+    result <- main_execution()
+    list(result = result, analyzed_datasets = analyzed_datasets)
+}
+
+test_that("main_execution discovers datasets created during objective 0 preflight", {
+    run <- NULL
+    expect_no_error(run <- run_main_execution_with_stubs(function(...) invisible(NULL)))
+    expect_setequal(
+        run$analyzed_datasets,
+        c("uveal_melanoma_full_cohort", "uveal_melanoma_restricted_cohort")
+    )
+})
+
+test_that("the run log records the session locale", {
     run_output <- character()
     previous_appender <- logger::log_appender()
     withr::defer(logger::log_appender(previous_appender))
     logger::log_appender(function(lines) run_output <<- c(run_output, lines))
-    expect_no_error(main_execution())
-    # The run log records the locale that produced the outputs.
+
+    run_main_execution_with_stubs(function(...) invisible(NULL))
+
     expect_true(any(grepl(
         sprintf("Session locale: %s", Sys.getlocale()),
         run_output,
         fixed = TRUE
     )))
-    expect_setequal(
-        analyzed_datasets,
-        c("uveal_melanoma_full_cohort", "uveal_melanoma_restricted_cohort")
-    )
+})
+
+test_that("a failing cross-cohort figure fails the run state instead of aborting main_execution", {
+    run <- NULL
+    expect_no_error(run <- run_main_execution_with_stubs(function(...) stop("workbook missing", call. = FALSE)))
+    expect_identical(run$result$run_state, "failed")
+    expect_true(any(grepl("^objective4_cross_cohort_figure:workbook missing$", run$result$fatal_issues)))
 })

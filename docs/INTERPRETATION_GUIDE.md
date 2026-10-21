@@ -21,7 +21,6 @@ It is not the canonical source for variable derivations or statistical assumptio
 - [Understanding RMST Analysis](#understanding-rmst-analysis)
 - [Interpreting Proportional Hazards Diagnostics](#interpreting-proportional-hazards-diagnostics)
 - [Understanding GEP Analysis](#understanding-gep-analysis)
-- [Understanding PRAME Enhancement Outputs](#understanding-prame-enhancement-outputs)
 - [Clinical Significance vs Statistical Significance](#clinical-significance-vs-statistical-significance)
 - [Common Pitfalls](#common-pitfalls)
 - [Troubleshooting](#troubleshooting)
@@ -52,7 +51,7 @@ Current cohort totals are exported with each run to `Analytic Dataset/cohort_sum
 - Objective 1: `01_Efficacy/` (survival, recurrence, tumor height)
 - Objective 2: `02_Safety/` (vision changes, complications)
 - Objective 3: `03_Repeat_Radiation/` (PFS-2 for recurrence patients)
-- Objective 4: `04_GEP_Validation/` (predictive accuracy)
+- Objective 4: `04_GEP_Validation/` (GEP validation)
 
 **Step 3:** Open relevant files
 - `.xlsx` - Summary statistics, regression tables
@@ -363,7 +362,7 @@ The 5-year overall survival was 75% for PBT and 82% for GKSRS (log-rank p=0.12).
 - More accurate event probabilities
 - Gray's test instead of log-rank test
 
-**Current Objective 4 display note:** the reader-facing MSS CIF PNG is intentionally simplified to `Class 1` versus `Class 2` using `gep_class_simple`, and excludes `GEP Not Tested` / `GEP Failed/Indeterminate` from the plotted strata. The companion technical competing-risk tables and models still use the more granular `biopsy1_gep` grouping, so the plot is a cleaner display layer rather than a redefinition of the technical MSS analysis.
+Objective 4 draws one cumulative-incidence curve per Class x PRAME group; see [Understanding GEP Analysis](#understanding-gep-analysis).
 
 ---
 
@@ -592,437 +591,83 @@ Global test          6.89     3      0.075
 
 ## Understanding GEP Analysis
 
-Gene Expression Profiling (GEP) is an external molecular risk assay for metastatic spread. Objective 4 does not recompute the Castle-type 15-gene signature inside this pipeline. Instead, it takes the lab-reported patient-level 5-year GEP survival predictions already present in the analytic dataset, uses those values directly for the 5-year `expected_*` columns, derives the 7-year and 10-year values from the same 5-year probabilities using $S(7) = S(5)^{7/5}$ and $S(10) = S(5)^{10/5}$, and then converts those horizon-specific survival values into risk quantities needed for validation. Those 7-year and 10-year values are assumption-checked extrapolations rather than direct imported assay outputs. The downstream methods then ask different questions: Kaplan-Meier or competing-risk summaries estimate observed outcome risk from follow-up data, calibration tools assess agreement between supplied GEP risk and observed risk, discrimination tools test rank-ordering, PRAME-based analyses evaluate whether reclassification improves clinical utility, and the extrapolation-assumption check asks whether the constant-hazard extension beyond 5 years is reasonably compatible with the observed data.
-
-The main Objective 4 denominator is deliberately stricter than “any row with a GEP-related label.” Only tumors with definitive raw DecisionDx Class 1 or Class 2 calls plus valid endpoint-specific imported probabilities enter the MFS and MSS eligible subsets. Rows representing `GEP Failed/Indeterminate`, `GEP Not Tested`, PRAME-not-reported, unknown, or discordant raw labels are excluded from the main analytic denominators even though reader-facing display restoration may still show canonical labels elsewhere in the workbook ecosystem.
-
-### Where to Find the Files
-
-- Objective 4 outputs live under `04_GEP_Validation/` inside each cohort directory.
-- Start with the outcome-specific consolidated workbook in `a_metastasis_free_survival/05_summary_tables/` or `b_melanoma_specific_survival/03_summary_tables/`, named `<prefix>MFS_consolidated_summary.xlsx` or `<prefix>MSS_consolidated_summary.xlsx`.
-- Technical-detail workbooks `<prefix>mfs_validation_technical_details.xlsx` and `<prefix>mss_validation_technical_details.xlsx` sit in those same summary-table subfolders. They are companion detail files rather than alternate summary workbooks.
-- Narrative Markdown summaries `<prefix>mfs_validation_narrative_summary.md` and `<prefix>mss_validation_narrative_summary.md` sit alongside those technical workbooks in the same summary-table subfolders.
-- Full calibration curve figures `<prefix>mfs_calibration_full.png` and `<prefix>mss_calibration_full.png` sit in the outcome validation folders and summarize calibration across the risk spectrum. Each dot is one predicted-risk quantile bin (x = mean predicted risk in bin; y = KM observed risk at the horizon), and the smooth line is an IPCW-weighted spline recalibration curve when feasible.
-- Unified cross-outcome summaries live at the root of `04_GEP_Validation/` as `<prefix>unified_gep_validation_summary.xlsx`. This workbook is comparison-only rather than a second outcome-summary workbook.
-- For the full cohort, that unified workbook now also includes compact no-GEP tabs: `No_GEP_Overview`, `No_GEP_Model_Comparison`, and `No_GEP_Risk_Strata`.
-- Simple actual-vs-expected QC outputs live in `04_GEP_Validation/unified_summary/` as `<prefix>simple_gep_validation.xlsx`.
-- For MFS, treat the observed 5-year value in that QC workbook as Kaplan-Meier MFS at 60 months. It is censoring-aware and should match the 5-year KM summary, not the raw count of patients with `metastasis_by_5yr == 0`.
-- Treat older slide numbers based on raw `metastasis_by_5yr` counts as non-canonical if they disagree with the current workbook. The repository-standard interpretation is the Kaplan-Meier estimate at 60 months.
-
-### Workbook Layout at a Glance
-
-| Sheet | Purpose | Where to find detailed metric definitions |
-|-------|---------|-------------------------------------------|
-| `Observed_Expected_Summary` | Compact overall observed-vs-expected summary by timepoint. | `docs/STATISTICAL_METHODS.md#gep-validation-metrics` |
-| `Calibration_Summary` | Predicted vs observed agreement. | `docs/STATISTICAL_METHODS.md#gep-validation-metrics` (Calibration subsection) |
-| `Discrimination_Summary` | Rank-order performance across timepoints. | `STATISTICAL_METHODS.md` (Discrimination subsection) |
-| `Decision_Curve_Summary` | Net benefit across threshold probabilities. | `STATISTICAL_METHODS.md` (Clinical Utility subsection) |
-| `Extrapolation_Assumption_Checks` | Focused support check for the 7-year and 10-year exponential extrapolation. | `STATISTICAL_METHODS.md` (GEP Validation Metrics subsection) |
-| `PRAME_Summary` | GEP-only vs GEP-plus-PRAME incremental discrimination comparison; sparse cohorts may show an explanatory placeholder row instead of full results. | Same Clinical Utility subsection |
-| `Missing_Data_Summary` | QC signals that contextualize Objective 4. | `STATISTICAL_METHODS.md` (Missing Data diagnostics) |
-
-### Workbook Naming & Refresh Cadence
-
-| Item | Details |
-| --- | --- |
-| Primary workbook pattern | `a_metastasis_free_survival/05_summary_tables/<prefix>MFS_consolidated_summary.xlsx` or `b_melanoma_specific_survival/03_summary_tables/<prefix>MSS_consolidated_summary.xlsx`. |
-| Technical workbooks | `<prefix>mfs_validation_technical_details.xlsx` and `<prefix>mss_validation_technical_details.xlsx` in those outcome-specific summary-table subfolders; these keep lower-level detail and no longer repeat the consolidated summary calibration/discrimination tables. |
-| Narrative summaries | `<prefix>mfs_validation_narrative_summary.md` and `<prefix>mss_validation_narrative_summary.md` in those same summary-table subfolders. |
-| Calibration curve PNGs | `<prefix>mfs_calibration_full.png` and `<prefix>mss_calibration_full.png` (one per outcome; faceted by timepoint). |
-| Unified workbook | `<prefix>unified_gep_validation_summary.xlsx` at the root of `04_GEP_Validation/`; this workbook uses comparison-only sheet names such as `Calibration_Comparison`, `Discrimination_Comparison`, `PRAME_Comparison`, and `Missing_Data_Comparison`. The full cohort additionally appends `No_GEP_Overview`, `No_GEP_Model_Comparison`, and `No_GEP_Risk_Strata`. |
-| Simple QC workbook | `unified_summary/<prefix>simple_gep_validation.xlsx`. For MFS, the observed 5-year value is KM at 60 months. |
-| Default directory | Each cohort's `04_GEP_Validation/` folder, with `a_metastasis_free_survival/`, `b_melanoma_specific_survival/`, and `unified_summary/`. |
-| Outcomes covered | MFS and MSS; unified workbooks stack both. Full-cohort unified workbooks may also append no-GEP comparison sheets. |
-| Timepoints | Driven by `GEP_VALIDATION_TIMEPOINTS` (defaults: 5, 7, 10 years). Every sheet carries one row per timepoint requested. |
-| How to regenerate | Run Objective 4 via `run_specific_objective("uveal_melanoma_<cohort>", 4)` or the full pipeline. New runs overwrite existing workbooks after passing QC. |
-
-### How to Read the Exploratory No-GEP Workbook
-
-The exploratory no-GEP workbook lives in `04_GEP_Validation/d_exploratory_no_gep/` and is separate from the main Objective 4 validation workbooks. It is designed for patients with `GEP Failed/Indeterminate` or `GEP Not Tested`, where the question is not “did the imported GEP prediction validate?” but rather “what baseline risk estimate is still supportable without a usable GEP result?” The full-cohort unified Objective 4 workbook now mirrors the highest-yield no-GEP summaries in compact comparison tabs, while this appendix workbook retains the row-level detail.
-
-If you only need the highest-yield no-GEP summary inside the root Objective 4 workbook, use this order:
-
-1. `No_GEP_Overview`
-  - Use this first for counts, observed outcomes, median no-GEP predicted risks, and the strongest baseline-separation note.
-2. `No_GEP_Model_Comparison`
-  - Use this next to compare the surrogate, full direct 5-year MFS/MSS models, and parsimonious direct sensitivity models side by side.
-  - The `Use_Case` column distinguishes the descriptive surrogate from the clinically preferred direct-risk outputs.
-  - The direct MFS/MSS rows should show IPCW horizon modeling as the declared method; if it is not supportable, the report should show an explicit unsupported status rather than a raw-binary substitute.
-3. `No_GEP_Risk_Ladder`
-  - Use this before the pooled-bin sheet when you need to place `GEP Not Tested` and `GEP Failed/Indeterminate` relative to definitive `Class 1` and `Class 2`.
-  - This is the safest place to support an “overall between Class 1 and Class 2, but internally heterogeneous” interpretation.
-  - The observed MFS and MSS quantities in this section are censoring-aware horizon estimates, not raw event fractions.
-4. `No_GEP_Risk_Strata`
-  - Use this to confirm whether low/intermediate/high predicted bins actually show increasing observed 5-year MFS or MSS event rates.
-  - Check the overlap diagnostic language before making strong statements about transportability from definitive-GEP patients into the no-GEP groups.
-
-Then open the appendix workbook only if you need the full baseline table, patient-level predictions, or the full predictor-contribution sheets.
-
-Use this reading order:
-
-1. Start with `Summary_and_Guide`.
-  - This tab says what was computed, what the main findings were, and how cautious the interpretation should be.
-  - If the summary says the surrogate model is only modest, do not treat the surrogate probability as a recovered Class 1 or Class 2 call.
-  - Read the surrogate output as: among patients with known Class 1 and Class 2 results, which known clinical pattern does this no-GEP patient look more like?
-  - The surrogate is a binary Class 2-vs-Class 1 model, so the stored probability is specifically `P(Class 2-like | baseline features)`.
-  - By complement, `1 - surrogate_class2_probability` is the implied `Class 1-like` probability within that surrogate only.
-  - Neither number is the probability of the patient's true molecular assay result.
-2. Read `Predictor_Contribution`.
-  - This tab reports the largest absolute original-scale term coefficient for each retained predictor, with its sign and reference category.
-  - Coefficient magnitudes depend on units and factor coding. Their ordering is not standardized variable importance or statistical proof; the coefficient tabs retain all fitted terms.
-3. Check `Risk_Ladder_5yr`.
-  - This sheet compares definitive `Class 1`, `GEP Not Tested`, `GEP Failed/Indeterminate`, and definitive `Class 2` on the same 5-year descriptive scale.
-  - Use it to support statements about whether the no-GEP groups sit between the definitive GEP groups overall.
-  - Do not collapse the two no-GEP groups into one interpretive bucket if this sheet shows they are meaningfully separated.
-4. Check `Surrogate_Class2_Model`, `Direct_MFS_Risk_Model`, and `Direct_MSS_Risk_Model`.
-  - `CV AUC` tells you whether the model can rank higher-risk versus lower-risk patients better than chance.
-  - `CV_AUC_CI_Lower` and `CV_AUC_CI_Upper` show how much the internal-validation signal moves when the fold assignment changes.
-  - `CV Brier` gives a compact overall prediction-error summary.
-  - Calibration rows tell you whether risks are systematically too high or too low, when the data are rich enough to estimate that reliably.
-5. Read `Parsimonious_Sensitivity`.
-  - This compares the full direct models against a smaller pre-specified baseline predictor set.
-  - If the parsimonious models preserve similar ranking and subgroup ordering, that strengthens the claim without requiring more covariates.
-6. Read `No_GEP_Predictions`.
-  - This is the patient-level output for the two no-GEP groups.
-  - `surrogate_class2_probability` is descriptive only.
-  - It is a clinical resemblance score showing how much the patient's baseline profile resembles the observed Class 2 pattern versus the observed Class 1 pattern in the definitive-GEP reference set.
-  - If you mentally convert it to the opposite pole, `1 - surrogate_class2_probability` means `Class 1-like` resemblance only.
-  - Do not write or say that either of these values is a true molecular `Class 1` or `Class 2` probability.
-  - `predicted_mfs_5yr_risk` and `predicted_mss_5yr_risk` are the main clinically usable outputs.
-7. Read `Sensitivity_Pooled_No_GEP`.
-  - This checks whether pooled low/intermediate/high predicted-risk bins show increasing observed event rates.
-  - If observed event rates increase across bins, the model is at least ordering patients in a clinically meaningful direction.
-
-How to interpret the exploratory plots:
-
-- Corrected KM/CIF plots:
-  - These show where `GEP Failed/Indeterminate` and `GEP Not Tested` sit relative to definitive `Class 1` and `Class 2`.
-  - Curves between definitive `Class 1` and `Class 2` support an overall between-group interpretation, but inspect `GEP Failed/Indeterminate` and `GEP Not Tested` separately before calling the whole no-GEP population “intermediate risk.”
-  - The corrected MFS figure is a Kaplan–Meier estimate from the same endpoint-specific risk set used for the workbook rows. Censor marks and the numbers-at-risk table are part of the display; the global log-rank p-value is reported in the workbook only.
-  - The corrected MSS figure is an Aalen–Johansen cumulative-incidence estimate from the same endpoint-specific competing-risk fit used for the workbook rows. Melanoma death is the event of interest and other-cause death remains a competing event; the global Gray-test p-value is reported in the workbook only.
-- Density plots:
-  - A right-shifted density means the subgroup is receiving higher predicted probability overall.
-  - If `GEP Failed/Indeterminate` is shifted to the right of `GEP Not Tested`, it suggests the failed group is clinically higher risk on the retained baseline features.
-- Event-rate-by-bin plots:
-  - These are a practical check on risk ordering.
-  - Rising observed event rates from low to high bins support useful stratification.
-
-Plain-English bottom line:
-
-- The exploratory workbook is best used to support direct baseline risk estimation when GEP is unavailable.
-- The surrogate score is best used to say which definitive-GEP clinical pattern a no-GEP patient looks more like, not to say what their true molecular class was.
-- If you want the opposite resemblance score, use `1 - surrogate_class2_probability`, but call it `Class 1-like` probability rather than true `Class 1` probability.
-- It should not be used to claim true molecular reclassification.
-- Group-level separation is usually more reliable than any single patient-level probability.
-
-#### Curve-comparison fields in the no-GEP workbook
-
-The `KM_Corrected_MFS` and `KM_Corrected_MSS` sheets repeat one global curve-comparison result on their horizon rows so that the result is easy to find alongside the estimates. The field names carry the scope directly:
-
-- `log_rank_global_curve_p_value`, `log_rank_global_curve_test_status`, and `log_rank_global_curve_test_reason` belong to the MFS Kaplan–Meier comparison.
-- `gray_test_global_curve_p_value`, `gray_test_global_curve_test_status`, and `gray_test_global_curve_test_reason` belong to the MSS competing-risk comparison.
-
-These are not separate p-values for each horizon or subgroup. A missing p-value with a non-`ok` status is an explicit unsupported comparison, not a zero and not a failed figure. No curve PNG prints a p-value; use the workbook fields for the formal comparison result.
-
-### Shared Conventions
-
-- **`N`** counts patients who contribute data at that horizon after censoring, predictor filtering, and the definitive-label eligibility rule. For Objective 4, this means only analyzable raw Class 1 / Class 2 DecisionDx calls with valid endpoint-specific imported GEP probabilities enter the main MFS and MSS validation subsets.
-- **`Events` / `Non_Events`** always tie to the outcome being modeled (metastasis for MFS, melanoma-specific death for MSS). Non-events are censored survivors.
-- **`Timepoint`** corresponds to the year label in `GEP_VALIDATION_TIMEPOINTS`; interpretation tips should explicitly quote it.
-- **Fallback + method columns** (`*_Fallback_Used`, `*_Method`) surface whenever the preferred estimator fails; cite them whenever they read `TRUE` to explain unexpected `NA`s.
-- **Missing = `NA`** means "metric skipped" rather than "zero." Cross-check the run log (`logs/json/*.jsonl`) for warnings before imputing values.
-- **Displayed GEP labels come directly from the canonical analytic cohort.** Objective-specific sparse-model handling does not replace `biopsy1_gep`, `gep_class_simple`, `prame_status`, or `gep12_prame_status` in reader-facing outputs. A literal `Other` label is not a valid biological GEP class.
-- **The simple QC workbook now follows the same refreshed eligibility rule as the main Objective 4 analysis.** If a row does not have a definitive raw Class 1 / Class 2 DecisionDx label, it should not appear in the simple Class 1 vs Class 2 summary counts.
-- **The MSS CIF PNG is more collapsed than the technical MSS workbook.** The figure is shown at the `gep_class_simple` level (`Class 1` vs `Class 2`) for readability, while the technical competing-risk tables may still report the more granular `biopsy1_gep` group structure.
-
-### GEP Quick Read
-
-If you are not statistically inclined, use this order:
-
-1. Check `N` and `Events` first. Very small numbers make every later metric less trustworthy.
-2. Check calibration next. Ask: "Were the predicted risks roughly the right size?"
-3. Check discrimination after that. Ask: "Did the model rank higher-risk patients above lower-risk patients?"
-4. Check the decision-curve sheet last. Ask: "Would using this model actually help a clinical decision?"
-5. Read the PRAME sheet only after the base GEP prediction looks at least reasonably calibrated and discriminative.
+Objective 4 compares the gene expression profile (GEP) results with outcomes observed in the cohort at 5 years. The imported GEP values are the laboratory's published group-level estimates (four values for the four Class x PRAME groups), so the analysis asks whether each group's published risk fits the patients in that group and how well the four groups order patients by risk. Formal definitions are in [GEP Validation](STATISTICAL_METHODS.md#gep-validation).
 
-Fast triage rule:
-- `OE_Ratio` near 1, lower `ICI`, and `Slope` near 1 suggest the risk estimates are in the right ballpark.
-- Lower `Brier_Score` suggests better overall prediction accuracy at that horizon because the predicted risks sit closer to what actually happened.
-- Higher `Harrell_C` and `Integrated_AUC` suggest better patient ranking.
-- Positive `Optimal_Net_Benefit` over a sensible threshold range suggests the model could be clinically useful.
-- Many `NA` values or `*_Fallback_Used = TRUE` mean the result is more fragile and should be described cautiously.
+### Where to find the files
 
-### GEP Calibration Made Simple
-
-Calibration asks a simple question: **did the supplied GEP prediction get the amount of risk about right?**
-
-Use this reading order:
-
-1. `OE_Ratio`
-  - Near 1: overall predicted risk and overall observed risk are similar.
-  - Above 1: the supplied GEP prediction may be underpredicting events.
-  - Below 1: the supplied GEP prediction may be overpredicting events.
-2. `ICI`
-  - Lower is better.
-  - Think of this as the average prediction error.
-3. `Slope`
-  - Near 1: the spread of predictions is about right.
-  - Below 1: predictions are too extreme.
-  - Above 1: predictions are too compressed.
-4. `Nam_D_Agostino_p`
-  - Small p-value: more evidence that predicted and observed risks are mismatched across risk groups.
-  - Larger p-value: no strong evidence of mismatch, but not proof of perfect calibration.
-
-Plain-English example:
-- `OE_Ratio = 0.98`, `ICI = 0.04`, `Slope = 0.95`: the supplied GEP prediction is probably estimating risk reasonably well.
-- `OE_Ratio = 0.60`, `ICI = 0.14`, `Slope = 0.55`: the supplied GEP prediction is probably miscalibrated and making risks too extreme.
-
-What to say in a write-up:
-- "Calibration looked acceptable: overall predicted risk was close to observed risk, average calibration error was small, and the slope was near 1."
-- "Calibration looked weak: observed risk did not line up well with predicted risk, and the slope suggested the model was over-separating patients."
-
-### GEP Discrimination Made Simple
-
-Discrimination asks a different question: **did the model put sicker patients above healthier patients?**
-
-Start with `Harrell_C`:
-- Higher is better.
-- Around 0.5 means the ranking is close to random.
-- Around 0.7 means the ranking is often useful.
-- Much higher than that suggests stronger separation.
-
-Then use the supporting fields:
-- `Integrated_AUC`: average ranking performance over follow-up.
-- `Cumulative_Discrimination`: average ranking performance across the prespecified 5-, 7-, and 10-year windows.
-- `Time_averaged_Discrimination`: average ranking performance across monthly follow-up landmarks.
-- `IPA`: whether the model improves on a very simple benchmark.
+Each cohort's `04_GEP_Validation/` folder holds one workbook and three figures; the full cohort adds a `d_no_gep/` subfolder.
 
-Important caution:
-- MFS `Harrell_C` and MSS `Harrell_C` are not identical estimands in this pipeline.
-- MFS uses horizon-truncated follow-up.
-- MSS uses full observed follow-up in the horizon-specific analysis set.
-- Compare MFS-to-MFS and MSS-to-MSS more confidently than MFS-to-MSS.
-
-Plain-English example:
-- `Harrell_C = 0.72`: the model usually ranks patients who fail earlier above patients who remain event-free longer.
-- `Harrell_C = 0.54`: the model is only a little better than chance at ranking patients.
-
-What to say in a write-up:
-- "Discrimination was reasonable: higher-risk patients generally experienced the endpoint sooner than lower-risk patients."
-- "Discrimination was weak: the model did not separate higher-risk from lower-risk patients very well."
+| File | What it holds |
+|------|---------------|
+| `<prefix>gep_validation_5yr.xlsx` | Primary workbook: observed vs imported 5-year risk by group (MFS and MSS), discrimination, sensitivity analyses |
+| `<prefix>gep_validation_mfs_curves.png`, `<prefix>gep_validation_mss_curves.png` | Cumulative risk curves by group, with the imported 5-year risk marked |
+| `<prefix>gep_validation_observed_vs_imported.png` | Observed 5-year risk with its interval beside the imported risk, for each group |
+| `d_no_gep/<prefix>no_gep_5yr.xlsx` | Full cohort: outcomes in every GEP group, baseline characteristics by group, baseline-model performance |
+| `d_no_gep/<prefix>no_gep_group_risk.png`, `d_no_gep/<prefix>no_gep_model_auc.png` | Observed 5-year risk by group; model and comparator AUC |
 
-### GEP Decision Curve Made Simple
+A `<prefix>..._diagnostics.xlsx` workbook sits next to each primary workbook and travels with it in published snapshots and the collaborator export. It documents how each result was produced and lists, by patient `id`, the records behind every exclusion or flag. It contains patient identifiers, so share it only with people who already have access to the study data. The three cohorts also share a cross-cohort observed-vs-imported figure in `merged_tables/objective4_cross_cohort_figures/`.
 
-Decision-curve analysis asks: **if we used this model in practice, would it help decision-making?**
+### Reading the group table
 
-Read it this way:
+`Group_Table_MFS` and `Group_Table_MSS` have one row per Class x PRAME group and an overall row.
 
-1. `Optimal_Net_Benefit`
-  - Positive is better.
-  - Negative means the model is not helping at that threshold.
-2. `Threshold_Range_Min` / `Threshold_Range_Max`
-  - These show the probability range where the model is giving positive net benefit.
-  - If that range lines up with a clinically realistic action threshold, the result is more useful.
-3. `Area_Between_Curves`
-  - Bigger positive values suggest a larger overall gain across the evaluated threshold range.
+| Column | Meaning |
+|--------|---------|
+| `n` | Patients in the group |
+| `events_by_horizon` | Events by 60 months |
+| `event_free_through_horizon` | Patients known to be event-free at 60 months |
+| `max_followup_months` | Longest follow-up in the group |
+| `observed_risk`, `observed_ci_lower`, `observed_ci_upper` | 5-year risk estimated from follow-up (Kaplan-Meier for MFS, cumulative incidence for MSS), with its 95% interval |
+| `imported_risk` | 1 minus the imported 5-year survival |
+| `difference_pct_points` | Observed minus imported risk, in percentage points |
+| `estimable`, `note` | Whether a 5-year value exists, and why not |
 
-Plain-English example:
-- Positive net benefit from 10% to 30% means the model may help if your clinical action threshold lives in that range.
-- No positive net benefit means the model may not improve decisions beyond simpler strategies.
-
-What to say in a write-up:
-- "The decision-curve analysis suggested clinical usefulness across the 10% to 30% threshold range."
-- "The decision-curve analysis did not show a clear net-benefit advantage over simple default strategies."
-
-### Sheet Dictionary (Quick Reference)
-
-Metric formulas remain in `STATISTICAL_METHODS.md`; the notes below clarify what each column represents inside the workbook.
-
-#### `Observed_Expected_Summary`
-
-- `Timepoint`, `N`: context columns described above.
-- `Observed`, `Expected`, `OE_Ratio`, `CI_Lower`, `CI_Upper`: overall observed-versus-expected counts and ratio for calibration-in-the-large. For MFS, `Observed` is a KM-derived pseudo-count on the cohort denominator scale and the interval is Greenwood-derived rather than Poisson.
-- `OE_Chi_Square_p`: p-value for the overall O/E goodness-of-fit comparison across the class-level observed and expected event counts. This is not the grouped Greenwood Nam-D'Agostino calibration p-value.
-
-Important distinction:
-- `OE_Chi_Square_p` belongs to `Observed_Expected_Summary` and summarizes the overall O/E count mismatch.
-- `Nam_D_Agostino_p` belongs to `Calibration_Summary` and summarizes grouped survival calibration using Kaplan-Meier observed risk with Greenwood variance.
-
-#### `Calibration_Summary`
-
-- `Timepoint`, `N`: context columns described above.
-- `Prediction_Source`: `Imported` at 5 years and `Extrapolated from imported 5-year value` at 7 and 10 years.
-- `Extrapolation_Assumption`: `Not Applicable` at 5 years and `Exponential constant hazard` at 7 and 10 years.
-- `Assumption_Support_Status`: interpretive support tier for the later-horizon extrapolation. `Supported` means the data were reasonably compatible with constant hazard, `Weakly Supported` means the diagnostics were mixed or limited, and `Unsupported` means the data either argued against constant hazard or were too sparse to assess it well.
-- `Assumption_Support_Notes`: plain-language reason for the support tier. Treat `Unsupported` later-horizon rows as exploratory.
-- `Nam_D_Agostino_p`: p-value from the grouped Greenwood Nam-D'Agostino survival-calibration test. Smaller values mean stronger evidence that predicted and observed risk do not agree well across the risk groups.
-- `Nam_D_Agostino_Method`: method label for the grouped goodness-of-fit field; currently this should read `greenwood_nam_dagostino`.
-- `ICI`: Integrated Calibration Index — lower is better.
-- `ICI_Method`: tells you whether the ICI came from the preferred IPCW-smoothed recalibration curve or from the grouped Kaplan-Meier fallback. Cite this column whenever comparing cohorts or horizons.
-- `Slope`: horizon-specific IPCW-weighted logistic recalibration slope (ideal = 1.0).
-- `Slope_Method`: method label for the slope field; currently this should read `ipcw_logit` when the fit is supportable. `ipcw_logit_unavailable` means the weighted slope fit was too sparse or too numerically unstable to report responsibly.
-- `Brier_Score`: Overall prediction-accuracy check at that horizon. Lower is better.
-- `Brier_Method` + `Brier_Fallback_Used`: tell you whether the score came from the preferred calculation or from a fallback path. If a fallback was used, describe the result more cautiously and see `STATISTICAL_METHODS.md` for the technical details.
-
-##### How to interpret the main calibration fields
-
-The grouped Greenwood Nam-D'Agostino statistic is the workbook's formal grouped calibration test. The full equation is documented in [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md). In plain language, the test asks whether the model's predicted event counts and the observed event counts line up across low-, medium-, and high-risk groups once censoring is taken seriously.
-
-How to read the chi-square result:
-- `Nam_D_Agostino_p < 0.05`: evidence of miscalibration. The observed risks differ from the predicted risks more than would usually be expected by chance alone.
-- `Nam_D_Agostino_p >= 0.05`: no strong evidence of miscalibration. This does not prove the model is perfectly calibrated; it only means the grouped test did not detect a clear mismatch.
-- Larger cohorts can detect smaller departures from calibration, so the p-value should always be read alongside `ICI`, `Slope`, and `N` rather than in isolation.
-
-ICI can be thought of as the average absolute calibration error. The exact method-specific formulas are documented in [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md). In plain language, lower ICI means the average prediction is closer to what actually happened.
-
-The calibration slope comes from the horizon-specific recalibration model, with the formal equation documented in [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md).
-
-How to read the slope:
-- `Slope` near 1: prediction spread is about right.
-- `Slope < 1`: predictions are too extreme, so low risks are too low and high risks are too high.
-- `Slope > 1`: predictions are too compressed, so the model is not separating low and high risk strongly enough.
-- `Slope = NA` with `Slope_Method = ipcw_logit_unavailable`: the fit was too sparse or unstable to trust, so the workbook intentionally withholds the number.
-
-The Brier score is the workbook's overall accuracy check at that horizon. Lower values mean the predicted risks were closer to what actually happened. There is no single universal cutoff that counts as "good" in every cohort, so this field is most useful when comparing the same outcome and timepoint across cohorts or models.
-
-How to read the Brier fields:
-- `Brier_Score` near 0: predictions were very close to the observed horizon outcomes.
-- Larger `Brier_Score`: worse overall probabilistic accuracy.
-- `Brier_Method`: check whether the score came from the preferred calculation or a fallback path.
-- `Brier_Fallback_Used = TRUE`: mention in the write-up that the score came from a fallback path rather than the preferred calculation.
-
-Practical rule: use the grouped chi-square p-value to ask, "Is there evidence of group-level miscalibration?" and use `ICI` plus `Slope` to ask, "How large is the mismatch, and in what direction?"
-
-If you want the shortest possible version, read [GEP Calibration Made Simple](#gep-calibration-made-simple) first.
-
-#### `Discrimination_Summary`
-
-- `Prediction_Source`, `Extrapolation_Assumption`, `Assumption_Support_Status`, `Assumption_Support_Notes`: read these exactly as in `Calibration_Summary`. They are there so you do not accidentally treat 7-year and 10-year concordance results as if they were based on independently imported assay predictions.
-- `Events`: Number of outcome events accumulated by that year.
-- `Harrell_C`: Primary concordance field. For MFS, this is a horizon-specific concordance estimate after truncating follow-up at the sheet's timepoint. For MSS, this is computed from the full observed follow-up within the horizon-specific analytic subset rather than the same horizon-truncated estimand used for MFS.
-- `Integrated_AUC`: Mean `riskRegression::Score()` AUC over monthly follow-up intervals rather than a single landmark AUC.
-- `Integrated_AUC_Status`, `Integrated_AUC_Method`, `Integrated_AUC_Unavailable_Reason`: provenance fields telling you whether iAUC was actually estimable, how it was computed, and why it is missing when absent. Missing iAUC should be read as "not estimable," not as implicit fallback to Harrell's C.
-- `Cumulative_Discrimination`: Mean truncated concordance across the prespecified 5-, 7-, and 10-year windows that had enough events to evaluate.
-- `Time_averaged_Discrimination`: Mean truncated concordance across monthly follow-up landmarks.
-- `IPA`, `IPA_Method`, `IPA_Fallback_Used`: Index of Prediction Accuracy at that horizon. The preferred estimator is the Brier-score comparison against the null event-rate benchmark; the method columns tell you when the pipeline had to fall back to the AUC-based or simplified estimator.
-
-See [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#gep-validation-metrics) for the exact formulas and implementation details.
+**Worked example (generic).** A row with `observed_risk` 0.20 (95% interval 0.08 to 0.45), `imported_risk` 0.15 and `n` 12 says: in this group of 12 patients the estimated 5-year risk is 20%; the imported 15% lies inside the interval, so the data are compatible with it; the interval is wide because few patients were followed. If the row had `event_free_through_horizon` of 2, only two patients were known to be event-free at 5 years and the estimate is imprecise. A row with `estimable` FALSE has no 5-year value because nobody in the group was followed to 60 months. A row with no events shows an observed risk of 0 and no interval.
 
-If you want the shortest possible version, read [GEP Discrimination Made Simple](#gep-discrimination-made-simple) first.
-
-#### `Decision_Curve_Summary`
+The overall row averages the group risks weighted by group size and compares them with the group-size-weighted imported risk. It has no interval.
 
-- `Prediction_Source`, `Extrapolation_Assumption`, `Assumption_Support_Status`, `Assumption_Support_Notes`: use these to qualify 7-year and 10-year clinical-utility interpretations. If support is weak or unsupported, present the decision-curve result cautiously.
-- `Event_Rate`: Observed event rate at the horizon (use it to sanity-check IPA swings).
-- `Optimal_Threshold`: Probability threshold delivering maximum net benefit; mirrors `Net_Benefit_Threshold` when present.
-- `Optimal_Net_Benefit`: Net benefit at the optimal threshold relative to treat-all/none.
-- `Threshold_Range_Min` / `Threshold_Range_Max`: Boundaries for clinically reasonable thresholds configured when building the decision curves.
-- `Area_Between_Curves`: Integral of the net-benefit gain vs treat-none across the range.
+### Reading the figures
 
-If you want the shortest possible version, read [GEP Decision Curve Made Simple](#gep-decision-curve-made-simple) first.
+- **Curves.** Each step curve is one group's cumulative risk over follow-up, drawn to 60 months. The open diamond at 60 months is that group's imported 5-year risk. A curve that reaches the diamond means the observed and imported risks agree at 5 years. A curve that stops before 60 months marks the end of that group's follow-up. Groups with no events are flat at zero.
+- **Observed vs imported.** One panel per endpoint. Each group shows the observed 5-year risk as a point with its interval and the imported risk as a marker; open circles mark groups with no events, whose interval cannot be estimated. A marker inside the interval means the data are compatible with the imported value.
+- **No-GEP group risk.** Observed 5-year risk with intervals for all six GEP groups. A group with no point has no patient followed to 60 months.
+- **Model AUC.** One panel each for MFS and MSS shows the AUC of the penalized models (filled points) next to the T stage and tumor diameter comparators (open diamonds), each with its interval; a third panel shows the Class 2-like score. The dashed line at 0.5 marks chance.
 
-#### `Extrapolation_Assumption_Checks`
+### Discrimination
 
-- `Exponential_Hazard_Per_Year`: hazard implied by the intercept-only exponential model.
-- `Weibull_Shape`: the key non-exponential comparator. Values near 1 are more compatible with constant hazard.
-- `Delta_AIC_Weibull_minus_Exponential`: negative values favor Weibull, positive values favor exponential.
-- `Pre5yr_Hazard_Per_Year` and `Post5yr_Hazard_Per_Year`: crude piecewise hazards before and after 5 years.
-- `Post_vs_Pre_Hazard_Ratio`: a quick screen for an obvious hazard break after 5 years.
-- `Support_Status`: overall interpretation used to label 7-year and 10-year workbook rows.
-- `Support_Note`: plain-language explanation of why the later-horizon extrapolation was judged supported, weakly supported, or unsupported.
+`Discrimination` gives Harrell's C for MFS and the competing-risk AUC for MSS with intervals, the number of events, the share of tied pairs, and a `status`.
 
-Practical reading rule:
-- `Supported`: later-horizon extrapolation looked reasonably compatible with the observed data.
-- `Weakly Supported`: later-horizon extrapolation was not clearly contradicted, but evidence was limited or mixed.
-- `Unsupported`: later-horizon extrapolation should be treated as exploratory rather than defensible.
+**Worked example (generic).** A C of 0.80 with interval 0.70 to 0.90, from 25 events and 20% tied pairs, says: in 80% of comparable pairs the patient with the earlier event had the higher imported risk, counting tied pairs as one half; the interval excludes 0.5. Because the imported risk has four values, this describes how well the four groups are ordered; it does not mean an individual's risk is predicted at that accuracy. A `status` of "not estimable" means fewer than 3 events by 60 months or no variation in the imported risk.
 
-Important distinction:
-- `Unsupported` does not always mean the data proved the hazard was non-constant.
-- It can also mean the check was too sparse to be informative, or that the fitting routine encountered a technical issue that prevented a meaningful comparison.
-- Read `Support_Note` before interpreting `Unsupported` as scientific evidence against exponential extrapolation.
+### Sensitivity sheets
 
-How to read common `Support_Note` patterns:
-- `Fewer than 10 events were available...`
-  This means the data were too sparse to interrogate hazard shape responsibly. It is an information problem, not proof that exponential extrapolation is wrong.
-- `The extrapolation check could not be completed...`
-  This means the parametric comparison failed technically. Interpret this as “the assumption has not yet been adequately checked,” not as “the assumption has been disproved.”
-- `At least one diagnostic favored non-constant hazard...`
-  This is the strongest form of `Unsupported`, because it means the diagnostic comparisons themselves pointed away from constant hazard.
+- `Sensitivity_Late_Biopsy`: each primary quantity next to its value after removing patients sampled more than 180 days after treatment, with the difference.
+- `Sensitivity_Cause_of_Death`: each group's risk with unknown-cause deaths counted as melanoma deaths, the number of deaths reclassified, and the difference in percentage points.
+- `Sensitivity_Treatment_Era` (no-GEP workbook): each group's risk among patients treated in the testing era; see below.
 
-Why the 5-year model can still be fine when 7-year and 10-year rows are not:
-- The 5-year GEP value is imported directly from the assay workflow.
-- The 7-year and 10-year values are not directly imported assay outputs in this pipeline. They are extrapolated from the 5-year value using a constant-hazard rule.
-- So a later-horizon problem usually means the extension rule is questionable, not that the imported 5-year prediction necessarily failed.
+**Worked example (generic).** A group risk of 12.0% that becomes 12.5% when late samples are removed moved by 0.5 percentage points; the late samples do not drive the result. A risk that moves from 9% to 16% when unknown-cause deaths are counted as melanoma deaths depends on how those deaths are classified, and both values are informative.
 
-Why the pipeline does not simply switch to a “better” later-horizon model:
-- Replacing exponential extrapolation with a Weibull or flexible model would introduce a new modeling layer based on this dataset rather than on the imported assay.
-- That may be useful as a sensitivity analysis, but it is not the same as validating the original assay output.
-- For that reason, the main pipeline keeps the original 5-year imported prediction as primary and uses the extrapolation support tier to qualify the 7-year and 10-year interpretation.
+### Patients without a definitive call
 
-#### `PRAME_Summary`
+`Group_Outcomes_MFS` and `Group_Outcomes_MSS` give the same measures as the group table for each of the six GEP groups, with median and maximum follow-up. `Baseline_By_Group` compares baseline characteristics across groups; a group with fewer than 3 patients shows only its size. Compare groups only where both have a 5-year estimate, and read differences between "Not tested" and the Class 1 and Class 2 groups with testing patterns in mind (for example the share treated in or after the year testing appears).
 
-- `N`, `Events`: Sample sizes for the PRAME-complete subset at that timepoint.
-- `Base_Harrell_C`, `Enhanced_Harrell_C`: Discrimination for the GEP-only and GEP-plus-PRAME models on the same patients.
-- `Delta_Harrell_C`: Improvement in Harrell's C after adding PRAME.
-- `Delta_CI_Lower`, `Delta_CI_Upper`: Bootstrap interval for the delta-C estimate.
-- `LR_p`: Likelihood-ratio p-value for the nested-model comparison.
-- `PRAME_HR`, `PRAME_HR_CI_Lower`, `PRAME_HR_CI_Upper`: PRAME effect estimate from the enhanced model.
-- `Analysis_Tier`: `Primary` for MFS, `Exploratory` for MSS.
-- `Interpretation`: Auto-generated summary tying delta C and model support into plain language.
+`Sensitivity_Treatment_Era` repeats each group's risk among patients treated in or after that year (`patients_in_era`), next to the primary risk, with the interval and the difference in percentage points. **Worked example (generic).** A group with 100 patients, 30 of them treated before testing began, a primary risk of 10% and an in-era risk of 14% (interval 8% to 24%) shifts by 4 percentage points; if the primary risk lies inside the in-era interval the era does not change the reading, and a group with `patients_before_era` of 0 is unchanged by construction.
 
-#### `Missing_Data_Summary`
+### Baseline models without GEP
 
-Single column dictionary:
+`Model_Performance` lists, for each endpoint and performance scope, the AUC, its interval, the Brier score, the no-information Brier score and the Brier skill for the penalized models and for the comparators. Rows labeled with the "No GEP" scope are the headline; "All patients" is shown for reference. `AUC_Difference` gives the model AUC minus the comparator AUC with its interval.
 
-| Metric | Meaning |
-| --- | --- |
-| `Total_Patients_n` | Patients evaluated for missingness diagnostics inside this run. |
-| `Missingness_Groups_n` | Distinct missingness patterns detected (rows in the patterns table, when available). |
-| `Baseline_Variables_with_Significant_Differences_n` | Count of baseline covariates that differ across missingness groups (p < 0.05). |
-| `Survival_by_Missingness_Logrank_p` | Log-rank p-value comparing survival between missingness strata. |
-| `Imputable_Patients_n` | Patients that could be recovered through imputation diagnostics. |
+**Worked example (generic).** A model AUC of 0.62 (0.48 to 0.76) next to T stage alone at 0.70 gives a difference of -0.08. If the difference interval is -0.22 to 0.04, the data cannot distinguish the model from T stage alone, and the model is not shown to rank better. A Brier skill of 0.00 says the predicted risks are no closer to the outcomes than the overall rate. The intervals come from a bootstrap that does not refit the model, so they understate model-fitting uncertainty; with few events they are wide in any case.
 
-### Differences Between MFS and MSS Tabs
+### Diagnostics workbook
 
-- **Event definition:** MFS treats metastasis as the event and censors deaths without metastasis; MSS uses cause-specific death as the event.
-- **Discrimination definition:** MFS `Harrell_C` is a horizon-specific concordance estimate after truncating follow-up at the requested timepoint, whereas MSS `Harrell_C` uses full observed follow-up in the horizon-specific analysis set. Do not read those two columns as identical estimands.
-- **Modeling approach:** MSS commonly has fewer usable events than MFS and therefore more `*_Fallback_Used` flags or `NA` fields when horizons are sparse.
-- **Sample size:** MSS tables often have lower `N`, which in turn drives more `NA` metrics. Always sanity-check counts before comparing outcomes.
+Read `Specification_Coding` first: each quantity's method, estimand, units, direction and plain-language reading. `Denominators_Flow` counts patients through each step. `Checks` gives each check a result and a status (no concern, concern, not assessed) with a reason; a check that was not run is "not assessed" and never appears as passed. `Record_Issues` lists, one row per record and issue, each with the patient `id` from the analytic dataset, the patients outside the primary set, the patients flagged for biopsy timing (including a biopsy long before treatment, which stays in the analysis), and the patients removed from a model; its counts reconcile with `Denominators_Flow`.
 
-### How to Use the Sheets
+### Suggested interpretation template
 
-1. **Check sample counts first.** When `N` or `Events` fall below the exploratory thresholds (20 total / 5 events), annotate results as preliminary.
-2. **Reference `STATISTICAL_METHODS.md#gep-validation-metrics` for formulas.** Use this guide for workbook logistics and the statistics doc for the math.
-3. **Summarize per timepoint:** Combine one calibration sentence, one discrimination sentence, and (if available) a decision-curve takeaway. Use the template below and cite the workbook filename.
-4. **Escalate flags:** If the Missing Data sheet lists significant baseline differences or non-random loss, note it in your write-up before quoting performance.
-5. **Document fallbacks:** Whenever `*_Fallback_Used == TRUE`, mention that the simplified estimator supplied the metric.
+> "Among N patients with a Class 1 or Class 2 result and PRAME reported, the observed 5-year metastasis risk was X% (95% CI a to b) in [group] compared with the imported Y%. Harrell's C for the imported risk was C (95% CI c to d); tied pairs, [Z%] of comparable pairs, count one half."
 
-### Suggested Interpretation Template
-
-> "For 5-year metastasis-free survival (`uveal_full_mfs_consolidated_summary.xlsx`), Harrell's C was 0.71 with calibration slope 0.98 and positive decision-curve net benefit at 10–30% thresholds (see `STATISTICAL_METHODS.md#gep-validation-metrics`)."
-
----
-
-## Understanding PRAME Incremental Outputs
-
-### What The PRAME Rows Now Mean
-
-- The PRAME sheets no longer use heuristic risk multipliers or reclassification counts.
-- Each row compares two models fitted on the same PRAME-complete patients at that timepoint: GEP alone versus GEP plus PRAME.
-- The main question is whether PRAME improves discrimination beyond the imported GEP prediction already supplied by the lab-derived fields.
-
-### How To Read The Result
-
-1. Start with `Delta_Harrell_C`.
-2. Check whether `Delta_CI_Lower` to `Delta_CI_Upper` stays above 0.
-3. Use `LR_p` and the PRAME hazard ratio as support, not as the primary decision rule.
-4. Treat MSS rows as exploratory even when they look favorable, because the MSS concordance estimand differs from MFS in this pipeline.
-
-### Practical Tips
-
-1. Check banner messages and placeholder text first; sparse cohorts can still produce explanatory rows instead of numeric estimates.
-2. If the workbook also contains `mfs_prame_delta_c.png` or `mss_prame_delta_c.png`, use the plot and the table together. They should tell the same story.
-3. Prefer the consolidated workbook over the technical workbook for interpretation; the unified workbook is comparison-only.
+Take the numbers from the run's workbooks; the run log carries the source revision they came from.
 
 ---
 
@@ -1321,7 +966,7 @@ After interpreting results:
 
 **Common Issues:**
 - Check logs in `logs/txt/` for error messages
-- Review diagnostics workbooks (`*_diagnostics.xlsx`)
+- Review diagnostics workbooks (`*_diagnostics.xlsx`); the sheets and how to read them are in [STATISTICAL_METHODS.md](STATISTICAL_METHODS.md#model-diagnostics-workbooks-objectives-1-3)
 - Verify input data quality
 - Confirm adequate sample sizes and event counts
 

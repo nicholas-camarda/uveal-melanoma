@@ -179,7 +179,10 @@ for (var in test_variables) {
                 expected_counts <- chisq.test(cont_table)$expected
                 if (any(expected_counts < 5)) {
                     # Use Fisher's exact test for small expected counts
-                    test_result <- fisher.test(cont_table, simulate.p.value = TRUE)
+                    test_result <- with_local_seed(
+                        SIMULATED_FISHER_SEED,
+                        fisher.test(cont_table, simulate.p.value = TRUE)
+                    )
                     test_type <- "Fisher's exact"
 
                     # Try to get odds ratio from Fisher's test

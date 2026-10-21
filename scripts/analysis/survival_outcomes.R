@@ -543,83 +543,6 @@ write_rmst_skip_artifact <- function(rmst_dir, prefix, ylab, rmst_results) {
     logger::log_info(sprintf("RMST skip note saved: %s", basename(note_path)))
 }
 
-determine_survival_output_dir <- function(ylab, output_dirs, route_key = NULL) {
-    if (is.null(output_dirs)) {
-        return(getwd())
-    }
-
-    default_dir <- output_dirs$baseline_characteristics %||% getwd()
-    route_map <- c(
-        obj1_recurrence = "obj1_recurrence",
-        obj1_mets = "obj1_mets",
-        obj1_os = "obj1_os",
-        obj1_pfs = "obj1_pfs",
-        obj3_pfs2 = "obj3_pfs2",
-        obj4_mfs = "obj4_mfs",
-        obj4_mss = "obj4_mss"
-    )
-
-    if (!is.null(route_key)) {
-        if (!route_key %in% names(route_map)) {
-            stop(sprintf("Unknown survival output route_key `%s`.", route_key), call. = FALSE)
-        }
-        output_name <- route_map[[route_key]]
-        configured_dir <- output_dirs[[output_name]]
-        has_configured_dir <- is.character(configured_dir) &&
-            length(configured_dir) == 1L &&
-            !is.na(configured_dir) &&
-            nzchar(trimws(configured_dir))
-        if (!has_configured_dir) {
-            stop(
-                sprintf(
-                    "Configured survival output route_key `%s` has no non-empty directory (`output_dirs$%s`).",
-                    route_key,
-                    output_name
-                ),
-                call. = FALSE
-            )
-        }
-        return(configured_dir)
-    }
-
-    if (grepl("Local Recurrence-Free", ylab) && !is.null(output_dirs$obj1_recurrence)) {
-        return(output_dirs$obj1_recurrence)
-    }
-    if (grepl("Overall Survival", ylab) && !is.null(output_dirs$obj1_os)) {
-        return(output_dirs$obj1_os)
-    }
-    if (grepl("Progression-Free Survival", ylab) && !is.null(output_dirs$obj1_pfs)) {
-        return(output_dirs$obj1_pfs)
-    }
-    if (grepl("PFS-2", ylab) && !is.null(output_dirs$obj3_pfs2)) {
-        return(output_dirs$obj3_pfs2)
-    }
-    if (grepl("Metastasis-Free Survival", ylab)) {
-        if (!is.null(output_dirs$obj4_mfs)) {
-            return(output_dirs$obj4_mfs)
-        }
-        if (!is.null(output_dirs$obj1_pfs)) {
-            return(output_dirs$obj1_pfs)
-        }
-        logger::log_warn("Output directory for Metastasis-Free Survival not provided; using baseline_characteristics as fallback")
-    }
-
-    default_dir
-}
-
-#' Repoint typed survival artifact subdirectories for a local one-off route
-#'
-#' @param output_dirs Output directory list.
-#' @param route_prefix Route prefix such as `obj1_os` or `obj1_pfs`.
-#' @param base_dir Base directory for the local one-off analysis.
-#' @return Output directory list with route base and typed artifact subfolders repointed.
-repoint_local_survival_route <- function(output_dirs, route_prefix, base_dir) {
-    output_dirs[[route_prefix]] <- base_dir
-
-    profile_id <- ENDPOINT_PROFILE_BY_ROUTE_PREFIX[[route_prefix]] %||% "capped_survival"
-    append_endpoint_subdirs(output_dirs, route_prefix, base_dir, profile_id)
-}
-
 #' Summarize censoring and follow-up support for a survival endpoint
 #'
 #' Builds an overall and optional by-group support table for time-to-event
@@ -957,6 +880,7 @@ build_survival_skip_diagnostics <- function(data,
             median_follow_up_months = median_follow_up
         )),
         sparse_level_diagnostics = sparse_level_diagnostics,
+        prefit_records = filter_stats$removed_records,
         event_support = build_level_support_tab(data, variables, outcome_var = event_var),
         model_context = build_model_context_tab(list(
             event_var = event_var,
@@ -1344,7 +1268,33 @@ build_km_risk_set_audit <- function(data,
     )
 }
 
-analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var = "treatment_group", model_group_var = group_var, confounders = NULL, ylab = "Survival Probability", analysis_type = "post_treatment_only", dataset_name = NULL, legend_labels = NULL, output_dirs = NULL, prefix = NULL, route_key = NULL, risk_table_height = 0.18, risk_table_rel_heights = c(0.78, 0.22), risk_table_y_expand = c(0.18, 0.18), saved_plot_height = NULL, allow_cox = TRUE, cox_skip_reason = NULL, cox_skip_narrative = NULL) {
+#' Kaplan-Meier, RMST and Cox analysis of one time-to-event endpoint
+#'
+#' Every artifact is written to the directories of one endpoint route: `output_dirs`
+#' comes from [create_output_structure()] and `route_key` names the route
+#' (`names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)`). There is no default location.
+#'
+#' @param data Analysis data frame.
+#' @param time_var Name of the follow-up time column (months).
+#' @param event_var Name of the event indicator column.
+#' @param group_var Name of the grouping column shown in the plots.
+#' @param model_group_var Name of the grouping column used in the Cox model.
+#' @param confounders Character vector of Cox adjustment variables, or `NULL`.
+#' @param ylab Survival-probability axis label; also names the output files.
+#' @param analysis_type Analysis label passed to the summaries.
+#' @param dataset_name Dataset identifier for the audit workbooks.
+#' @param legend_labels Optional legend labels for the groups.
+#' @param output_dirs Named output directory list from [create_output_structure()].
+#' @param prefix File name prefix for every output.
+#' @param route_key Endpoint route that owns the output directories, such as `obj1_os`.
+#' @param risk_table_height,risk_table_rel_heights,risk_table_y_expand Layout of the
+#'   numbers-at-risk table.
+#' @param saved_plot_height Height of the saved KM figure, or `NULL` for the default.
+#' @param allow_cox Logical; fit the Cox model when `TRUE`.
+#' @param cox_skip_reason,cox_skip_narrative Reason and narrative recorded when the Cox
+#'   model is not fitted.
+#' @return List with the KM fit and plot, RMST results, the Cox model and the output paths.
+analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var = "treatment_group", model_group_var = group_var, confounders = NULL, ylab = "Survival Probability", analysis_type = "post_treatment_only", dataset_name = NULL, legend_labels = NULL, output_dirs, prefix = NULL, route_key, risk_table_height = 0.18, risk_table_rel_heights = c(0.78, 0.22), risk_table_y_expand = c(0.18, 0.18), saved_plot_height = NULL, allow_cox = TRUE, cox_skip_reason = NULL, cox_skip_narrative = NULL) {
     data <- normalize_treatment_group_data(data)
     plot_group_var <- group_var
     palette_group_var <- group_var
@@ -1352,11 +1302,7 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
     # Check that there are at least two groups for analysis; otherwise, skip Cox model
     if (length(unique(data[[plot_group_var]])) < 2) {
         warning(sprintf("Only one level of %s present; skipping cox model.", plot_group_var))
-        skip_output_dir <- if (!is.null(output_dirs)) {
-            ensure_output_dir(resolve_endpoint_output_dir(output_dirs, determine_survival_output_dir(ylab, output_dirs, route_key = route_key), "cox"))
-        } else {
-            "test_output"
-        }
+        skip_output_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
         early_skip_diagnostics <- build_survival_skip_diagnostics(
             data = data,
             event_var = event_var,
@@ -1422,19 +1368,20 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
     km_data <- fix_event_data %>%
         dplyr::select(all_of(c(time_var, event_var, plot_group_var)))
 
+    # The patient identifier travels with the model data so every row the sparse-level
+    # screen or the model fit removes can be listed by id in the diagnostics workbook.
     model_data <- fix_event_data %>%
-        dplyr::select(all_of(c(time_var, event_var, model_group_var, confounders_to_use)))
+        dplyr::select(
+            dplyr::any_of(pick_sparse_level_id_col(fix_event_data) %||% character()),
+            all_of(c(time_var, event_var, model_group_var, confounders_to_use))
+        )
 
     if (nrow(km_data) == 0 || length(unique(stats::na.omit(km_data[[plot_group_var]]))) < 2) {
         logger::log_warn(formatted(
             "Insufficient data available for Kaplan-Meier fit; skipping survival analysis.",
             indent = 1
         ))
-        skip_output_dir <- if (!is.null(output_dirs)) {
-            ensure_output_dir(resolve_endpoint_output_dir(output_dirs, determine_survival_output_dir(ylab, output_dirs, route_key = route_key), "cox"))
-        } else {
-            "test_output"
-        }
+        skip_output_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
         skip_diagnostics <- build_survival_skip_diagnostics(
             data = km_data,
             event_var = event_var,
@@ -1597,7 +1544,7 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         unique(c(display_strata_order, legend_labels_for_fit))
     )
     # Identify strata requiring de-emphasis (thinner line/partial transparency)
-    deemphasised_levels <- intersect(display_strata_order, c("GEP Failed/Indeterminate"))
+    deemphasised_levels <- intersect(display_strata_order, GEP_GROUPS_WITHOUT_DEFINITIVE_CALL)
 
     # Get plot scaling factor from config (allows global adjustment via SURVIVAL_PLOT_SCALE)
     plot_scale <- SURVIVAL_PLOT_SCALE
@@ -1851,65 +1798,63 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         )
     surv_plot$table$coordinates <- ggplot2::coord_cartesian(clip = "off")
     
-    # Save KM plot if output_dirs are provided
-    if (!is.null(output_dirs)) {
-        output_dir <- determine_survival_output_dir(ylab, output_dirs, route_key = route_key)
-        km_dir <- ensure_output_dir(resolve_endpoint_output_dir(output_dirs, output_dir, "km"))
-        km_path <- file.path(km_dir, paste0(prefix, make_filename_safe(ylab), "_km.png"))
-        # Combine main plot and risk table vertically so the saved image includes both
-        combined_km <- cowplot::plot_grid(
-            surv_plot$plot,
-            surv_plot$table,
-            ncol = 1,
-            align = "v",
-            rel_heights = risk_table_rel_heights
-        )
-        combined_km <- cowplot::ggdraw() +
-            cowplot::draw_plot(combined_km, x = 0.02, y = 0, width = 0.96, height = 1)
-        # Dynamic height scaling: base on number of strata in the KM fit
-        n_groups <- tryCatch(
-            {
-                length(surv_plot$plot$data$strata %||% levels(km_data[[plot_group_var]]))
-            },
-            error = function(e) length(levels(km_data[[plot_group_var]]))
-        )
-        # Calculate dynamic height based on number of strata
-        extra_groups <- max(0, n_groups - 2)
-        dynamic_height <- KM_BASE_HEIGHT + extra_groups * KM_HEIGHT_PER_STRATUM
-        # Prefer taller PFS-2 default if applicable, but cap at KM_MAX_HEIGHT
-        base_pref <- if (grepl("PFS-2", ylab)) max(PFS2_PLOT_HEIGHT, SURVIVAL_PLOT_HEIGHT) else SURVIVAL_PLOT_HEIGHT
-        plot_height <- if (!is.null(saved_plot_height)) {
-            min(KM_MAX_HEIGHT, saved_plot_height)
-        } else {
-            min(KM_MAX_HEIGHT, max(base_pref, dynamic_height))
-        }
-        # Save the combined plot with dynamic height
-        ggplot2::ggsave(km_path, combined_km, width = SURVIVAL_PLOT_WIDTH, height = plot_height, dpi = PLOT_DPI, bg = "white")
-        logger::log_info(sprintf("KM plot (with risk table) saved: %s", km_path))
-
-        km_audit <- build_km_risk_set_audit(
-            data = fix_event_data,
-            time_var = time_var,
-            event_var = event_var,
-            group_var = plot_group_var,
-            time_points = x_breaks,
-            dataset_name = dataset_name
-        )
-        km_audit_path <- file.path(
-            km_dir,
-            paste0(prefix, make_filename_safe(ylab), "_km_risk_set_audit.xlsx")
-        )
-        write_readable_xlsx(
-            list(
-                Audit_Metadata = km_audit$audit_metadata,
-                Risk_Set_Counts = km_audit$risk_set_counts,
-                Risk_Set_Members = km_audit$risk_set_members,
-                Patient_Endpoints = km_audit$patient_endpoints
-            ),
-            path = km_audit_path
-        )
-        logger::log_info(sprintf("KM risk-set audit saved: %s", km_audit_path))
+    # Save the KM plot
+    km_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "km"))
+    km_path <- file.path(km_dir, paste0(prefix, make_filename_safe(ylab), "_km.png"))
+    # Combine main plot and risk table vertically so the saved image includes both
+    combined_km <- cowplot::plot_grid(
+        surv_plot$plot,
+        surv_plot$table,
+        ncol = 1,
+        align = "v",
+        rel_heights = risk_table_rel_heights
+    )
+    combined_km <- cowplot::ggdraw() +
+        cowplot::draw_plot(combined_km, x = 0.02, y = 0, width = 0.96, height = 1)
+    # Dynamic height scaling: base on number of strata in the KM fit
+    n_groups <- tryCatch(
+        {
+            length(surv_plot$plot$data$strata %||% levels(km_data[[plot_group_var]]))
+        },
+        error = function(e) length(levels(km_data[[plot_group_var]]))
+    )
+    # Calculate dynamic height based on number of strata
+    extra_groups <- max(0, n_groups - 2)
+    dynamic_height <- KM_BASE_HEIGHT + extra_groups * KM_HEIGHT_PER_STRATUM
+    # Prefer taller PFS-2 default if applicable, but cap at KM_MAX_HEIGHT
+    base_pref <- if (grepl("PFS-2", ylab)) max(PFS2_PLOT_HEIGHT, SURVIVAL_PLOT_HEIGHT) else SURVIVAL_PLOT_HEIGHT
+    plot_height <- if (!is.null(saved_plot_height)) {
+        min(KM_MAX_HEIGHT, saved_plot_height)
+    } else {
+        min(KM_MAX_HEIGHT, max(base_pref, dynamic_height))
     }
+    # Save the combined plot with dynamic height
+    ggplot2::ggsave(km_path, combined_km, width = SURVIVAL_PLOT_WIDTH, height = plot_height, dpi = PLOT_DPI, bg = "white")
+    logger::log_info(sprintf("KM plot (with risk table) saved: %s", km_path))
+
+    km_audit <- build_km_risk_set_audit(
+        data = fix_event_data,
+        time_var = time_var,
+        event_var = event_var,
+        group_var = plot_group_var,
+        time_points = x_breaks,
+        dataset_name = dataset_name
+    )
+    km_audit_path <- file.path(
+        km_dir,
+        paste0(prefix, make_filename_safe(ylab), "_km_risk_set_audit.xlsx")
+    )
+    write_readable_xlsx(
+        list(
+            Audit_Metadata = km_audit$audit_metadata,
+            Risk_Set_Counts = km_audit$risk_set_counts,
+            Risk_Set_Members = km_audit$risk_set_members,
+            Patient_Endpoints = km_audit$patient_endpoints
+        ),
+        path = km_audit_path
+    )
+    logger::log_info(sprintf("KM risk-set audit saved: %s", km_audit_path))
+
 
     # Define time points (in months) for summary and RMST
     time_points <- SURVIVAL_SUMMARY_TIMEPOINTS_YEARS * 12
@@ -2177,89 +2122,74 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
         rmst_diff_row
     )
 
-    # Write outputs to Excel files if output_dirs provided
-    if (!is.null(output_dirs)) {
-        output_dir <- determine_survival_output_dir(ylab, output_dirs, route_key = route_key)
-        summary_dir <- ensure_output_dir(resolve_endpoint_output_dir(output_dirs, output_dir, "summary"))
+    # Write the survival-rate, RMST and effect-summary workbooks
+    summary_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "summary"))
+    write_readable_xlsx(
+        surv_rates,
+        path = file.path(summary_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rates.xlsx"))
+    )
+    write_readable_xlsx(
+        surv_rates_wide_with_rmst,
+        path = file.path(summary_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rates_wide.xlsx"))
+    )
+    rmst_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "rmst"))
+    rmst_has_completed_results <- nrow(completed_rmst_results) > 0
+    if (nrow(rmst_results) > 0) {
         write_readable_xlsx(
-            surv_rates,
-            path = file.path(summary_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rates.xlsx"))
+            rmst_results,
+            path = file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_rmst_analysis.xlsx"))
         )
-        write_readable_xlsx(
-            surv_rates_wide_with_rmst,
-            path = file.path(summary_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rates_wide.xlsx"))
-        )
-        rmst_dir <- ensure_output_dir(resolve_endpoint_output_dir(output_dirs, output_dir, "rmst"))
-        rmst_has_completed_results <- nrow(completed_rmst_results) > 0
-        if (nrow(rmst_results) > 0) {
-            write_readable_xlsx(
-                rmst_results,
-                path = file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_rmst_analysis.xlsx"))
-            )
-            logger::log_info(sprintf("RMST analysis file saved: %s", paste0(prefix, make_filename_safe(ylab), "_rmst_analysis.xlsx")))
-        } else {
-            logger::log_info(sprintf("Skipping RMST file creation - no RMST rows generated for %s", ylab))
-        }
-        if (rmst_has_completed_results && nrow(rmst_survival_summary) > 0) {
-            combined_path <- file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rmst_summary.xlsx"))
-            write_readable_xlsx(rmst_survival_summary, path = combined_path)
-            logger::log_info(sprintf("Survival + RMST summary saved: %s", basename(combined_path)))
-        } else if (nrow(rmst_results) > 0) {
-            logger::log_info(sprintf(
-                "Skipping survival + RMST summary for %s - no feasible RMST timepoints completed",
-                ylab
-            ))
-            write_rmst_skip_artifact(rmst_dir, prefix, ylab, rmst_results)
-        }
-        if (rmst_has_completed_results && nrow(rmst_timepoint_table) > 0) {
-            rmst_table_path <- file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_rmst_timepoint_table.xlsx"))
-            write_readable_xlsx(rmst_timepoint_table, path = rmst_table_path)
-            logger::log_info(sprintf("RMST timepoint table saved: %s", basename(rmst_table_path)))
-        } else if (nrow(rmst_results) > 0 && !rmst_has_completed_results) {
-            logger::log_info(sprintf("RMST timepoint table skipped for %s - all timepoints were infeasible", ylab))
-        }
+        logger::log_info(sprintf("RMST analysis file saved: %s", paste0(prefix, make_filename_safe(ylab), "_rmst_analysis.xlsx")))
+    } else {
+        logger::log_info(sprintf("Skipping RMST file creation - no RMST rows generated for %s", ylab))
+    }
+    if (rmst_has_completed_results && nrow(rmst_survival_summary) > 0) {
+        combined_path <- file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_survival_rmst_summary.xlsx"))
+        write_readable_xlsx(rmst_survival_summary, path = combined_path)
+        logger::log_info(sprintf("Survival + RMST summary saved: %s", basename(combined_path)))
+    } else if (nrow(rmst_results) > 0) {
+        logger::log_info(sprintf(
+            "Skipping survival + RMST summary for %s - no feasible RMST timepoints completed",
+            ylab
+        ))
+        write_rmst_skip_artifact(rmst_dir, prefix, ylab, rmst_results)
+    }
+    if (rmst_has_completed_results && nrow(rmst_timepoint_table) > 0) {
+        rmst_table_path <- file.path(rmst_dir, paste0(prefix, make_filename_safe(ylab), "_rmst_timepoint_table.xlsx"))
+        write_readable_xlsx(rmst_timepoint_table, path = rmst_table_path)
+        logger::log_info(sprintf("RMST timepoint table saved: %s", basename(rmst_table_path)))
+    } else if (nrow(rmst_results) > 0 && !rmst_has_completed_results) {
+        logger::log_info(sprintf("RMST timepoint table skipped for %s - all timepoints were infeasible", ylab))
     }
 
+
     # Run Cox regression and generate regression table
-    cox_result <- NULL
     cox_analysis_name <- paste0(ylab, "_cox")
     if (cox_ready) {
         logger::log_info(sprintf("DEBUG: About to call generate_regression_table for %s", paste0(ylab, "_cox")))
-        cox_result <- tryCatch({
-            cox_dir <- if (!is.null(output_dirs)) {
-                cox_output_dir <- determine_survival_output_dir(ylab, output_dirs, route_key = route_key)
-                ensure_output_dir(resolve_endpoint_output_dir(output_dirs, cox_output_dir, "cox"))
-            } else {
-                "test_output"
-            }
-            
-            generate_regression_table(
-                data = cox_data,
-                outcome_var = event_var,
-                predictor_vars = model_group_var,
-                confounders = confounders_to_use,
-                model_type = "cox",
-                effect_measure = "HR",
-                analysis_name = cox_analysis_name,
-                dataset_name = dataset_name,
-                output_dir = cox_dir,
-                prefix = prefix,
-                time_var = time_var,
-                event_var = event_var,
-                treatment_var = model_group_var,
-                sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
-                filter_stats = cox_exclusion_result$filter_stats
-            )
-        }, error = function(e) {
-            logger::log_error(sprintf("ERROR in generate_regression_table: %s", e$message))
-            return(NULL)
-        })
+        cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
+        # A fitting or writing error is not caught here: a failed analysis fails the run.
+        # Models that cannot be fitted for data reasons are skipped inside the shared
+        # regression layer, which writes the skipped-model diagnostics.
+        cox_result <- generate_regression_table(
+            data = cox_data,
+            outcome_var = event_var,
+            predictor_vars = model_group_var,
+            confounders = confounders_to_use,
+            model_type = "cox",
+            effect_measure = "HR",
+            analysis_name = cox_analysis_name,
+            dataset_name = dataset_name,
+            output_dir = cox_dir,
+            prefix = prefix,
+            time_var = time_var,
+            event_var = event_var,
+            treatment_var = model_group_var,
+            sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
+            filter_stats = cox_exclusion_result$filter_stats
+        )
     } else {
-        cox_dir <- if (!is.null(output_dirs)) {
-            ensure_output_dir(resolve_endpoint_output_dir(output_dirs, determine_survival_output_dir(ylab, output_dirs, route_key = route_key), "cox"))
-        } else {
-            "test_output"
-        }
+        cox_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
         diagnostics_stub <- build_survival_skip_diagnostics(
             data = cox_data,
             event_var = event_var,
@@ -2281,47 +2211,6 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
             sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
             modeled_n = nrow(cox_data),
             status = "skipped",
-            time_var = time_var
-        )
-        save_skipped_model_outputs(
-            analysis_name = cox_analysis_name,
-            dataset_name = dataset_name %||% "unspecified_dataset",
-            output_dir = cox_dir,
-            prefix = prefix %||% "",
-            reason = diagnostics_stub$reason,
-            diagnostics = diagnostics_stub
-        )
-        cox_result <- list(
-            model = NULL,
-            table = NULL,
-            diagnostics = diagnostics_stub
-        )
-    }
-
-    if (is.null(cox_result)) {
-        cox_dir <- if (!is.null(output_dirs)) {
-            ensure_output_dir(resolve_endpoint_output_dir(output_dirs, determine_survival_output_dir(ylab, output_dirs, route_key = route_key), "cox"))
-        } else {
-            "test_output"
-        }
-        diagnostics_stub <- build_survival_skip_diagnostics(
-            data = cox_data,
-            event_var = event_var,
-            variables = survival_variables,
-            analysis_name = cox_analysis_name,
-            dataset_name = dataset_name %||% "unspecified_dataset",
-            reason = "Cox model fitting failed before a usable output could be generated.",
-            narrative_lines = c(
-                sprintf(
-                    "Cox fitting was attempted for `%s`, but the shared regression layer returned no result.",
-                    cox_analysis_name
-                ),
-                "Check the logs for the underlying fitting error or numerical failure."
-            ),
-            filter_stats = cox_exclusion_result$filter_stats,
-            sparse_level_diagnostics = cox_exclusion_result$sparse_level_diagnostics,
-            modeled_n = nrow(cox_data),
-            status = "unavailable",
             time_var = time_var
         )
         save_skipped_model_outputs(
@@ -2368,9 +2257,8 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
     hr_rows <- hr_rows[!vapply(hr_rows, is.null, logical(1))]
     hazard_ratio_summary <- if (length(hr_rows) > 0) do.call(bind_effect_summary_rows, hr_rows) else empty_effect_summary_rows()
 
-    if (!is.null(output_dirs) && nrow(hazard_ratio_summary) > 0) {
-        hr_output_dir <- determine_survival_output_dir(ylab, output_dirs, route_key = route_key)
-        hr_dir <- ensure_output_dir(resolve_endpoint_output_dir(output_dirs, hr_output_dir, "cox"))
+    if (nrow(hazard_ratio_summary) > 0) {
+        hr_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "cox"))
         
         hr_filename <- paste0(prefix, make_filename_safe(ylab), "_effect_summary.xlsx")
         write_readable_xlsx(hazard_ratio_summary, file.path(hr_dir, hr_filename))
@@ -2454,7 +2342,7 @@ analyze_time_to_event_outcomes <- function(data, time_var, event_var, group_var 
 #' @details PFS-2 uses separate feasibility checks for analyzable patient count
 #'   and second-recurrence event count before attempting survival modeling.
 #' @return List with elements: pfs2_data (data frame), survival_analysis (list), summary_table (gtsummary object)
-analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_dirs = NULL, prefix = NULL) {
+analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_dirs, prefix = NULL) {
     logger::log_info("Starting PFS-2 analysis for recurrent patients")
 
     # Filter to patients with valid PFS-2 data (variables now created in data processing)
@@ -2547,21 +2435,19 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
         event_var = "pfs2_event"
     )
 
-    if (!is.null(output_dirs) && !is.null(output_dirs$obj3_pfs2)) {
-        cohort_support_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cohort_support")
-        summary_path <- file.path(cohort_support_dir, paste0(prefix, "pfs2_treatment_summary.xlsx"))
-        write_readable_xlsx(
-            list(
-                raw_primary_vs_salvage = raw_primary_vs_salvage,
-                model_primary_vs_salvage = model_primary_vs_salvage,
-                censoring_support = pfs2_censoring_support,
-                interpretation_guardrails = pfs2_interpretation_guardrails$guardrail_table,
-                treatment_estimability = pfs2_treatment_estimability$support
-            ),
-            summary_path
-        )
-        logger::log_info(sprintf("PFS-2 treatment summary saved to %s", summary_path))
-    }
+    cohort_support_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cohort_support")
+    summary_path <- file.path(cohort_support_dir, paste0(prefix, "pfs2_treatment_summary.xlsx"))
+    write_readable_xlsx(
+        list(
+            raw_primary_vs_salvage = raw_primary_vs_salvage,
+            model_primary_vs_salvage = model_primary_vs_salvage,
+            censoring_support = pfs2_censoring_support,
+            interpretation_guardrails = pfs2_interpretation_guardrails$guardrail_table,
+            treatment_estimability = pfs2_treatment_estimability$support
+        ),
+        summary_path
+    )
+    logger::log_info(sprintf("PFS-2 treatment summary saved to %s", summary_path))
 
     logger::log_info(sprintf("Final PFS-2 analysis dataset: %d patients", nrow(pfs2_data)))
     total_events <- sum(pfs2_data$pfs2_event, na.rm = TRUE)
@@ -2584,27 +2470,18 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
         )
         pfs2_skip_diagnostics$compatibility_text <- explanation_text
 
-        if (!is.null(output_dirs)) {
-            cohort_support_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cohort_support")
-            cox_dir <- resolve_route_output_dir(output_dirs, "obj3_pfs2", "cox")
-            if (!is.null(cohort_support_dir)) {
-                ensure_output_dir(cohort_support_dir)
-                explanation_file <- file.path(cohort_support_dir, paste0(prefix, "pfs2_analysis_skipped_explanation.txt"))
-                writeLines(explanation_text, explanation_file)
-                logger::log_info(sprintf("Explanation saved to: %s", explanation_file))
-            }
-            if (!is.null(cox_dir)) {
-                ensure_output_dir(cox_dir)
-                save_skipped_model_outputs(
-                    analysis_name = "pfs2_analysis",
-                    dataset_name = dataset_name %||% "unspecified_dataset",
-                    output_dir = cox_dir,
-                    prefix = prefix,
-                    reason = pfs2_skip_diagnostics$reason,
-                    diagnostics = pfs2_skip_diagnostics
-                )
-            }
-        }
+        cohort_support_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, "obj3_pfs2", "cohort_support"))
+        explanation_file <- file.path(cohort_support_dir, paste0(prefix, "pfs2_analysis_skipped_explanation.txt"))
+        writeLines(explanation_text, explanation_file)
+        logger::log_info(sprintf("Explanation saved to: %s", explanation_file))
+        save_skipped_model_outputs(
+            analysis_name = "pfs2_analysis",
+            dataset_name = dataset_name %||% "unspecified_dataset",
+            output_dir = ensure_output_dir(resolve_route_output_dir(output_dirs, "obj3_pfs2", "cox")),
+            prefix = prefix,
+            reason = pfs2_skip_diagnostics$reason,
+            diagnostics = pfs2_skip_diagnostics
+        )
 
         pfs2_skip_diagnostics
     }
@@ -2784,7 +2661,7 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
     ph_diag_result <- run_or_skip_proportional_hazards_diagnostics(
         cox_model = pfs2_survival$cox_model,
         outcome_name = "PFS-2 Probability (Freedom from 2nd Recurrence)",
-        output_dir = if (!is.null(output_dirs)) resolve_route_output_dir(output_dirs, "obj3_pfs2", "ph") else getwd(),
+        output_dir = resolve_route_output_dir(output_dirs, "obj3_pfs2", "ph"),
         file_prefix = paste0(prefix, make_filename_safe("PFS-2 Probability (Freedom from 2nd Recurrence)"), "_"),
         dataset_name = dataset_name,
         data = pfs2_survival$cox_input_data,
@@ -2846,7 +2723,7 @@ analyze_pfs2 <- function(data, confounders = NULL, dataset_name = NULL, output_d
 #'   skip or unavailability reason.
 run_or_skip_proportional_hazards_diagnostics <- function(cox_model,
                                                          outcome_name = "Survival",
-                                                         output_dir = NULL,
+                                                         output_dir,
                                                          file_prefix = "",
                                                          dataset_name = NULL,
                                                          data = NULL,
@@ -2872,9 +2749,6 @@ run_or_skip_proportional_hazards_diagnostics <- function(cox_model,
         ))
     }
 
-    if (is.null(output_dir)) {
-        output_dir <- getwd()
-    }
     if (is.null(modeled_n)) {
         modeled_n <- if (!is.null(data) && is.data.frame(data)) nrow(data) else NA_integer_
     }
@@ -2947,19 +2821,13 @@ run_or_skip_proportional_hazards_diagnostics <- function(cox_model,
 #'   function writes an unavailable-artifact bundle with model context.
 #' @return List containing Schoenfeld test results and plot paths when testing
 #'   succeeds, or skip/unavailable diagnostics when PH testing is not feasible.
-test_proportional_hazards_assumption <- function(cox_model, outcome_name = "Survival", output_dir = NULL, file_prefix = "", dataset_name = NULL, input_n = NULL, fitted_n = NULL) {
+test_proportional_hazards_assumption <- function(cox_model, outcome_name = "Survival", output_dir, file_prefix = "", dataset_name = NULL, input_n = NULL, fitted_n = NULL) {
     logger::log_info(sprintf("Testing proportional hazards assumption for %s", outcome_name))
 
     # Check if model is valid
     if (is.null(cox_model) || !inherits(cox_model, "coxph")) {
         logger::log_warn("Invalid Cox model provided - skipping PH assumption testing")
         return(NULL)
-    }
-
-    # Set default output directory if not provided
-    if (is.null(output_dir)) {
-        warning("No output directory provided for proportional hazards testing. Files will be saved to current directory.")
-        output_dir <- "."
     }
 
     # Ensure output directory exists

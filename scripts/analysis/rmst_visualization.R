@@ -11,9 +11,9 @@
 #' @param group1_name Character string for the first group (coded as 0 in RMST)
 #' @param group2_name Character string for the second group (coded as 1 in RMST)
 #' @param group_var Character string for the grouping variable name (used for palette selection)
-#' @param route_key Optional explicit survival-output route key.
+#' @param route_key Endpoint route that owns the output directories, such as `obj1_os`.
 #' @return ggplot object
-plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dirs, prefix, group1_name = "Group 1", group2_name = "Group 2", group_var = "treatment_group", route_key = NULL) {
+plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dirs, prefix, group1_name = "Group 1", group2_name = "Group 2", group_var = "treatment_group", route_key) {
     wrap_plot_text <- function(text, width) {
         paste(strwrap(text, width = width), collapse = "\n")
     }
@@ -357,14 +357,7 @@ plot_rmst_pvalue_progression <- function(rmst_results, outcome_label, output_dir
         return(combined_plot)
     }
 
-    output_dir <- determine_survival_output_dir(outcome_label, output_dirs, route_key = route_key)
-
-    if (is.null(output_dir)) {
-        warning("Could not determine output directory for outcome_label: ", outcome_label)
-        return(combined_plot)
-    }
-
-    output_dir <- ensure_output_dir(resolve_endpoint_output_dir(output_dirs, output_dir, "rmst"))
+    output_dir <- ensure_output_dir(resolve_route_output_dir(output_dirs, route_key, "rmst"))
 
     filename <- paste0(prefix, make_filename_safe(outcome_label), "_rmst_pvalue_progression.png")
     if (is.null(filename) || filename == "" || is.na(filename)) {

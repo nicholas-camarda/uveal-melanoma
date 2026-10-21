@@ -569,6 +569,11 @@ main_execution <- function() {
     initialize_runtime_dirs()
     set_log_context(replace = TRUE)
     log_phase("MAIN EXECUTION PHASE")
+    source_revision <- get_source_revision()
+    logger::log_info(sprintf(
+        "Source revision: %s (uncommitted changes: %s)",
+        source_revision$revision, source_revision$dirty
+    ))
     # Record the session locale so a run log shows the character handling and
     # collation order that produced the outputs.
     logger::log_info(sprintf("Session locale: %s", Sys.getlocale()))
@@ -690,25 +695,18 @@ main_execution <- function() {
         logger::log_error(formatted(sprintf("Error merging baseline tables: %s", e$message)))
     })
 
-    # Generate cross-cohort Objective 4 poster figures after all cohort-level
-    # simple-validation workbooks have been refreshed.
+    # Cross-cohort observed-vs-imported figure, drawn after every cohort workbook is refreshed.
+    # A failure is a fatal issue like any other Objective 4 output, recorded so the run still
+    # reports its state and the earlier cohort failures instead of aborting before the summary.
     tryCatch({
-        create_objective4_simple_mfs_three_panel_report()
-        create_objective4_simple_mfs_two_panel_report()
-        if (!is.null(cohort_data[["uveal_melanoma_full_cohort"]]) && !is.null(cohort_data[["uveal_melanoma_gksrs_only_cohort"]])) {
-            write_mfs_simple_binary_poster_km_stack(
-                full_data = cohort_data[["uveal_melanoma_full_cohort"]],
-                gksrs_data = cohort_data[["uveal_melanoma_gksrs_only_cohort"]],
-                output_dir = file.path(MERGED_TABLES_DIR, "objective4_poster_figures")
-            )
-        }
+        create_gep_observed_vs_imported_panel_report(run_started = main_start_time)
         logger::log_info(sprintf(
-            "Objective 4 poster figures saved under: %s",
-            file.path(MERGED_TABLES_DIR, "objective4_poster_figures")
+            "Objective 4 cross-cohort figure saved under: %s",
+            file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures")
         ))
     }, error = function(e) {
-        warning_issues <<- append_issue(warning_issues, sprintf("objective4_poster_mfs:%s", e$message))
-        logger::log_warn(formatted(sprintf("Objective 4 poster figure generation failed: %s", e$message)))
+        fatal_issues <<- append_issue(fatal_issues, sprintf("objective4_cross_cohort_figure:%s", e$message))
+        logger::log_error(formatted(sprintf("Objective 4 cross-cohort figure failed: %s", e$message)))
     })
 
     # Summary banner

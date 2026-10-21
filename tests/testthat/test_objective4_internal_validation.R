@@ -11,52 +11,6 @@ test_that("horizon status distinguishes known competing outcomes from early cens
     expect_identical(status$use_left_limit, c(TRUE, TRUE, FALSE, FALSE))
 })
 
-test_that("IPCW decision curves exclude early censoring and retain competing deaths", {
-    payload <- calculate_ipcw_decision_curve(
-        data = tibble::tibble(
-            risk = c(0.9, 0.8, 0.2, 0.1),
-            followup = c(12, 18, 24, 60),
-            event_type = c(1L, 2L, 0L, 0L)
-        ),
-        predicted_risk_var = "risk",
-        time_var = "followup",
-        event_type_var = "event_type",
-        horizon_months = 60,
-        thresholds = c(0.25, 0.5)
-    )
-
-    expect_identical(payload$data$outcome, c(1L, 0L, NA_integer_, 0L))
-    expect_equal(payload$data$ipcw_weight[[3]], 0)
-    expect_gt(payload$data$ipcw_weight[[2]], 0)
-    expect_equal(payload$known_n, 3L)
-    expect_equal(payload$early_censored_n, 1L)
-})
-
-test_that("direct ridge models fail closed when named horizon outcome disagrees", {
-    fixture <- tibble::tibble(
-        patient_id = sprintf("p%02d", 1:12),
-        exploratory_gep_group = rep(c("Class 1", "Class 2"), 6),
-        age = seq(40, 70, length.out = 12),
-        followup = rep(c(12, 72), 6),
-        event_type = rep(c(1L, 0L), 6),
-        metastasis_by_5yr = rep(0L, 12)
-    )
-
-    expect_error(
-        fit_exploratory_binary_model(
-            data = fixture,
-            outcome_var = "metastasis_by_5yr",
-            predictors = "age",
-            model_name = "Direct 5-Year Metastasis Risk",
-            model_mode = "ipcw_horizon_mfs",
-            time_var = "followup",
-            event_var = "event_type",
-            eval_time_months = 60
-        ),
-        "fixed-horizon outcome contract failed"
-    )
-})
-
 test_that("fold IPCW payload uses only training rows for censoring estimation", {
     training <- tibble::tibble(
         followup = c(10, 20, 70, 80),
@@ -271,62 +225,6 @@ test_that("IPCW metrics explicitly report missing weighted case or control suppo
     expect_true(is.na(no_cases$brier))
 })
 
-test_that("IPCW calibration uses assessment weights and rejects sparse support", {
-    # At each prediction value, the weighted event rate equals the prediction:
-    # 1 / (4 + 1) = 0.2 and 4 / (1 + 4) = 0.8.  The weighted offset
-    # intercept and logit slope are therefore both 0 and 1, respectively.
-    outcome <- rep(c(0L, 1L, 0L, 1L), 5)
-    predicted <- rep(c(0.2, 0.2, 0.8, 0.8), 5)
-    weight <- rep(c(4, 1, 1, 4), 5)
-
-    calibration <- summarize_ipcw_calibration(outcome, predicted, weight)
-    sparse <- summarize_ipcw_calibration(
-        outcome = c(0L, 1L, NA_integer_),
-        predicted = c(0.2, 0.8, NA_real_),
-        weight = c(1, 1, 0)
-    )
-
-    expect_identical(calibration$status, "ok")
-    expect_equal(calibration$intercept, 0, tolerance = 1e-7)
-    expect_equal(calibration$slope, 1, tolerance = 1e-7)
-    expect_equal(calibration$weighted_cases, 25)
-    expect_equal(calibration$weighted_controls, 25)
-    expect_identical(sparse$status, "unsupported_sparse_support")
-    expect_true(is.na(sparse$intercept))
-    expect_true(is.na(sparse$slope))
-})
-
-test_that("IPCW calibration rejects complete separation despite adequate support", {
-    separated <- summarize_ipcw_calibration(
-        outcome = c(rep(0L, 10), rep(1L, 10)),
-        predicted = c(rep(0.1, 10), rep(0.9, 10)),
-        weight = rep(1, 20)
-    )
-
-    expect_identical(separated$status, "recalibration_fit_unstable")
-    expect_true(is.na(separated$intercept))
-    expect_true(is.na(separated$slope))
-})
-
-test_that("zero-weight unknown rows cannot alter IPCW calibration", {
-    outcome <- rep(c(0L, 1L, 0L, 1L), 5)
-    predicted <- rep(c(0.2, 0.2, 0.8, 0.8), 5)
-    weight <- rep(c(4, 1, 1, 4), 5)
-
-    baseline <- summarize_ipcw_calibration(outcome, predicted, weight)
-    with_unknown <- summarize_ipcw_calibration(
-        outcome = c(outcome, NA_integer_),
-        predicted = c(predicted, NA_real_),
-        weight = c(weight, 0)
-    )
-
-    expect_identical(with_unknown$status, baseline$status)
-    expect_equal(with_unknown$intercept, baseline$intercept)
-    expect_equal(with_unknown$slope, baseline$slope)
-    expect_equal(with_unknown$weighted_cases, baseline$weighted_cases)
-    expect_equal(with_unknown$weighted_controls, baseline$weighted_controls)
-})
-
 make_nested_cv_fixture <- function() {
     n <- 60L
     tibble::tibble(
@@ -363,7 +261,7 @@ test_that("nested horizon ridge is deterministic and keyed independently of row 
     order_predictions <- function(x) x[do.call(order, x[prediction_key]), , drop = FALSE]
     expect_equal(order_predictions(first$oof_predictions), order_predictions(second$oof_predictions))
     expect_equal(order_predictions(first$oof_predictions), order_predictions(reordered$oof_predictions))
-    expect_identical(first$final_foldid[order(first$final_stable_id)], reordered$final_foldid[order(reordered$final_stable_id)])
+    expect_equal(order_predictions(first$oof_predictions)$ipcw_weight, order_predictions(reordered$oof_predictions)$ipcw_weight)
     expect_true(all(stats::complete.cases(first$oof_predictions$prediction)))
 })
 
@@ -491,36 +389,31 @@ test_that("horizon ridge design failures retain outer-fold and final-fit context
     )
 })
 
+make_surrogate_cv_fixture <- function() {
+    make_nested_cv_fixture() %>%
+        dplyr::mutate(
+            id = .data$patient_id,
+            gep_group = rep(c("Class 1", "Class 2"), length.out = dplyr::n())
+        )
+}
+
 test_that("surrogate nested fit failures retain repeat and outer-fold context", {
-    fixture <- make_nested_cv_fixture() %>%
-        dplyr::mutate(class2 = rep(c(0L, 1L), length.out = dplyr::n()))
+    fixture <- make_surrogate_cv_fixture()
     testthat::local_mocked_bindings(
         cv.glmnet = function(...) stop("forced inner-fit failure"),
         .package = "glmnet"
     )
 
     expect_error(
-        cross_validate_binary_predictions(
-            data = fixture,
-            outcome_var = "class2",
-            predictors = c("age", "diameter"),
-            folds = 3L,
-            seed = GEP_EXPLORATORY_CV_SEED,
-            repeat_id = 2L
-        ),
-        "repeat 2, outer fold 1: forced inner-fit failure"
+        compute_surrogate_oof_predictions(fixture, predictors = c("age", "diameter")),
+        "repeat 1, outer fold 1: forced inner-fit failure"
     )
 })
 
 test_that("surrogate nested prediction failures retain repeat and outer-fold context", {
-    fixture <- make_nested_cv_fixture() %>%
-        dplyr::mutate(class2 = rep(c(0L, 1L), length.out = dplyr::n()))
+    fixture <- make_surrogate_cv_fixture()
     previous_method <- get0("predict.cv.glmnet", envir = .GlobalEnv, inherits = FALSE)
-    assign(
-        "predict.cv.glmnet",
-        function(object, ...) stop("forced prediction failure"),
-        envir = .GlobalEnv
-    )
+    assign("predict.cv.glmnet", function(object, ...) stop("forced prediction failure"), envir = .GlobalEnv)
     on.exit({
         if (is.null(previous_method)) {
             rm("predict.cv.glmnet", envir = .GlobalEnv)
@@ -530,14 +423,28 @@ test_that("surrogate nested prediction failures retain repeat and outer-fold con
     }, add = TRUE)
 
     expect_error(
-        cross_validate_binary_predictions(
-            data = fixture,
-            outcome_var = "class2",
-            predictors = c("age", "diameter"),
-            folds = 3L,
-            seed = GEP_EXPLORATORY_CV_SEED,
-            repeat_id = 7L
-        ),
-        "repeat 7, outer fold 1: forced prediction failure"
+        compute_surrogate_oof_predictions(fixture, predictors = c("age", "diameter")),
+        "repeat 1, outer fold 1: forced prediction failure"
+    )
+})
+
+test_that("ridge design builder stops instead of scoring an absent level as the reference", {
+    fitting <- data.frame(site = factor(c("a", "a", "b", "b"), levels = c("a", "b", "c")), age = c(40, 50, 60, 70))
+    # Level "c" has no fitting patient: its design column is all zero.
+    expect_error(
+        build_horizon_ridge_design_matrix(fitting, c("site", "age")),
+        "no patients for design column\\(s\\): sitec"
+    )
+
+    fitting <- droplevels(fitting)
+    reference <- colnames(build_horizon_ridge_design_matrix(fitting, c("site", "age")))
+    # A training level missing from the assessment rows is zero-filled.
+    only_a <- data.frame(site = factor("a", levels = c("a", "b")), age = 45)
+    expect_equal(unname(build_horizon_ridge_design_matrix(only_a, c("site", "age"), reference)[1, "siteb"]), 0)
+    # A level only the assessment rows have is refused.
+    assessment <- data.frame(site = factor(c("a", "c")), age = c(45, 55))
+    expect_error(
+        build_horizon_ridge_design_matrix(assessment, c("site", "age"), reference),
+        "absent from training: sitec"
     )
 })

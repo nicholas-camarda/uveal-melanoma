@@ -177,7 +177,7 @@ The analysis is organized into four main research objectives:
 | 1 | Efficacy | Event summaries, survival outputs, tumor-height analyses, subgroup forest plots |
 | 2 | Safety | Vision summaries, adverse-event models, diagnostics, effect-summary workbooks |
 | 3 | Repeat radiation | PFS-2 summaries, survival outputs, skip artifacts when data are sparse |
-| 4 | GEP validation | Consolidated workbooks, technical workbooks, narrative summaries, KM/CIF displays |
+| 4 | GEP validation | Primary workbook and figures per cohort (observed vs imported 5-year risk, discrimination, no-GEP analysis for the full cohort) |
 
 For a collaborator-facing overview of the study aims and eligibility logic, see [docs/OBJECTIVES.md](docs/OBJECTIVES.md).
 
@@ -208,14 +208,14 @@ Within each cohort folder, outputs follow a consistent layout:
 - `01_Efficacy/`: recurrence, metastasis, survival, tumor-height, and subgroup outputs; primary endpoint artifacts use typed `01_`–`06_` subfolders and subgroup outputs use `g_subgroup_analysis/`. Only the restricted cohort also has `h_propensity_score_sensitivity/`, containing the overlap-weighted sensitivity workbook, plots, narrative summary, and technical audit.
 - `02_Safety/`: vision and radiation-related adverse-event outputs (descriptive → adjusted models → effect summary; vision adds `04_sensitivity/`)
 - `03_Repeat_Radiation/`: PFS-2 cohort support, survival artifacts, and PH diagnostics under `a_pfs2/`
-- `04_GEP_Validation/`: Objective 4 workbooks, plots, and unified summaries
+- `04_GEP_Validation/`: Objective 4 workbooks and figures (observed vs imported 5-year risk by GEP group; the full cohort adds `d_no_gep/`)
 
 Objective 4 has a deliberate reading path:
 
 1. Start here for the high-level purpose and output location.
-2. Use [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md#gep-validation-metrics) for the formal validation framework.
+2. Use [docs/STATISTICAL_METHODS.md](docs/STATISTICAL_METHODS.md#gep-validation) for the formal validation methods.
 3. Use [docs/INTERPRETATION_GUIDE.md](docs/INTERPRETATION_GUIDE.md#understanding-gep-analysis) for workbook-first reading guidance.
-4. Use [docs/TECHNICAL.md](docs/TECHNICAL.md#objective-4-gep-predictive-accuracy) for implementation and artifact contracts.
+4. Use [docs/TECHNICAL.md](docs/TECHNICAL.md#objective-4-gep-validation) for implementation and artifact contracts.
 
 ## Publish Workflow
 
@@ -233,7 +233,7 @@ publish_outputs(dry_run = TRUE)
 publish_outputs(dry_run = FALSE)
 ```
 
-The publish step copies only registry-approved deliverables. It excludes `.rds`, diagnostics workbooks, caches, logs, test output, and ad hoc intermediate files by design.
+The publish step copies only registry-approved deliverables. It excludes `.rds`, caches, logs, test output, and ad hoc intermediate files by design. Diagnostics workbooks (`*_diagnostics.xlsx`) are included because they list, by patient id (for example the `Record_Issues` sheets of the Objective 4 and model diagnostics workbooks), the patients left out of or flagged in each analysis; share snapshots only with people who have access to the study data.
 
 The direct command interface is dry-run by default:
 
@@ -270,7 +270,7 @@ Rscript -e "source('scripts/load_all.R'); RECREATE_ANALYTIC_DATASETS <- TRUE; ma
 
 `INPUT_FILENAME` is maintained in the data-processing policy. If the shared spreadsheet has a different name, provide it at the configured raw-data location under that expected name, or make a deliberate local configuration change before recreating analytic datasets.
 
-Objective 4 grouping and display settings are centralized in `scripts/config/objective4_policy.R` through `GEP_GROUPING_SPECS` and `OBJECTIVE4_GEP_GROUPING`.
+The Objective 4 GEP groups, their labels and the raw source labels behind them are defined in `scripts/config/objective4_policy.R`.
 
 ## Documentation
 

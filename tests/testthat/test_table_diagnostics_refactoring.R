@@ -60,7 +60,11 @@ test_that("create_comprehensive_diagnostics exposes sparse-level diagnostics sch
     expect_true(is.list(result))
     expect_true(all(c(
         "model_summary",
-        "model_diagnostics_tab",
+        "model_diagnostics",
+        "model_spec",
+        "term_support",
+        "suppressed_terms",
+        "prefit_records",
         "data_characteristics",
         "sparse_level_diagnostics",
         "raw_model_output",
@@ -211,6 +215,7 @@ test_that("Cox fitted-model diagnostics count modeled rows rather than events", 
 
 test_that("model summary puts the fitted sample size alongside model metadata", {
     test_data <- data.frame(
+        id = sprintf("P%03d", 1:24),
         outcome = c(0, 0, 1, 1, NA_real_, 1, 1, 0, rep(c(0, 1, 1, 0), 4)),
         treatment_group = factor(rep(c("Control", "Treatment"), 12)),
         age = seq(45, 79, length.out = 24),
@@ -326,7 +331,7 @@ test_that("supported fitted model classes use their model-frame row count", {
     expect_true(all(vapply(audits, `[[`, character(1), "sample_size_reconciliation") == "reconciled"))
 })
 
-test_that("diagnostics workbook omits redundant excluded rows worksheet", {
+test_that("diagnostics workbook is one sheet family with each fact in one place", {
     set.seed(456)
 
     test_data <- data.frame(
@@ -396,21 +401,25 @@ test_that("diagnostics workbook omits redundant excluded rows worksheet", {
 
     diagnostics_path <- file.path(output_dir, "unit_test_analysis_diagnostics.xlsx")
     sheets <- readxl::excel_sheets(diagnostics_path)
-    model_summary <- readxl::read_xlsx(diagnostics_path, sheet = "Model_summary")
-    sample_size_summary <- readxl::read_xlsx(diagnostics_path, sheet = "Sample_size_summary")
+    flow <- readxl::read_xlsx(diagnostics_path, sheet = "Denominators_Flow")
+    checks <- readxl::read_xlsx(diagnostics_path, sheet = "Checks")
+    term_support <- readxl::read_xlsx(diagnostics_path, sheet = "Term_support")
+    record_issues <- readxl::read_xlsx(diagnostics_path, sheet = "Record_Issues")
 
-    expect_equal(sheets[1:3], c("Model_summary", "Sample_size_summary", "Model_excluded_rows"))
-    expect_true("Sparse_level_diagnostics" %in% sheets)
-    expect_true("Model_excluded_rows" %in% sheets)
-    expect_false("Excluded_Rows" %in% sheets)
-    expect_true(all(c("input_n", "fitted_n", "n_total") %in% names(model_summary)))
-    expect_equal(model_summary$fitted_n, model_summary$n_total)
-    expect_equal(sample_size_summary$stage, c(
+    expect_equal(sheets, c("Specification_Coding", "Denominators_Flow", "Checks", "Term_support", "Record_Issues"))
+    expect_equal(flow$stage[1:3], c(
         "Initial analysis cohort",
         "Model input after pre-fit exclusions",
         "Fitted model-frame rows"
     ))
-    expect_true(all(c("n", "excluded_from_previous_n", "exclusion_reason", "source") %in% names(sample_size_summary)))
+    expect_true(all(c("Events in the fitted model", "Non-events in the fitted model") %in% flow$stage))
+    expect_true(all(c("n", "excluded_from_previous_n", "exclusion_reason") %in% names(flow)))
+    expect_true(all(c("check", "scope", "result", "status", "reason") %in% names(checks)))
+    expect_true(all(checks$status %in% c("no concern", "concern", "not assessed")))
+    expect_true(all(c("Events per estimated coefficient", "Sample sizes reconcile") %in% checks$check))
+    expect_equal(names(record_issues), c("record_key", "key_source", "step", "reason", "field", "current_value"))
+    # No estimate, interval or p-value is repeated outside the principal table.
+    expect_false(any(grepl("estimate|ci_|p_value|odds_ratio|hazard_ratio", names(term_support))))
 })
 
 test_that("shared skip diagnostics render structured HTML and workbook tabs", {
@@ -464,7 +473,11 @@ test_that("shared skip diagnostics render structured HTML and workbook tabs", {
         model_context = build_model_context_tab(list(
             model_type = "logistic",
             formula = "outcome ~ treatment_group + sex"
-        ))
+        )),
+        prefit_records = build_model_record_table(
+            record_key = c("101", "102", "103"), key_source = "id", step = MODEL_RECORD_STEP_SPARSE_LEVEL,
+            reason = "Level has 1 observation(s), below the minimum of 5", field = "location", current_value = "Peripheral"
+        )
     )
 
     html_text <- render_skip_report_html(
@@ -487,7 +500,19 @@ test_that("shared skip diagnostics render structured HTML and workbook tabs", {
     write_diagnostics_workbook(diagnostics, diagnostics_path)
     sheets <- readxl::excel_sheets(diagnostics_path)
 
-    expect_true(all(c("Skip_summary", "Narrative_summary", "Event_support", "Model_context") %in% sheets))
+    expect_equal(sheets, c(
+        "Specification_Coding", "Denominators_Flow", "Checks", "Term_support", "Warnings_Limitations", "Record_Issues"
+    ))
+    checks <- readxl::read_xlsx(diagnostics_path, sheet = "Checks")
+    expect_true("Model fitted" %in% checks$check)
+    expect_true("minimum events required" %in% checks$check)
+    flow <- readxl::read_xlsx(diagnostics_path, sheet = "Denominators_Flow")
+    expect_true("modeled events" %in% flow$stage)
+    record_issues <- readxl::read_xlsx(diagnostics_path, sheet = "Record_Issues")
+    expect_equal(record_issues$record_key, c("101", "102", "103"))
+    # A skip metric nobody placed stops the build instead of being copied into the wrong sheet.
+    diagnostics$skip_summary <- build_skip_summary_tab(list(unplaced_metric = 1L))
+    expect_error(write_diagnostics_workbook(diagnostics, tempfile(fileext = ".xlsx")), "Unplaced skip-summary metric")
 })
 
 test_that("no-content diagnostic HTML uses the shared structured skip layout", {
@@ -511,6 +536,14 @@ test_that("no-content diagnostic HTML uses the shared structured skip layout", {
         outcome_type = "binary"
     )
 
+    # A real diagnostics object whose principal table is forced to have no reportable content.
+    no_content_diagnostics <- create_comprehensive_diagnostics(
+        model_fit = model_fit, data = test_data, outcome_var = "outcome", predictor_vars = "treatment_group",
+        confounders = "age", analysis_name = "unit_no_content", dataset_name = "test_dataset",
+        table_result = table_result
+    )
+    no_content_diagnostics$filtering_summary$table_has_meaningful_content <- FALSE
+
     output_dir <- tempfile("no-content-output-")
     dir.create(output_dir, recursive = TRUE)
     withr::defer(unlink(output_dir, recursive = TRUE), envir = parent.frame())
@@ -523,37 +556,7 @@ test_that("no-content diagnostic HTML uses the shared structured skip layout", {
         dataset_name = "test_dataset",
         output_dir = output_dir,
         prefix = "unit_",
-        diagnostics = list(
-            filtering_summary = data.frame(
-                table_has_meaningful_content = FALSE,
-                main_predictor_filtered = FALSE
-            ),
-            sample_size_summary = tibble::tibble(
-                dataset_name = "test_dataset",
-                analysis_name = "unit_no_content",
-                stage_order = 1:3,
-                stage = c(
-                    "Initial analysis cohort",
-                    "Model input after pre-fit exclusions",
-                    "Fitted model-frame rows"
-                ),
-                n = c(80L, 80L, NA_integer_),
-                excluded_from_previous_n = c(NA_integer_, 0L, NA_integer_),
-                excluded_pct = c(NA_real_, 0, NA_real_),
-                exclusion_reason = c(
-                    "Starting analysis cohort",
-                    "No pre-fit exclusions",
-                    "No fitted model was produced"
-                ),
-                source = c(
-                    "filter_stats$initial_n",
-                    "rows passed to model fitting",
-                    "model fit"
-                ),
-                status = c("available", "not_fitted", "not_fitted"),
-                reconciliation = c("not_applicable", "matched", "not_fitted")
-            )
-        ),
+        diagnostics = no_content_diagnostics,
         data = test_data,
         outcome_var = "outcome",
         confounders = "age"
@@ -596,11 +599,6 @@ test_that("filtering summary counts filtered coefficients from raw model output"
 })
 
 test_that("public APIs no longer expose other_map plumbing", {
-    expect_false("other_map" %in% names(formals(analyze_gep_mfs_validation)))
-    expect_false("other_map" %in% names(formals(analyze_gep_mss_validation)))
-    expect_false("other_map" %in% names(formals(create_mfs_gep_visuals)))
-    expect_false("other_map" %in% names(formals(create_mss_gep_visuals)))
-    expect_false("other_map" %in% names(formals(create_mss_cumulative_incidence_curves)))
     expect_false("other_map" %in% names(formals(create_forest_plot)))
     expect_false("other_map" %in% names(formals(create_single_cohort_forest_plot)))
     expect_false("other_map" %in% names(formals(create_forest_plot_diagnostics)))

@@ -282,20 +282,20 @@ write_readable_xlsx <- function(x,
         stop("write_readable_xlsx() did not receive any non-null sheets to write", call. = FALSE)
     }
 
+    # openxlsx reports an unwritable path as a warning, so remove any earlier file and check
+    # that the new one exists; an old file must not pass for the one just written.
+    if (file.exists(path)) {
+        file.remove(path)
+    }
     openxlsx::saveWorkbook(wb, path, overwrite = TRUE)
+    if (!file.exists(path)) {
+        stop(sprintf("The workbook was not written: %s", path), call. = FALSE)
+    }
     invisible(path)
 }
 
-#' Create organized output directory structure based on study objectives
-#'
-#' Creates directory structure organized by cohort first, then by study objectives
-#' Structure: cohort -> objective -> sub-objectives
-#' Includes dedicated directories for proportional hazards assumption diagnostics
-#'
-#' @param cohort_dir Base directory for this specific cohort
-#' @return List of created directory paths
-#' @examples
-#' create_output_structure("~/Workspaces/uveal-melanoma/runtime/Analysis/uveal_full")
+# Numbered artifact subfolders of each endpoint route. A route's profile lists its artifact
+# types in order; each type becomes `NN_<slug>` below the route's base directory.
 ENDPOINT_ARTIFACT_FOLDER_SLUGS <- list(
     event_support = "event_support",
     km = "km_curves",
@@ -309,10 +309,7 @@ ENDPOINT_ARTIFACT_FOLDER_SLUGS <- list(
     adjusted_models = "adjusted_models",
     effect_summary = "effect_summary",
     models = "models",
-    timing_audit = "timing_audit",
-    validation = "validation",
-    cif = "cif_curves",
-    base = ""
+    timing_audit = "timing_audit"
 )
 
 ENDPOINT_PROFILES <- list(
@@ -337,56 +334,55 @@ ENDPOINT_PROFILE_BY_ROUTE_PREFIX <- c(
     obj1_height_primary = "tumor_height_primary"
 )
 
-#' Build numbered subfolder name for an endpoint profile artifact type
-#'
-#' @param profile_id Profile identifier from `ENDPOINT_PROFILES`.
-#' @param artifact_type Semantic artifact type.
-#' @return Character folder name such as `05_ph_diagnostics`.
-profile_folder_name <- function(profile_id, artifact_type) {
-    profile_types <- ENDPOINT_PROFILES[[profile_id]]
-    if (is.null(profile_types) || !artifact_type %in% profile_types) {
-        return(artifact_type)
-    }
-    idx <- match(artifact_type, profile_types)
-    slug <- ENDPOINT_ARTIFACT_FOLDER_SLUGS[[artifact_type]]
-    sprintf("%02d_%s", idx, slug)
-}
-
-#' Register numbered artifact subdirectories for an endpoint route prefix
+#' Register the numbered artifact subdirectories of one endpoint route
 #'
 #' @param dirs Existing output directory list.
-#' @param route_prefix Route key prefix such as `obj1_os`.
+#' @param route_key Route key such as `obj1_os`.
 #' @param base_path Endpoint base directory.
 #' @param profile_id Profile identifier from `ENDPOINT_PROFILES`.
-#' @return Updated output directory list.
-append_endpoint_subdirs <- function(dirs, route_prefix, base_path, profile_id) {
-    profile_types <- ENDPOINT_PROFILES[[profile_id]]
-    if (is.null(profile_types)) {
-        return(dirs)
+#' @return `dirs` with one `<route_key>_<artifact_type>` entry per artifact type of the profile.
+append_endpoint_subdirs <- function(dirs, route_key, base_path, profile_id) {
+    artifact_types <- ENDPOINT_PROFILES[[profile_id]]
+    if (is.null(artifact_types)) {
+        stop(sprintf("Unknown endpoint profile `%s`.", profile_id), call. = FALSE)
     }
-    for (artifact_type in profile_types) {
-        folder_name <- profile_folder_name(profile_id, artifact_type)
-        key <- paste0(route_prefix, "_", artifact_type)
-        dirs[[key]] <- file.path(base_path, folder_name)
+    for (index in seq_along(artifact_types)) {
+        artifact_type <- artifact_types[[index]]
+        folder_name <- sprintf("%02d_%s", index, ENDPOINT_ARTIFACT_FOLDER_SLUGS[[artifact_type]])
+        dirs[[paste0(route_key, "_", artifact_type)]] <- file.path(base_path, folder_name)
     }
     dirs
 }
 
-#' Resolve a route prefix and artifact type to an output directory
+#' Look up a configured output directory
 #'
-#' @param output_dirs Named output directory list.
-#' @param route_prefix Route key such as `obj1_os`.
-#' @param artifact_type Semantic artifact type.
-#' @return Resolved directory path.
-resolve_route_output_dir <- function(output_dirs, route_prefix, artifact_type) {
-    if (is.null(output_dirs) || is.null(route_prefix)) {
-        return(getwd())
+#' There is no default location: a missing or empty entry is an error, so every
+#' artifact is written to the directory `create_output_structure()` defines.
+#'
+#' @param output_dirs Named output directory list from [create_output_structure()].
+#' @param key Name of the directory entry.
+#' @return The directory path.
+get_output_dir <- function(output_dirs, key) {
+    directory <- output_dirs[[key]]
+    if (!is.character(directory) || length(directory) != 1L || is.na(directory) || !nzchar(trimws(directory))) {
+        stop(sprintf("No output directory is configured for `%s`.", key), call. = FALSE)
     }
-    base_dir <- output_dirs[[route_prefix]]
-    if (is.null(base_dir)) {
-        return(getwd())
+    directory
+}
+
+#' Resolve an endpoint route and artifact type to its output directory
+#'
+#' @param output_dirs Named output directory list from [create_output_structure()].
+#' @param route_key Route key; one of `names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)`.
+#' @param artifact_type Artifact type of the route's profile, or `"base"` for the route's
+#'   base directory.
+#' @return The directory path; unknown routes and unconfigured directories are errors.
+resolve_route_output_dir <- function(output_dirs, route_key, artifact_type = "base") {
+    if (!is.character(route_key) || length(route_key) != 1L || !route_key %in% names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)) {
+        stop(sprintf("Unknown output route `%s`.", paste(route_key, collapse = ", ")), call. = FALSE)
     }
-    resolve_endpoint_output_dir(output_dirs, base_dir, artifact_type)
+    key <- if (identical(artifact_type, "base")) route_key else paste0(route_key, "_", artifact_type)
+    get_output_dir(output_dirs, key)
 }
 
 #' Define the objective-based directory map for a single cohort
@@ -402,6 +398,8 @@ resolve_route_output_dir <- function(output_dirs, route_prefix, artifact_type) {
 define_objective_directory_map <- function(cohort_dir) {
     list(
         # ── Objective 1: Efficacy of PBT vs GKSRS ──────────────────────
+        obj1_root                 = file.path(cohort_dir, "01_Efficacy"),
+        obj1_subgroup_root        = file.path(cohort_dir, "01_Efficacy", "g_subgroup_analysis"),
         obj1_recurrence           = file.path(cohort_dir, "01_Efficacy", "a_recurrence"),
         obj1_mets                 = file.path(cohort_dir, "01_Efficacy", "b_metastatic_progression"),
         obj1_os                   = file.path(cohort_dir, "01_Efficacy", "c_overall_survival"),
@@ -422,20 +420,9 @@ define_objective_directory_map <- function(cohort_dir) {
         # ── Objective 3: Efficacy of Repeat Radiation ───────────────────
         obj3_pfs2 = file.path(cohort_dir, "03_Repeat_Radiation", "a_pfs2"),
 
-        # ── Objective 4: GEP Predictive Accuracy ────────────────────────
-        obj4_mfs            = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival"),
-        obj4_mss            = file.path(cohort_dir, "04_GEP_Validation", "b_melanoma_specific_survival"),
-        obj4_ph_diagnostics = file.path(cohort_dir, "04_GEP_Validation", "c_proportional_hazards_diagnostics"),
-        # MFS-specific subfolders
-        obj4_mfs_km         = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival", "01_km_curves"),
-        obj4_mfs_cox        = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival", "02_cox_models"),
-        obj4_mfs_rmst       = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival", "03_rmst_analysis"),
-        obj4_mfs_validation = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival", "04_validation"),
-        obj4_mfs_summary    = file.path(cohort_dir, "04_GEP_Validation", "a_metastasis_free_survival", "05_summary_tables"),
-        # MSS-specific subfolders (intentionally asymmetric with MFS)
-        obj4_mss_cif        = file.path(cohort_dir, "04_GEP_Validation", "b_melanoma_specific_survival", "01_cif_curves"),
-        obj4_mss_validation = file.path(cohort_dir, "04_GEP_Validation", "b_melanoma_specific_survival", "02_validation"),
-        obj4_mss_summary    = file.path(cohort_dir, "04_GEP_Validation", "b_melanoma_specific_survival", "03_summary_tables"),
+        # ── Objective 4: GEP Validation ─────────────────────────────────
+        obj4_gep    = file.path(cohort_dir, "04_GEP_Validation"),
+        obj4_no_gep = file.path(cohort_dir, "04_GEP_Validation", "d_no_gep"),
 
         # ── Cross-cutting outputs ──────────────────────────────────────
         baseline_characteristics = file.path(cohort_dir, "00_General", "baseline_characteristics"),
@@ -465,17 +452,10 @@ create_output_structure <- function(cohort_dir, include_propensity_sensitivity =
         )
     }
 
-    # Expand numbered artifact subdirectories from endpoint profiles
-    dirs <- append_endpoint_subdirs(dirs, "obj1_recurrence",      dirs$obj1_recurrence,      "event_support_survival")
-    dirs <- append_endpoint_subdirs(dirs, "obj1_mets",            dirs$obj1_mets,            "event_support_survival")
-    dirs <- append_endpoint_subdirs(dirs, "obj1_os",              dirs$obj1_os,              "capped_survival")
-    dirs <- append_endpoint_subdirs(dirs, "obj1_pfs",             dirs$obj1_pfs,             "capped_survival")
-    dirs <- append_endpoint_subdirs(dirs, "obj1_height_primary",  dirs$obj1_height_primary,  "tumor_height_primary")
-    dirs <- append_endpoint_subdirs(dirs, "obj2_vision",          dirs$obj2_vision,          "safety_vision")
-    dirs <- append_endpoint_subdirs(dirs, "obj2_retinopathy",     dirs$obj2_retinopathy,     "safety_toxicity")
-    dirs <- append_endpoint_subdirs(dirs, "obj2_nvg",             dirs$obj2_nvg,             "safety_toxicity")
-    dirs <- append_endpoint_subdirs(dirs, "obj2_srd",             dirs$obj2_srd,             "safety_toxicity")
-    dirs <- append_endpoint_subdirs(dirs, "obj3_pfs2",            dirs$obj3_pfs2,            "pfs2_survival")
+    # Expand the numbered artifact subdirectories of every endpoint route
+    for (route_key in names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)) {
+        dirs <- append_endpoint_subdirs(dirs, route_key, dirs[[route_key]], ENDPOINT_PROFILE_BY_ROUTE_PREFIX[[route_key]])
+    }
 
     # Create all directories
     for (dir_name in names(dirs)) {
@@ -491,111 +471,13 @@ create_output_structure <- function(cohort_dir, include_propensity_sensitivity =
     dirs
 }
 
-#' Normalize a file path safely
+#' Keep the reason text only for checks that raise a concern or were not assessed
 #'
-#' Wraps [base::normalizePath()] with guards against NULL, NA, and empty input.
-#' Always uses forward slashes for cross-platform consistency.
-#'
-#' @param path A file path (character), or NULL/NA.
-#' @return Normalized path string, or `NA_character_` if input is not usable.
-safe_normalize_path <- function(path) {
-    if (is.null(path) || is.na(path) || !nzchar(path)) {
-        return(NA_character_)
-    }
-    normalizePath(path, winslash = "/", mustWork = FALSE)
-}
-
-#' Resolve an artifact-type subdirectory within an endpoint base directory
-#'
-#' Given an endpoint base directory and an artifact type (km, cox, rmst,
-#' summary, ph, sensitivity, etc.), returns the appropriate numbered
-#' subdirectory. Handles special routing for Objective 4 (MFS vs MSS) and
-#' for generic route-prefix endpoints.
-#'
-#' @param output_dirs Named output directory list from [create_output_structure()].
-#' @param base_dir Endpoint base directory.
-#' @param artifact_type Semantic artifact type (km, cox, rmst, summary, ph,
-#'   sensitivity, cohort_support, descriptive, adjusted_models,
-#'   effect_summary, models, timing_audit, validation, cif, base).
-#' @return Resolved output directory path.
-resolve_endpoint_output_dir <- function(
-    output_dirs,
-    base_dir,
-    artifact_type = c(
-        "base", "event_support", "km", "cox", "rmst", "summary", "ph", "sensitivity",
-        "cohort_support", "descriptive", "adjusted_models", "effect_summary", "models",
-        "timing_audit", "validation", "cif"
-    )
-) {
-    artifact_type <- match.arg(artifact_type)
-
-    if (is.null(output_dirs) || is.null(base_dir)) {
-        return(base_dir)
-    }
-
-    normalized_base <- safe_normalize_path(base_dir)
-    normalized_mfs <- safe_normalize_path(output_dirs$obj4_mfs %||% NULL)
-    normalized_mss <- safe_normalize_path(output_dirs$obj4_mss %||% NULL)
-
-    if (!is.na(normalized_base) && !is.na(normalized_mfs) && identical(normalized_base, normalized_mfs)) {
-        key <- switch(
-            artifact_type,
-            base = "obj4_mfs",
-            km = "obj4_mfs_km",
-            cox = "obj4_mfs_cox",
-            rmst = "obj4_mfs_rmst",
-            validation = "obj4_mfs_validation",
-            summary = "obj4_mfs_summary",
-            cif = "obj4_mss_cif"
-        )
-        return(output_dirs[[key]] %||% base_dir)
-    }
-
-    if (!is.na(normalized_base) && !is.na(normalized_mss) && identical(normalized_base, normalized_mss)) {
-        key <- switch(
-            artifact_type,
-            base = "obj4_mss",
-            km = "obj4_mss_cif",
-            cox = "obj4_mss_summary",
-            rmst = "obj4_mss_summary",
-            validation = "obj4_mss_validation",
-            summary = "obj4_mss_summary",
-            cif = "obj4_mss_cif"
-        )
-        return(output_dirs[[key]] %||% base_dir)
-    }
-
-    route_prefixes <- names(ENDPOINT_PROFILE_BY_ROUTE_PREFIX)
-    for (route_prefix in route_prefixes) {
-        route_base <- output_dirs[[route_prefix]] %||% NULL
-        if (is.null(route_base)) {
-            next
-        }
-        if (!identical(safe_normalize_path(route_base), normalized_base)) {
-            next
-        }
-        sub_key <- paste0(route_prefix, "_", artifact_type)
-        if (!is.null(output_dirs[[sub_key]])) {
-            return(output_dirs[[sub_key]])
-        }
-        profile_id <- ENDPOINT_PROFILE_BY_ROUTE_PREFIX[[route_prefix]]
-        return(file.path(base_dir, profile_folder_name(profile_id, artifact_type)))
-    }
-
-    base_dir
-}
-
-#' Resolve an Objective-4 output directory (convenience wrapper)
-#'
-#' Calls [resolve_endpoint_output_dir()] with Obj-4-specific artifact types.
-#'
-#' @param output_dirs Named output directory list.
-#' @param base_dir Endpoint base directory.
-#' @param artifact_type One of `"base"`, `"km"`, `"cox"`, `"rmst"`,
-#'   `"validation"`, `"summary"`, or `"cif"`.
-#' @return Resolved output directory path.
-resolve_obj4_output_dir <- function(output_dirs, base_dir, artifact_type = c("base", "km", "cox", "rmst", "validation", "summary", "cif")) {
-    resolve_endpoint_output_dir(output_dirs, base_dir, artifact_type)
+#' @param checks Data frame with `status` and `reason`.
+#' @return `checks` with `reason` set to "No issue found" where the status is `no concern`.
+describe_check_reasons <- function(checks) {
+    checks$reason <- ifelse(checks$status == "no concern", "No issue found", checks$reason)
+    checks
 }
 
 #' Ensure a directory exists, creating it if needed
@@ -872,7 +754,7 @@ build_merged_baseline_cohort_table <- function(data, dataset_name = NULL) {
                 }
 
                 cohort_table %>%
-                    add_p(
+                    add_p_seeded(
                         include = any_of(testable_vars),
                         test = list(all_categorical() ~ "fisher.test"),
                         test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
@@ -1417,7 +1299,7 @@ merge_recurrence_metastatic_progression_tables <- function(full_cohort_data, res
                     )
                 ) %>%
                 add_overall() %>%
-                add_p(
+                add_p_seeded(
                     test = list(all_categorical() ~ "fisher.test"),
                     test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                 ) %>%
@@ -1450,7 +1332,7 @@ merge_recurrence_metastatic_progression_tables <- function(full_cohort_data, res
                     )
                 ) %>%
                 add_overall() %>%
-                add_p(
+                add_p_seeded(
                     test = list(all_categorical() ~ "fisher.test"),
                     test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                 ) %>%
@@ -1686,7 +1568,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                             digits = list(all_continuous() ~ 1, all_categorical() ~ 1)
                         ) %>%
                         add_overall() %>%
-                        add_p(
+                        add_p_seeded(
                             test = list(
                                 all_continuous() ~ "wilcox.test",
                                 all_categorical() ~ "fisher.test"
@@ -1766,7 +1648,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                                 label = list(vision_line_change_category ~ "Snellen Line Change Integer Distribution")
                             ) %>%
                             add_overall() %>%
-                            add_p(
+                            add_p_seeded(
                                 test = list(all_categorical() ~ "fisher.test"),
                                 test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                             ) %>%
@@ -1801,7 +1683,7 @@ merge_adverse_events_tables <- function(full_cohort_data, restricted_cohort_data
                                 label = list(vision_line_change_bucket ~ "Snellen Line Change Distribution")
                             ) %>%
                             add_overall() %>%
-                            add_p(
+                            add_p_seeded(
                                 test = list(all_categorical() ~ "fisher.test"),
                                 test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
                             ) %>%

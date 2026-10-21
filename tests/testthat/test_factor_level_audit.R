@@ -13,11 +13,10 @@ test_that("canonical factor expectations cover the core model-facing variables",
         "initial_stage_binary",
         "biopsy1_gep_raw",
         "biopsy1_gep",
-        "gep_class_simple",
         "prame_status",
         "gep12_prame_status",
-        "exploratory_gep_group",
-        "no_gep_group",
+        "gep_group",
+        "gep_test_timing",
         "vision_line_change_bucket",
         "initial_t_stage_simple"
     )

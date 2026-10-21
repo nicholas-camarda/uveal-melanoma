@@ -7,7 +7,8 @@ test_that("dependency diagram generator includes current workflow layers and loa
 
     expect_equal(result$status, "success")
     expect_match(doc_text, "workflow/publish_outputs.R", fixed = TRUE)
-    expect_match(doc_text, "data_helper/gep_missing_data_analysis.R", fixed = TRUE)
+    expect_match(doc_text, "data_helper/cohort_orchestration.R", fixed = TRUE)
+    expect_false(grepl("gep_missing_data_analysis", doc_text, fixed = TRUE))
     expect_match(doc_text, "## Loader Inventory", fixed = TRUE)
 })
 

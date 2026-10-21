@@ -13,7 +13,7 @@ test_that("isolated Objective 0 output contains only canonical analytic dataset 
         lapply(cohort_ids, function(dataset_id) {
             data.frame(
                 id = 1:2,
-                biopsy1_gep = factor(c("Class 1", "GEP Not Tested")),
+                biopsy1_gep = factor(c(GEP_DETAIL_LEVELS[[1]], GEP_GROUP_NOT_TESTED)),
                 baseline_value = c(10, 20)
             )
         }),
@@ -43,7 +43,7 @@ test_that("isolated Objective 0 output contains only canonical analytic dataset 
     expect_equal(result$analytic_data[[cohort_ids[[1]]]]$baseline_value, c(10, 20))
     expect_equal(
         as.character(result$analytic_data[[cohort_ids[[1]]]]$biopsy1_gep),
-        c("Class 1", "GEP Not Tested")
+        c(GEP_DETAIL_LEVELS[[1]], GEP_GROUP_NOT_TESTED)
     )
 })
 

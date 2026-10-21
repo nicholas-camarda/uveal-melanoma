@@ -229,6 +229,7 @@ analyze_tumor_height_changes <- function(data, output_dirs, prefix, confounders)
                 distinct_treatment_groups = length(unique(stats::na.omit(data_model_ready$treatment_group)))
             )),
             sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+            prefit_records = exclusion_result$filter_stats$removed_records,
             level_support = build_level_support_tab(data_model_ready, unique(c("treatment_group", confounders))),
             raw_model_output = "Model skipped: insufficient data after sparse-level exclusions."
         )
@@ -297,6 +298,7 @@ analyze_tumor_height_changes <- function(data, output_dirs, prefix, confounders)
                 distinct_treatment_groups = length(unique(stats::na.omit(data_model_ready$treatment_group)))
             )),
             sparse_level_diagnostics = exclusion_result$sparse_level_diagnostics,
+            prefit_records = exclusion_result$filter_stats$removed_records,
             level_support = build_level_support_tab(data_model_ready, unique(c("treatment_group", confounders, "initial_tumor_height"))),
             raw_model_output = "Model skipped: insufficient data after sparse-level exclusions."
         )
@@ -415,7 +417,11 @@ summarize_tumor_size_by_treatment <- function(data, size_var = "initial_tumor_he
 
     plot_obj <- ggplot2::ggplot(tumor_df, ggplot2::aes(x = treatment_group, y = .data[[size_var]], fill = treatment_group, color = treatment_group)) +
         ggplot2::geom_boxplot(width = 0.35, alpha = 0.5, color = "black", outlier.shape = NA) +
-        ggplot2::geom_jitter(width = 0.12, alpha = 0.6, size = 2.4) +
+        ggplot2::geom_jitter(
+            position = ggplot2::position_jitter(width = 0.12, seed = FIGURE_JITTER_SEED),
+            alpha = 0.6,
+            size = 2.4
+        ) +
         ggplot2::scale_fill_manual(values = palette) +
         ggplot2::scale_color_manual(values = palette) +
         ggplot2::labs(

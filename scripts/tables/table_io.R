@@ -612,7 +612,9 @@ coerce_binary_outcome_vector <- function(values) {
 #' @param variables Character vector of modeled variables to summarize.
 #' @param outcome_var Optional character scalar naming a binary outcome/event column.
 #'
-#' @return Tibble summarizing counts by variable level.
+#' @return Tibble summarizing counts by variable level. A continuous variable (numeric with
+#'   more than two distinct values) has no levels: it is one `Continuous` row (its non-missing
+#'   observations) plus a `Missing` row when any value is missing, never one row per value.
 build_level_support_tab <- function(data,
                                     variables,
                                     outcome_var = NULL) {
@@ -634,6 +636,9 @@ build_level_support_tab <- function(data,
 
     purrr::map_dfr(summarized_variables, function(variable_name) {
         level_values <- data[[variable_name]]
+        if (identical(model_variable_type(level_values), "continuous")) {
+            level_values <- ifelse(is.na(level_values), NA_character_, "Continuous")
+        }
         support_df <- tibble::tibble(
             variable = variable_name,
             level = dplyr::case_when(
@@ -696,6 +701,8 @@ build_level_support_tab <- function(data,
 #' @param model_context Optional data frame with contextual model metadata.
 #' @param compatibility_text Optional character vector for legacy text artifacts.
 #' @param raw_model_output Optional character vector summarizing the failure.
+#' @param prefit_records Optional data frame (see `build_model_record_table()`) listing the
+#'   patients removed before the model could be fitted; `NULL` when none were removed.
 #'
 #' @return Named list compatible with `write_diagnostics_workbook()` and skip HTML rendering.
 build_skip_report_diagnostics <- function(status = "skipped",
@@ -710,7 +717,8 @@ build_skip_report_diagnostics <- function(status = "skipped",
                                           level_support = NULL,
                                           model_context = NULL,
                                           compatibility_text = NULL,
-                                          raw_model_output = NULL) {
+                                          raw_model_output = NULL,
+                                          prefit_records = NULL) {
     if (is.null(raw_model_output)) {
         raw_model_output <- reason
     }
@@ -732,7 +740,8 @@ build_skip_report_diagnostics <- function(status = "skipped",
         event_support = event_support,
         level_support = level_support,
         model_context = model_context,
-        compatibility_text = compatibility_text
+        compatibility_text = compatibility_text,
+        prefit_records = prefit_records
     )
 }
 
@@ -830,90 +839,28 @@ render_skip_report_html <- function(analysis_name,
 
 #' Write the model diagnostics workbook
 #'
-#' @param diagnostics Named list of diagnostics tables or text summaries.
+#' Fitted-model and skipped-model diagnostics share one sheet family (see
+#' `build_fitted_model_workbook_sheets()` and `build_skipped_model_workbook_sheets()`).
+#' A failed build or write stops the run: a diagnostics workbook is never skipped,
+#' partial or empty.
+#'
+#' @param diagnostics Named list from `create_comprehensive_diagnostics()` (fitted model)
+#'   or `build_skip_report_diagnostics()` (skipped model).
 #' @param diagnostics_path Character scalar path to the workbook output.
 #'
-#' @return Invisibly returns `NULL` after writing the workbook.
+#' @return Invisibly returns `diagnostics_path` after writing the workbook.
 write_diagnostics_workbook <- function(diagnostics, diagnostics_path) {
     if (is.null(diagnostics)) {
-        logger::log_warn("No diagnostics to save")
-        return(invisible(NULL))
+        stop(sprintf("No diagnostics were provided for %s.", basename(diagnostics_path)), call. = FALSE)
     }
-
-    tryCatch(
-        {
-            workbook_data <- list()
-            if (!is.null(diagnostics$model_summary)) {
-                workbook_data$Model_summary <- diagnostics$model_summary
-            }
-            if (!is.null(diagnostics$sample_size_summary)) {
-                workbook_data$Sample_size_summary <- diagnostics$sample_size_summary
-            }
-            if (!is.null(diagnostics$model_excluded_rows)) {
-                workbook_data$Model_excluded_rows <- diagnostics$model_excluded_rows
-            }
-            if (!is.null(diagnostics$model_diagnostics)) {
-                workbook_data$Model_diagnostics <- diagnostics$model_diagnostics
-            }
-            if (!is.null(diagnostics$data_characteristics)) {
-                workbook_data$Data_characteristics <- diagnostics$data_characteristics
-            }
-            if (!is.null(diagnostics$sparse_level_diagnostics)) {
-                workbook_data$Sparse_level_diagnostics <- diagnostics$sparse_level_diagnostics
-            }
-            if (!is.null(diagnostics$raw_model_output)) {
-                if (is.data.frame(diagnostics$raw_model_output)) {
-                    raw_output_formatted <- diagnostics$raw_model_output
-                    if ("p_value" %in% names(raw_output_formatted)) {
-                        raw_output_formatted$p_value <- as.character(raw_output_formatted$p_value)
-                        raw_output_formatted$p_value[raw_output_formatted$p_value == "NA"] <- ""
-                    }
-                    workbook_data$Raw_model_output <- raw_output_formatted
-                } else {
-                    workbook_data$Raw_model_output <- data.frame(
-                        message = diagnostics$raw_model_output,
-                        stringsAsFactors = FALSE
-                    )
-                }
-            }
-            if (!is.null(diagnostics$filtering_summary)) {
-                workbook_data$Filtering_summary <- diagnostics$filtering_summary
-            }
-            if (!is.null(diagnostics$reference_levels)) {
-                workbook_data$Reference_Levels <- diagnostics$reference_levels
-            }
-            if (!is.null(diagnostics$covariate_variation)) {
-                workbook_data$Covariate_variation <- diagnostics$covariate_variation
-            }
-            if (!is.null(diagnostics$assumption_status)) {
-                workbook_data$Assumption_status <- diagnostics$assumption_status
-            }
-            if (!is.null(diagnostics$skip_summary)) {
-                workbook_data$Skip_summary <- diagnostics$skip_summary
-            }
-            if (!is.null(diagnostics$event_support)) {
-                workbook_data$Event_support <- diagnostics$event_support
-            }
-            if (!is.null(diagnostics$level_support)) {
-                workbook_data$Level_support <- diagnostics$level_support
-            }
-            if (!is.null(diagnostics$narrative_summary)) {
-                workbook_data$Narrative_summary <- diagnostics$narrative_summary
-            }
-            if (!is.null(diagnostics$model_context)) {
-                workbook_data$Model_context <- diagnostics$model_context
-            }
-            if (length(workbook_data) == 0) {
-                logger::log_warn("No populated diagnostics sheets to save")
-                return(invisible(NULL))
-            }
-            write_readable_xlsx(workbook_data, diagnostics_path)
-            logger::log_info(sprintf("Comprehensive diagnostics saved to %s", diagnostics_path))
-        },
-        error = function(e) {
-            logger::log_error(sprintf("Failed to save diagnostics: %s", e$message))
-        }
-    )
+    sheets <- if (!is.null(diagnostics$model_spec)) {
+        build_fitted_model_workbook_sheets(diagnostics)
+    } else {
+        build_skipped_model_workbook_sheets(diagnostics)
+    }
+    write_readable_xlsx(sheets, diagnostics_path)
+    logger::log_info(sprintf("Comprehensive diagnostics saved to %s", diagnostics_path))
+    invisible(diagnostics_path)
 }
 
 #' Save HTML and workbook outputs for a skipped model
@@ -1225,7 +1172,7 @@ build_sample_size_source_note <- function(sample_size_summary) {
     if (complete_case_excluded_n > 0) {
         exclusion_parts <- c(
             exclusion_parts,
-            sprintf("%d complete-case exclusions; see Model_excluded_rows", as.integer(complete_case_excluded_n))
+            sprintf("%d complete-case exclusions; see Record_Issues", as.integer(complete_case_excluded_n))
         )
     }
     sprintf(

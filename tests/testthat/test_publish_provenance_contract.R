@@ -164,3 +164,28 @@ test_that("publishing rejects selected files newer than the completed full-run l
         regexp = "newer than the validated analysis log"
     )
 })
+
+test_that("the run log records the source revision in a parseable form", {
+    revision <- get_source_revision()
+    expect_true(grepl("^[0-9a-f]{12}$", revision$revision) || identical(revision$revision, "not a git checkout"))
+    expect_true(is.logical(revision$dirty) && length(revision$dirty) == 1L)
+
+    outside_git <- get_source_revision(withr::local_tempdir())
+    expect_identical(outside_git$revision, "not a git checkout")
+    expect_true(is.na(outside_git$dirty))
+
+    orchestration_text <- paste(readLines(here::here("scripts", "workflow", "analysis_orchestration.R"), warn = FALSE), collapse = "\n")
+    expect_true(grepl("Source revision: %s", orchestration_text, fixed = TRUE))
+})
+
+test_that("the source revision is read from a checkout whose path contains spaces", {
+    repository <- file.path(withr::local_tempdir(), "path with spaces")
+    dir.create(repository)
+    run_git <- function(...) system2("git", c("-C", shQuote(repository), ...), stdout = FALSE, stderr = FALSE)
+    skip_if(run_git("init") != 0L, "git is not available")
+    run_git("-c", "user.name=test", "-c", "user.email=test@example.org", "commit", "--allow-empty", "-m", "start")
+
+    revision <- get_source_revision(repository)
+    expect_match(revision$revision, "^[0-9a-f]{12}$")
+    expect_false(revision$dirty)
+})

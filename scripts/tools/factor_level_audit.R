@@ -110,20 +110,8 @@ get_canonical_factor_level_expectations <- function() {
             critical = FALSE
         ),
         biopsy1_gep = list(
-            levels = c(
-                "Class 1 PRAME Negative",
-                "Class 1 PRAME Positive",
-                "Class 2 PRAME Negative",
-                "Class 2 PRAME Positive",
-                "GEP Failed/Indeterminate",
-                "GEP Not Tested"
-            ),
-            reference = "Class 1 PRAME Negative",
-            critical = FALSE
-        ),
-        gep_class_simple = list(
-            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
-            reference = "Class 1",
+            levels = GEP_DETAIL_LEVELS,
+            reference = GEP_DETAIL_LEVELS[[1]],
             critical = FALSE
         ),
         prame_status = list(
@@ -136,14 +124,14 @@ get_canonical_factor_level_expectations <- function() {
             reference = "Negative",
             critical = FALSE
         ),
-        exploratory_gep_group = list(
-            levels = c("Class 1", "Class 2", "GEP Failed/Indeterminate", "GEP Not Tested"),
-            reference = "Class 1",
+        gep_test_timing = list(
+            levels = GEP_TEST_TIMING_LEVELS,
+            reference = GEP_TEST_TIMING_LEVELS[[1]],
             critical = FALSE
         ),
-        no_gep_group = list(
-            levels = c("GEP Failed/Indeterminate", "GEP Not Tested"),
-            reference = "GEP Failed/Indeterminate",
+        gep_group = list(
+            levels = GEP_GROUP_LEVELS,
+            reference = "Class 1",
             critical = FALSE
         ),
         vision_line_change_bucket = list(

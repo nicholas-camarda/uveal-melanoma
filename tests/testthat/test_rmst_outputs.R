@@ -55,6 +55,7 @@ test_that("RMST, KM, and Cox models share filtered cohort", {
     )
 
     sample_data <- tibble::tibble(
+        id = sprintf("P%02d", 1:7),
         time_months = c(24, 22, 20, 18, 16, 14, 12),
         status = c(1, 1, 0, 1, 0, 0, 1),
         treatment_group = factor(
@@ -80,8 +81,9 @@ test_that("RMST, KM, and Cox models share filtered cohort", {
         dataset_name = "unit_test",
         ylab = "Unit Test Survival",
         legend_labels = c("PBT", "GKSRS"),
-        output_dirs = NULL,
-        prefix = "unit_"
+        output_dirs = build_peer_review_objective1_output_dirs(withr::local_tempdir()),
+        prefix = "unit_",
+        route_key = "obj1_os"
     ))
 
     skip_if(is.null(result$fit))

@@ -17,8 +17,10 @@ test_that("Objective 0 preprocessing creates expected derived fields on syntheti
         "last_vision_followup_months_explicit",
         "last_vision_followup_months_proxy",
         "last_vision_followup_timing_source",
-        "exploratory_gep_group",
-        "no_gep_group",
+        "gep_group",
+        "gep_test_days",
+        "gep_test_timing",
+        "mss_event_type_unknown_cause_melanoma",
         "ciliary_involvement",
         "optic_nerve_involvement"
     ) %in% names(derived)))
@@ -274,4 +276,44 @@ test_that("iris optic nerve N/A helper records only explicit non-applicability c
     expect_equal(special_cases$id, 247)
     expect_equal(special_cases$special_case, IRIS_OPTIC_NERVE_SPECIAL_CASE)
     expect_match(special_cases$interpretation, "full cohort only")
+})
+
+test_that("unknown-cause deaths are recoded to melanoma deaths only in the sensitivity process", {
+    test_data <- create_test_dataset()
+    test_data$cod <- "Metastatic_Uveal_Melanoma"
+    dead <- which(!is.na(test_data$dod))
+    expect_gte(length(dead), 4L)
+    test_data$cod[dead[1:4]] <- c("Unknown", "Cardiac_Arrest", "Metastatic_Uveal_Melanoma", "Unknown_Cancer")
+    derived <- create_derived_variables(test_data)
+
+    primary <- derived$mss_event_type[dead[1:4]]
+    sensitivity <- derived$mss_event_type_unknown_cause_melanoma[dead[1:4]]
+    expect_identical(primary, c(2L, 2L, 1L, 2L))
+    expect_identical(sensitivity, c(1L, 2L, 1L, 1L))
+    # Everyone else is unchanged.
+    others <- setdiff(seq_len(nrow(derived)), dead[1:4])
+    expect_identical(derived$mss_event_type_unknown_cause_melanoma[others], derived$mss_event_type[others])
+})
+
+test_that("a death with no recorded cause is missing, not a competing death", {
+    test_data <- create_test_dataset()[1:3, ]
+    test_data$dod <- as.Date(c("2024-01-01", "2024-02-01", NA))
+    test_data$cod <- c("Metastatic_Uveal_Melanoma", NA, NA)
+
+    derived <- create_derived_variables(test_data)
+
+    expect_identical(derived$death_event, c(1, 1, 0))
+    expect_identical(derived$melanoma_death_event, c(1, NA, 0))
+    expect_identical(derived$competing_death_event, c(0L, NA, 0L))
+})
+
+test_that("a blank metastasis or recurrence source value stays missing", {
+    test_data <- create_test_dataset()[1:2, ]
+    test_data$recurrence1 <- c("Y", NA)
+    test_data$mets_progression <- c(NA, "Y")
+
+    derived <- create_derived_variables(test_data)
+
+    expect_identical(derived$recurrence_event, c(1, NA))
+    expect_identical(derived$mets_event, c(NA, 1L))
 })

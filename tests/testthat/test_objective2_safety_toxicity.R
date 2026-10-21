@@ -134,14 +134,14 @@ test_that("Objective 2 writes adjusted outputs in each side-effect subfolder", {
     expect_true(file.exists(file.path(output_dirs$obj2_nvg_effect_summary, "test_neovascular_glaucoma_effect_summary.xlsx")))
 
     nvg_skip_sheets <- readxl::excel_sheets(file.path(output_dirs$obj2_nvg_adjusted_models, "test_nvg_logistic_diagnostics.xlsx"))
-    expect_true(all(c("Skip_summary", "Narrative_summary", "Event_support") %in% nvg_skip_sheets))
+    expect_true(all(c("Checks", "Warnings_Limitations", "Term_support", "Record_Issues") %in% nvg_skip_sheets))
 
-    nvg_skip_summary <- readxl::read_xlsx(
+    nvg_checks <- readxl::read_xlsx(
         file.path(output_dirs$obj2_nvg_adjusted_models, "test_nvg_logistic_diagnostics.xlsx"),
-        sheet = "Skip_summary"
+        sheet = "Checks"
     )
     expect_equal(
-        as.integer(nvg_skip_summary$value[nvg_skip_summary$metric == "minimum_events_required"]),
+        as.integer(nvg_checks$result[nvg_checks$check == "minimum events required"]),
         MINIMUM_ADJUSTED_LOGISTIC_EVENTS
     )
 
@@ -202,10 +202,11 @@ test_that("Objective 2 writes adjusted outputs in each side-effect subfolder", {
     )
     expect_true(all(grepl("Proportional-odds assumption was not formally tested", ordinal_rows$notes, fixed = TRUE)))
 
-    ordinal_diagnostics_sheets <- readxl::excel_sheets(
-        file.path(output_dirs$obj2_vision_adjusted_models, "test_snellen_line_change_distribution_adjusted_diagnostics.xlsx")
+    ordinal_checks <- readxl::read_xlsx(
+        file.path(output_dirs$obj2_vision_adjusted_models, "test_snellen_line_change_distribution_adjusted_diagnostics.xlsx"),
+        sheet = "Checks"
     )
-    expect_true("Assumption_status" %in% ordinal_diagnostics_sheets)
+    expect_equal(ordinal_checks$status[ordinal_checks$check == "Proportional-odds assumption"], "not assessed")
 
     ordinal_html <- readLines(
         file.path(output_dirs$obj2_vision_adjusted_models, "test_snellen_line_change_distribution_adjusted_polr.html"),
