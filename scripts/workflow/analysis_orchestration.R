@@ -555,7 +555,7 @@ main_execution <- function() {
     fatal_issues <- character()
     warning_issues <- character()
     
-    # Store data and fitted-model results for merging at the end
+    # Store data (and the fitted models the supplement reads) for merging at the end
     cohort_data <- list()
     cohort_results <- list()
 
@@ -617,7 +617,9 @@ main_execution <- function() {
                 results <- run_my_analysis(dataset_name, objectives_to_run = c(1, 2, 3, 4))
                 fatal_issues <- c(fatal_issues, results$fatal_issues %||% character())
                 warning_issues <- c(warning_issues, results$warning_issues %||% character())
-                cohort_results[[dataset_name]] <- results
+                if (dataset_name %in% FULL_MODEL_SUPPLEMENT_COHORTS) {
+                    cohort_results[[dataset_name]] <- select_full_model_supplement_inputs(results)
+                }
 
                 # Load the data directly for merging
                 tryCatch({
@@ -671,10 +673,7 @@ main_execution <- function() {
     # model plus the sensitivity analyses, from the fitted models of the two
     # main cohorts. A missing model fails the run instead of writing a partial table.
     tryCatch({
-        write_full_model_supplement(list(
-            Full = cohort_results[["uveal_melanoma_full_cohort"]],
-            Restricted = cohort_results[["uveal_melanoma_restricted_cohort"]]
-        ))
+        write_full_model_supplement(lapply(FULL_MODEL_SUPPLEMENT_COHORTS, function(dataset_name) cohort_results[[dataset_name]]))
         logger::log_info("Files created: full_model_supplement.xlsx")
     }, error = function(e) {
         fatal_issues <<- append_issue(fatal_issues, sprintf("full_model_supplement:%s", e$message))

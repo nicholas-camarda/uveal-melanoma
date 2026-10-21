@@ -71,7 +71,9 @@ create_forest_plot <- function(subgroup_results,
 #' @param treatment_labels Exact treatment keys `PBT` and `GKSRS`, in display order.
 #' @param variable_order Character vector specifying the order of variables to display (REQUIRED for consistency)
 #' @param effect_measure Character string for the effect measure (default: "HR")
-#' @param favours_labels Character vector of length 2 for axis labels (e.g., c("Favors GKSRS", "Favors PBT"))
+#' @param favours_labels Character vector of length 2 for axis labels. The default,
+#'   `FAVOURS_LABELS`, follows the model contrast (comparison group left of the null,
+#'   reference group right), not the order of `treatment_labels`.
 #' @param clip Numeric vector of length 2 for clipping range (default: c(0.1, 10))
 #' @param title Character string for plot title (optional)
 #' @param include_interaction_p Logical; include the interaction p-value column

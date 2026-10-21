@@ -140,7 +140,7 @@ vision_change = case_when(
 - **Non-recurrence patients:** Use `last_vision` = most recent vision measurement
 - **Recurrence patients:** Use `recurrence1_pretreatment_vision` = vision just before salvage treatment
 - **Rationale:** Isolate the visual outcome of primary treatment, before salvage treatment affects vision further
-- **Latest-VA timing sensitivity:** Minimum-follow-up analyses use explicit treatment-to-`last_followup` timing as the primary timing surface. A separately labeled proxy surface uses the derived general `follow_up_months` duration when explicit `last_followup` timing is missing. Tumor-height timing is summarized separately and is not used as the VA timing proxy.
+- **Latest-VA timing sensitivity:** Minimum-follow-up analyses are fitted on two labeled timing surfaces: explicit treatment-to-`last_followup` timing only, and a proxy surface (the follow-up definition reported in the manuscript) that uses `last_followup` when recorded and the derived general `follow_up_months` duration otherwise. Tumor-height timing is summarized separately and is not used as the VA timing proxy.
 
 ### **Clinical Interpretation**
 

@@ -51,9 +51,18 @@ OBJECTIVE2_SIMULATED_FISHER_SEED <- 20260422L
 # among patients with the same starting acuity (ANCOVA-equivalent contrast).
 OBJECTIVE2_VA_BASELINE_COVARIATE <- "initial_vision"
 
+# Timing surface of the minimum-follow-up VA analyses reported in Table 3 and the
+# full-model supplement. "proxy" is the follow-up definition stated in the
+# Methods: time to the last documented visit or, when that date is missing,
+# general follow-up. The explicit-only surface is still fitted and exported.
+OBJECTIVE2_VA_REPORTED_FOLLOWUP_SURFACE <- "proxy"
+
 # The seven-level Snellen-line distribution uses an exact Fisher test rather than
 # a Monte Carlo approximation, so the displayed p-value is identical on every run.
-OBJECTIVE2_FISHER_EXACT_WORKSPACE <- 2e8
+# The workspace is in 4-byte units (2e7 = 80 MB per call). The study tables (N up to
+# 260, 7 x 2) need less than 2e5; a table too large for 2e7 makes fisher.test() stop
+# with an error rather than return an approximation.
+OBJECTIVE2_FISHER_EXACT_WORKSPACE <- 2e7
 
 # Downstream objective input contract enforced centrally during Objective 0.
 # Domains are checked on non-missing values unless `missing_policy` is

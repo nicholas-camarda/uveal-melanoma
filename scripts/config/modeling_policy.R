@@ -22,7 +22,8 @@ OBJECTIVE1_PROPENSITY_COVARIATES <- c(
 OBJECTIVE1_PROPENSITY_ESTIMAND <- "ATO"
 OBJECTIVE1_PROPENSITY_BALANCE_THRESHOLD <- 0.10
 TREATMENT_LABELS <- c("PBT", "GKSRS") # For display/plotting (matches factor levels order)
-FAVOURS_LABELS <- c("Favors GKSRS", "Favors PBT") # Left/right for GKSRS-versus-PBT contrasts: lower adverse-event hazards or more-negative tumor-height change favor GKSRS
+# Forest-plot arrow labels follow the model contrast (comparison vs reference): an estimate below the null (lower hazard, more-negative tumor-height change) favors the comparison group, drawn on the left.
+FAVOURS_LABELS <- paste0("Favors ", c(TREATMENT_COMPARISON_LEVEL, TREATMENT_REFERENCE_LEVEL))
 
 # Validation: Ensure consistency with TREATMENT_LABELS
 if (!all(TREATMENT_LABELS %in% TREATMENT_FACTOR_LEVELS)) {

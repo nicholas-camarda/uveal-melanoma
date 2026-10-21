@@ -676,7 +676,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
         "Vision endpoint is visual-acuity change score",
         "(initial vision minus final or recurrence-pre-treatment vision);",
         "adjusted change-score models include baseline logMAR VA with the common confounders; latest-VA follow-up time enters only the latest-VA ANCOVA sensitivity;",
-        "minimum-follow-up sensitivity uses explicit last_followup timing as primary and a separately labeled general-follow-up proxy as sensitivity context."
+        "minimum-follow-up sensitivity is fitted on two labeled timing surfaces: explicit last_followup only, and the reported follow-up definition (explicit last_followup when recorded, otherwise derived general follow-up)."
     )
     ordinal_assumption_note <- paste(
         "Proportional-odds assumption was not formally tested;",
@@ -727,6 +727,10 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
 
     vision_model_data <- exclusion_result$data
     va_model_id_col <- pick_sparse_level_id_col(data_with_vision_change)
+    # The minimum-follow-up models are aligned to the primary VA model by patient key.
+    if (is.null(va_model_id_col) || anyDuplicated(vision_model_data[[va_model_id_col]]) > 0) {
+        stop("A unique patient key column is required to align the minimum-follow-up VA models with the primary VA model.", call. = FALSE)
+    }
     line_change_model_data <- vision_model_data %>%
         mutate(
             vision_line_change = compute_line_change_lines(vision_change)
@@ -1571,7 +1575,7 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
             reviewer_predictor_availability = visual_predictor_screen$availability,
             toxicity_scope = objective2_toxicity_scope_note(),
             limitation = tibble::tibble(
-                note = "The primary latest-VA minimum-follow-up sensitivity uses treatment-to-last_followup timing when that date is recorded. A separate proxy surface uses the derived general follow_up_months field when last_followup is missing. Tumor-height timing is not used as the VA timing proxy. The 12-, 36-, and 60-month sensitivity analyses are minimum-follow-up restrictions on latest VA, not standardized 1-, 3-, or 5-year landmark VA analyses."
+                note = "Latest-VA minimum-follow-up sensitivity is fitted on two labeled timing surfaces: explicit uses only recorded treatment-to-last_followup timing, and proxy (the follow-up definition reported in the manuscript) uses last_followup when recorded and the derived general follow_up_months otherwise. Tumor-height timing is not used as the VA timing proxy. The 12-, 36-, and 60-month sensitivity analyses are minimum-follow-up restrictions on latest VA, not standardized 1-, 3-, or 5-year landmark VA analyses."
             )
         )
     )

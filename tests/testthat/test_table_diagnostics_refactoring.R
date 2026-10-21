@@ -448,3 +448,24 @@ test_that("factor labels appear before corresponding coefficients in diagnostics
 
     expect_true(all(treatment_factor_idx < treatment_coeff_idx))
 })
+
+test_that("sample-size audit keeps prefit removals and explains incomplete-case drops", {
+    audit <- build_sample_size_summary_tab(
+        list(initial_n = 20L, model_n = 18L, removed_n = 2L, removed_pct = 10, removal_reason = "Excluded 2 rows in sparse levels"),
+        "dataset", "analysis", modeled_n = 15L
+    )
+    expect_equal(audit$removed_n, 5L)
+    expect_equal(audit$modeled_n, 15L)
+    expect_equal(audit$removed_pct, 25)
+    expect_equal(
+        audit$removal_reason,
+        "Excluded 2 rows in sparse levels; 3 further row(s) dropped as incomplete cases in the fitted model"
+    )
+
+    prefit_only <- build_sample_size_summary_tab(
+        list(initial_n = 20L, removed_n = 2L, removal_reason = "Excluded 2 rows in sparse levels"),
+        "dataset", "analysis", modeled_n = 18L
+    )
+    expect_equal(prefit_only$removed_n, 2L)
+    expect_equal(prefit_only$removal_reason, "Excluded 2 rows in sparse levels")
+})

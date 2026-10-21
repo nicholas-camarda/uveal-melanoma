@@ -25,6 +25,49 @@ full_model_supplement_specs <- function() {
     )
 }
 
+#' Display cohort labels and the datasets they come from
+#'
+#' Names are the cohort labels printed in the supplement; values are the dataset
+#' names used by `run_my_analysis()`.
+FULL_MODEL_SUPPLEMENT_COHORTS <- c(
+    Full = "uveal_melanoma_full_cohort",
+    Restricted = "uveal_melanoma_restricted_cohort"
+)
+
+#' Keep only the parts of one cohort's results that the supplement reads
+#'
+#' `main_execution()` holds these subsets until both cohorts are done, instead of
+#' the complete Objective 1-4 results (plots, subgroup results, other tables).
+#'
+#' @param results Results returned by `run_my_analysis()` for one cohort.
+#' @return List with the same `objective_1`/`objective_2` paths that
+#'   `build_full_model_supplement()` and `build_supplement_sensitivity_models()`
+#'   read; absent inputs stay absent so the builders report them as missing.
+select_full_model_supplement_inputs <- function(results) {
+    specs <- full_model_supplement_specs()
+    selected <- list(objective_1 = list(), objective_2 = list())
+    for (i in seq_len(nrow(specs))) {
+        result <- results[[specs$objective[[i]]]][[specs$result[[i]]]]
+        if (!is.null(result)) {
+            fields <- c(specs$model_field[[i]], specs$table_field[[i]])
+            selected[[specs$objective[[i]]]][[specs$result[[i]]]] <- result[intersect(names(result), fields)]
+        }
+    }
+    vision <- results$objective_2$vision_changes
+    if (!is.null(vision)) {
+        selected$objective_2$vision_changes$visual_followup_model <- lapply(
+            vision$visual_followup_model,
+            function(entry) list(model = entry$model)
+        )
+        selected$objective_2$vision_changes["latest_va_sensitivity_model"] <- list(vision$latest_va_sensitivity_model)
+    }
+    weighted <- results$objective_1$propensity_sensitivity$artifacts$weighted_cox_results
+    if (!is.null(weighted)) {
+        selected$objective_1$propensity_sensitivity <- list(artifacts = list(weighted_cox_results = weighted))
+    }
+    selected
+}
+
 #' Count fitted observations and events for a supplement model
 #'
 #' @param model Fitted `coxph`, `glm`, or `lm` object.
@@ -39,24 +82,6 @@ full_model_fit_counts <- function(model) {
         NA_real_
     }
     list(fitted_n = as.integer(fitted_n), events = as.integer(events))
-}
-
-#' Format a p-value with the manuscript's precision rule
-#'
-#' Two decimals at or above 0.01, three decimals from 0.001 to below 0.01, and
-#' "<0.001" below that. Values from 0.045 to below 0.055 also keep three
-#' decimals so a p-value just under 0.05 is not rounded onto the 0.05 threshold.
-#'
-#' @param p Numeric vector of p-values.
-#' @return Character vector; `NA` stays `NA`.
-format_manuscript_pvalue <- function(p) {
-    dplyr::case_when(
-        is.na(p) ~ NA_character_,
-        p < 0.001 ~ "<0.001",
-        p < 0.01 ~ formatC(p, format = "f", digits = 3),
-        p >= 0.045 & p < 0.055 ~ formatC(p, format = "f", digits = 3),
-        TRUE ~ formatC(p, format = "f", digits = 2)
-    )
 }
 
 #' Build the full-model supplementary table from objective results
@@ -153,10 +178,10 @@ sensitivity_row <- function(cohort, analysis, effect_measure, fitted_n, events, 
 #'
 #' Treatment term (GKSRS vs PBT) only, taken from the fitted objects the
 #' pipeline already holds: the 1-, 3-, and 5-year minimum-follow-up VA models
-#' (general follow-up definition, the one the Methods state), the extended
-#' latest-VA model, and, for the cohort that has one, the overlap-weighted Cox
-#' models. The overlap-weighted models exist only for the restricted cohort, so
-#' other cohorts contribute no such rows.
+#' (timing surface `OBJECTIVE2_VA_REPORTED_FOLLOWUP_SURFACE`), the extended
+#' latest-VA model, and the overlap-weighted Cox models. The overlap-weighted
+#' models are required for the cohort named by `OBJECTIVE1_PROPENSITY_DATASET`
+#' (the restricted cohort) and do not exist for the others.
 #'
 #' @param results_by_cohort Named list as in `build_full_model_supplement()`.
 #' @return Tibble with cohort, analysis, effect measure, fitted N, events,
@@ -167,13 +192,14 @@ build_supplement_sensitivity_models <- function(results_by_cohort) {
     for (cohort_label in names(results_by_cohort)) {
         vision <- results_by_cohort[[cohort_label]]$objective_2$vision_changes
         followup_models <- vision$visual_followup_model
-        proxy_keys <- grep("^proxy_[0-9]+mo$", names(followup_models), value = TRUE)
+        surface_pattern <- sprintf("^%s_([0-9]+)mo$", OBJECTIVE2_VA_REPORTED_FOLLOWUP_SURFACE)
+        proxy_keys <- grep(surface_pattern, names(followup_models), value = TRUE)
         if (is.null(vision) || length(proxy_keys) == 0) {
             stop(sprintf("Missing minimum-follow-up VA models for %s.", cohort_label), call. = FALSE)
         }
-        proxy_months <- as.integer(sub("^proxy_([0-9]+)mo$", "\\1", proxy_keys))
+        proxy_months <- as.integer(sub(surface_pattern, "\\1", proxy_keys))
         for (key in proxy_keys[order(proxy_months)]) {
-            months <- as.integer(sub("^proxy_([0-9]+)mo$", "\\1", key))
+            months <- as.integer(sub(surface_pattern, "\\1", key))
             effect <- extract_va_treatment_effect(followup_models[[key]]$model)
             add_row(sensitivity_row(
                 cohort_label,
@@ -190,6 +216,10 @@ build_supplement_sensitivity_models <- function(results_by_cohort) {
             latest$modeled_n, NA, latest$adjusted_md, latest$ci_lower, latest$ci_upper, latest$p_value
         ))
         weighted <- results_by_cohort[[cohort_label]]$objective_1$propensity_sensitivity$artifacts$weighted_cox_results
+        requires_propensity <- identical(unname(FULL_MODEL_SUPPLEMENT_COHORTS[cohort_label]), OBJECTIVE1_PROPENSITY_DATASET)
+        if (requires_propensity && is.null(weighted)) {
+            stop(sprintf("Missing overlap-weighted propensity results for %s.", cohort_label), call. = FALSE)
+        }
         if (!is.null(weighted)) {
             for (i in seq_len(nrow(weighted))) {
                 estimated <- identical(weighted$status[[i]], "estimated")

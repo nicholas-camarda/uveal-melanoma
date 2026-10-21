@@ -214,8 +214,18 @@ build_sample_size_summary_tab <- function(filter_stats, dataset_name, analysis_n
 
     initial_n <- stats$initial_n %||% modeled_n
     model_n <- modeled_n
-    removed_n <- pmax(initial_n - model_n, 0)
+    # Rows removed before fitting (reported by the caller) plus rows the fitted
+    # model dropped as incomplete cases, so the count and the reason agree.
+    incomplete_case_n <- pmax(initial_n - model_n - stats$removed_n, 0)
+    removed_n <- stats$removed_n + incomplete_case_n
     removed_pct <- if (initial_n > 0) round(removed_n / initial_n * 100, 1) else 0
+    removal_reason <- stats$removal_reason
+    if (incomplete_case_n > 0) {
+        removal_reason <- sprintf(
+            "%s; %d further row(s) dropped as incomplete cases in the fitted model",
+            removal_reason, incomplete_case_n
+        )
+    }
 
     data.frame(
         dataset_name = dataset_name,
@@ -224,7 +234,7 @@ build_sample_size_summary_tab <- function(filter_stats, dataset_name, analysis_n
         modeled_n = as.integer(model_n),
         removed_n = as.integer(removed_n),
         removed_pct = removed_pct,
-        removal_reason = stats$removal_reason,
+        removal_reason = removal_reason,
         stringsAsFactors = FALSE
     )
 }

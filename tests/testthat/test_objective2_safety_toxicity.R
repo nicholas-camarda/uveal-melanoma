@@ -201,12 +201,13 @@ test_that("Objective 2 writes adjusted outputs in each side-effect subfolder", {
 
     ordinal_html <- readLines(
         file.path(output_dirs$obj2_vision_adjusted_models, "test_snellen_line_change_distribution_adjusted_polr.html"),
-        warn = FALSE
+        warn = FALSE,
+        encoding = "UTF-8"
     )
     ordinal_html <- paste(ordinal_html, collapse = "\n")
     expect_match(
         ordinal_html,
-        "GKSRS</td>\\s*<td headers=\"estimate\" class=\"gt_row gt_center\">—</td>",
+        "GKSRS</td>\\s*<td headers=\"estimate\" class=\"gt_row gt_center\">\u2014</td>",
         perl = TRUE
     )
     expect_match(
@@ -654,4 +655,91 @@ test_that("merged adverse events workbook carries the exact p-values behind each
     table_sheet <- readxl::read_xlsx(merged_xlsx, sheet = "Sheet1", col_types = "text")
     displayed <- unlist(table_sheet[, grepl("p-value", names(table_sheet), fixed = TRUE)], use.names = FALSE)
     expect_true(all(exact$full_cohort_p_displayed[has_p] %in% displayed))
+})
+
+test_that("the restricted cohort must carry overlap-weighted results into the supplement", {
+    set.seed(12)
+    fit_data <- data.frame(
+        y = rnorm(40),
+        treatment_group = factor(rep(c("PBT", "GKSRS"), 20), levels = c("PBT", "GKSRS"))
+    )
+    lm_fit <- stats::lm(y ~ treatment_group, fit_data)
+    cohort <- list(
+        objective_1 = list(propensity_sensitivity = NULL),
+        objective_2 = list(vision_changes = list(
+            visual_followup_model = list(proxy_12mo = list(model = lm_fit)),
+            latest_va_sensitivity_model = lm_fit
+        ))
+    )
+    expect_equal(nrow(build_supplement_sensitivity_models(list(Full = cohort))), 2L)
+    expect_error(
+        build_supplement_sensitivity_models(list(Restricted = cohort)),
+        "overlap-weighted propensity results for Restricted"
+    )
+})
+
+test_that("supplement inputs drop everything the builders do not read", {
+    set.seed(13)
+    fit_data <- data.frame(
+        y = rnorm(40),
+        event = rbinom(40, 1, 0.4),
+        treatment_group = factor(rep(c("PBT", "GKSRS"), 20), levels = c("PBT", "GKSRS"))
+    )
+    lm_fit <- stats::lm(y ~ treatment_group, fit_data)
+    glm_fit <- stats::glm(event ~ treatment_group, binomial(), fit_data)
+    weighted <- tibble::tibble(
+        outcome = "Local Recurrence", n = 40L, events = 10L, estimate = 1.2, conf_low = 0.5,
+        conf_high = 2.9, p_value = 0.7, status = "estimated"
+    )
+    results <- list(
+        objective_1 = list(
+            recurrence_time_to_event = list(cox_model = NULL, cox_table = NULL, plot = "large"),
+            propensity_sensitivity = list(artifacts = list(weighted_cox_results = weighted, plots = "large"))
+        ),
+        objective_2 = list(
+            vision_changes = list(
+                regression_model = lm_fit, regression_table = NULL, changes = "large",
+                visual_followup_model = list(proxy_12mo = list(model = lm_fit, table = "large")),
+                latest_va_sensitivity_model = NULL
+            ),
+            retinopathy_analysis = list(model = glm_fit, table = NULL, extra = "large")
+        ),
+        objective_3 = list(anything = "large")
+    )
+    selected <- select_full_model_supplement_inputs(results)
+
+    expect_setequal(names(selected), c("objective_1", "objective_2"))
+    expect_false("changes" %in% names(selected$objective_2$vision_changes))
+    expect_false("extra" %in% names(selected$objective_2$retinopathy_analysis))
+    expect_false("table" %in% names(selected$objective_2$vision_changes$visual_followup_model$proxy_12mo))
+    expect_true("latest_va_sensitivity_model" %in% names(selected$objective_2$vision_changes))
+    expect_identical(selected$objective_1$propensity_sensitivity$artifacts$weighted_cox_results, weighted)
+    expect_null(select_full_model_supplement_inputs(list())$objective_2$retinopathy_analysis)
+})
+
+test_that("minimum-follow-up VA models require a unique patient key", {
+    test_data <- create_test_dataset()
+    key <- pick_sparse_level_id_col(test_data)
+    expect_false(is.null(key))
+    test_output_dir <- file.path(TEST_OUTPUT_DIR, "objective2_missing_patient_key")
+    output_dirs <- build_peer_review_objective2_output_dirs(test_output_dir)
+    for (dir_path in c(test_output_dir, output_dirs)) {
+        dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+    }
+    withr::defer(unlink(test_output_dir, recursive = TRUE), envir = parent.frame())
+
+    test_data[[key]] <- NULL
+    expect_error(
+        run_objective_2(test_data, "test_cohort", output_dirs, "test_", confounders = c("age_at_diagnosis", "sex")),
+        "unique patient key"
+    )
+})
+
+test_that("a failure while building the adverse events table is not swallowed", {
+    output_path <- file.path(TEST_OUTPUT_DIR, "merged_adverse_events_failure")
+    dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+    withr::defer(unlink(output_path, recursive = TRUE), envir = parent.frame())
+
+    expect_error(merge_adverse_events_tables(data.frame(unrelated = 1), data.frame(unrelated = 1), output_path))
+    expect_false(file.exists(file.path(output_path, "merged_adverse_events.xlsx")))
 })
