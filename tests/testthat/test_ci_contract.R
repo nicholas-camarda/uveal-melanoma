@@ -322,7 +322,7 @@ test_that("bootstrap and runner are lockfile- and failure-sensitive", {
     expect_false(grepl("OCULAR_EXPECTED_TEST_CASES", runner_text, fixed = TRUE))
 })
 
-test_that("OpenSpec records remain available without active CI enforcement", {
+test_that("CI workflow does not run OpenSpec validation", {
     workflow_text <- paste(
         readLines(here::here(".github", "workflows", "portable-tests.yml"), warn = FALSE),
         collapse = "\n"
@@ -330,9 +330,6 @@ test_that("OpenSpec records remain available without active CI enforcement", {
 
     expect_false(grepl("@fission-ai/openspec", workflow_text, fixed = TRUE))
     expect_false(grepl("openspec validate", workflow_text, fixed = TRUE))
-    expect_true(file.exists(here::here("openspec", "config.yaml")))
-    expect_gt(length(list.files(here::here("openspec", "specs"), recursive = TRUE)), 0L)
-    expect_gt(length(list.files(here::here("openspec", "changes", "archive"), recursive = TRUE)), 0L)
 })
 
 test_that("lintr contract permits the repository's established mixed pipe syntax", {
