@@ -117,16 +117,15 @@ Rscript tests/testthat.R
 Rscript scripts/ci/run_portable_suite.R
 
 # Local read-only actual-data integration suite
-OCULAR_INTEGRATION_RAW_DATA_DIR='/absolute/path/to/raw-data' \
-OCULAR_INTEGRATION_PROCESSED_DATA_DIR='/absolute/path/to/processed-data' \
-Rscript scripts/ci/run_testthat.R tests/integration
+Rscript scripts/ci/run_integration_suite.R
 ```
 
 The synthetic fixture exercises portable schema, missingness, censoring, GEP,
 PRAME, treatment, sparse-group, and one-arm paths. It is not a substitute for
 the local data-backed validation of scientific estimates. The actual-data lane
-requires explicit input directories, reads those inputs without copying them,
-and writes its outputs only beneath the process temporary directory.
+reads the configured raw-data and processed-data directories without copying
+them, fails if an input is missing, and writes its outputs only beneath the
+process temporary directory.
 All three test directories carry checked-in file manifests, so deleting or
 adding a test file without updating the intended suite inventory fails closed.
 

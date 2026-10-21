@@ -39,8 +39,8 @@
   expect_false("Other" %in% levels(factored_data$biopsy1_gep_raw))
   expect_true(identical(levels(factored_data$gep_group), GEP_GROUP_LEVELS))
   expect_true(identical(levels(factored_data$biopsy1_gep), GEP_DETAIL_LEVELS))
-  expect_false(identical(levels(factored_data$initial_tumor_height_binned), c("< 10 mm", "≥ 10 mm")))
-  expect_true(identical(levels(factored_data$initial_tumor_height_binned), c("≤ 3 mm", "3.1-6 mm", "6.1-9 mm", "9.1-12 mm", "12.1-15 mm", "> 15 mm")))
+  expect_false(identical(levels(factored_data$initial_tumor_height_binned), c("< 10 mm", "\u2265 10 mm")))
+  expect_true(identical(levels(factored_data$initial_tumor_height_binned), c("\u2264 3 mm", "3.1-6 mm", "6.1-9 mm", "9.1-12 mm", "12.1-15 mm", "> 15 mm")))
 
   logger::log_info("Applying inclusion/exclusion criteria")
   factored_filtered_data <- apply_criteria(factored_data)

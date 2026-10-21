@@ -346,7 +346,7 @@ test_that("documented test commands use the fail-sensitive runner", {
 
     expect_match(readme_text, "Rscript scripts/bootstrap_packages.R", fixed = TRUE)
     expect_match(readme_text, "Rscript scripts/ci/run_portable_suite.R", fixed = TRUE)
-    expect_match(readme_text, "Rscript scripts/ci/run_testthat.R tests/integration", fixed = TRUE)
+    expect_match(readme_text, "Rscript scripts/ci/run_integration_suite.R", fixed = TRUE)
 })
 
 test_that("pull request protocol requires complete local and remote validation", {

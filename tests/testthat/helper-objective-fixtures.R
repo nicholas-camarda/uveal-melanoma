@@ -272,12 +272,12 @@ get_objective1_pipeline <- function() {
                 right = FALSE,
                 labels = c(
                     "< 40 years", "40-49 years", "50-59 years",
-                    "60-69 years", "70-79 years", "≥ 80 years"
+                    "60-69 years", "70-79 years", "\u2265 80 years"
                 )
             ),
             levels = c(
                 "< 40 years", "40-49 years", "50-59 years",
-                "60-69 years", "70-79 years", "≥ 80 years"
+                "60-69 years", "70-79 years", "\u2265 80 years"
             )
         )
         paths <- build_objective_fixture_dirs("objective1_pipeline", "^obj1_")

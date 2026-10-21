@@ -825,9 +825,9 @@ if (sys.nframe() == 0L) {
     cat(sprintf("Validation summary written to: %s\n\n", result$validation_file))
 
     if (result$validation_results$documentation_complete) {
-        cat("✓ Documentation validation passed - all documented variables exist in the analytic dataset\n")
+        cat("\u2713 Documentation validation passed - all documented variables exist in the analytic dataset\n")
     } else {
-        cat("⚠ Documentation validation found documented variables missing in the dataset\n")
+        cat("\u26a0 Documentation validation found documented variables missing in the dataset\n")
     }
 
     cat("\n=== DOCUMENTATION GENERATION COMPLETE ===\n")

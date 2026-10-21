@@ -697,11 +697,25 @@ Rscript tests/testthat.R
 
 # Complete portable suite used by CI
 Rscript scripts/ci/run_portable_suite.R
-OCULAR_INTEGRATION_RAW_DATA_DIR='/absolute/path/to/raw-data' \
-OCULAR_INTEGRATION_PROCESSED_DATA_DIR='/absolute/path/to/processed-data' \
-Rscript scripts/ci/run_testthat.R tests/integration
+Rscript scripts/ci/run_integration_suite.R
 ```
 
-The actual-data lane fails before test execution unless both explicit input
-directories and all canonical inputs exist. It treats those directories as
+`scripts/ci/run_integration_suite.R` takes `RAW_DATA_DIR` and
+`PROCESSED_DATA_DIR` from `scripts/config/project_paths.R` (the paths
+`assert_required_input_paths()` checks) and sets `OCULAR_INTEGRATION_RAW_DATA_DIR`
+and `OCULAR_INTEGRATION_PROCESSED_DATA_DIR` for the test process only. The
+integration helper still requires both variables, so running it directly
+without them fails. The lane fails before test execution unless the raw
+spreadsheet and all canonical cohort files exist. It treats both directories as
 read-only and creates analysis outputs beneath the process temporary directory.
+
+Every session uses one locale, `en_US.UTF-8`, whatever locale R was started in.
+`scripts/load_all.R` sets `LC_CTYPE` (how text is read) and `LC_COLLATE` (how
+character vectors sort) before sourcing anything, and stops with a message if
+the locale is not installed. Without it, a C-locale session reads a label such
+as `"\u2265 63 years"` as bytes, so factor levels built in different files stop
+matching, and `sort()`, `order()`, `arrange()` and `factor()` order text
+differently from the published outputs. `tests/testthat/test_source_encoding.R`
+keeps non-ASCII characters out of code (labels are written as `\u` escapes),
+checks the locale from fresh processes started in `C` and `C.UTF-8`, and each
+run log records the session locale.

@@ -258,11 +258,11 @@ SURVIVAL_SUMMARY_TIMEPOINTS_YEARS <- c(1, 3, 5, 10, 15)
 # Vision change categorization settings
 VISION_LINE_CHANGE_STEP <- 0.1
 VISION_LINE_CHANGE_CATEGORY_LEVELS <- c(
-    "≥3-line improvement",
+    "\u22653-line improvement",
     "2-line improvement",
     "1-line improvement",
     "Stable (0-line change)",
     "1-line loss",
     "2-line loss",
-    "≥3-line loss"
+    "\u22653-line loss"
 )

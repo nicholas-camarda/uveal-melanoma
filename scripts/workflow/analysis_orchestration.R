@@ -574,6 +574,9 @@ main_execution <- function() {
         "Source revision: %s (uncommitted changes: %s)",
         source_revision$revision, source_revision$dirty
     ))
+    # Record the session locale so a run log shows the character handling and
+    # collation order that produced the outputs.
+    logger::log_info(sprintf("Session locale: %s", Sys.getlocale()))
 
     fatal_issues <- character()
     warning_issues <- character()

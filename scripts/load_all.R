@@ -1,3 +1,52 @@
+# Every project session uses one locale, en_US.UTF-8, whatever locale R was
+# started in. LC_CTYPE decides how text is read: in a non-UTF-8 session (for
+# example a plain C locale) text such as "\u2265 63 years" is read as bytes, so
+# label lookups and factor levels built from it silently stop matching.
+# LC_COLLATE decides how character vectors sort: sort(), order(), arrange() and
+# factor() without explicit levels order text differently under C (codepoint
+# order) and en_US.UTF-8, and the published outputs were produced under
+# en_US.UTF-8. Both are set unconditionally, not only when the session is not
+# UTF-8, so a C.UTF-8 or LC_COLLATE=C session cannot reorder results either.
+# This runs before any project file is sourced, which would otherwise be read
+# in the starting locale.
+PROJECT_LOCALE <- "en_US.UTF-8"
+for (locale_category in c("LC_CTYPE", "LC_COLLATE")) {
+    if (!nzchar(suppressWarnings(Sys.setlocale(locale_category, PROJECT_LOCALE)))) {
+        # R cuts error messages at 1000 bytes by default, which would drop the
+        # end of the instructions below.
+        options(warning.length = 8170L)
+        stop(
+            paste(
+                "",
+                sprintf(
+                    "LOCALE ERROR: this project requires the %s locale, and this computer does not have it (%s could not be set).",
+                    PROJECT_LOCALE,
+                    locale_category
+                ),
+                "",
+                "Why it matters: without it, text such as the label '>= 63 years' is read",
+                "as raw bytes and sorting follows a different order, which can silently",
+                "change factor levels, labels and results. The project refuses to run",
+                "rather than risk wrong output.",
+                "",
+                "What to do:",
+                sprintf("  1. Check what is installed:   locale -a | grep -i en_US   (looking for %s)", PROJECT_LOCALE),
+                "  2. macOS: it is built in. If it is missing, run `locale -a` in Terminal and",
+                "     check that LANG is not set to something unusual in ~/.zshrc or ~/.Renviron.",
+                "  3. Debian/Ubuntu (including Docker and CI images):",
+                "       sudo apt-get install -y locales && sudo locale-gen en_US.UTF-8 && sudo update-locale",
+                "     then start a new shell. In a Dockerfile add:  ENV LANG=en_US.UTF-8",
+                "  4. Windows is not supported: R there names locales differently.",
+                "",
+                sprintf("Current session locale: %s", Sys.getlocale()),
+                "Where this check lives: the top of scripts/load_all.R.",
+                sep = "\n"
+            ),
+            call. = FALSE
+        )
+    }
+}
+
 ########################################################
 ############### ANALYSIS SETTINGS #####################
 ########################################################
