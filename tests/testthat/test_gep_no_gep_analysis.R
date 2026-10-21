@@ -68,7 +68,7 @@ test_that("predictor screening drops incomplete predictors and keeps sparse-leve
     # Two patients have a location level (Iris) with fewer than the minimum patients.
     expect_identical(built$counts$removed_sparse_level, 2L)
     expect_identical(
-        built$counts$eligible - built$counts$removed_sparse_level - built$counts$removed_missing_predictor,
+        nrow(sets$MSS) - built$counts$removed_sparse_level - built$counts$removed_missing_predictor,
         built$counts$model_n
     )
     expect_identical(nrow(built$data), built$counts$model_n)
@@ -192,6 +192,11 @@ test_that("no-GEP outputs reconcile their flow with Record_Issues and keep ident
         as.integer(sum(flow$not_eligible_for_endpoint + flow$removed_sparse_level + flow$removed_missing_predictor) + results$treatment_era_excluded_n)
     )
     # Every patient treated before the testing era is listed by id, and the flow counts them.
+    # Patients not eligible for an endpoint show the fields behind the exclusion, not a placeholder.
+    endpoint_issues <- issues[grepl("^Not eligible for the endpoint", issues$reason), ]
+    expect_gt(nrow(endpoint_issues), 0L)
+    expect_false(any(endpoint_issues$current_value == "see cohort record"))
+    expect_true(any(grepl("mets_free_at_baseline = FALSE", endpoint_issues$current_value, fixed = TRUE)))
     era_issues <- issues[issues$analysis_set == "Treatment-era sensitivity", ]
     expect_identical(nrow(era_issues), as.integer(sum(cohort$treatment_year < GEP_TESTING_ERA_START_YEAR)))
     expect_setequal(era_issues$record_key, as.character(cohort$id[cohort$treatment_year < GEP_TESTING_ERA_START_YEAR]))
@@ -283,4 +288,19 @@ test_that("the treatment-era sensitivity restricts each group to the testing era
         prepare_no_gep_data(transform(synthetic_no_gep_cohort(), treatment_year = replace(treatment_year, 1, NA))),
         "treatment_year is missing for 1 patient"
     )
+})
+
+test_that("the model AUC figure keeps intervals that reach below the usual axis range", {
+    performance <- data.frame(
+        endpoint = c("MFS", "MFS"), performance_scope = "No GEP",
+        model = c("Penalized, all retained predictors", "T stage alone"),
+        auc = c(0.45, 0.60), auc_ci_lower = c(0.22, 0.45), auc_ci_upper = c(0.70, 0.75),
+        stringsAsFactors = FALSE
+    )
+    plot <- plot_no_gep_model_auc(performance)
+    built <- ggplot2::ggplot_build(plot)
+    bars <- built$data[[2]]
+    expect_equal(nrow(bars), 2L)
+    expect_false(anyNA(bars$xmin))
+    expect_lte(built$layout$panel_params[[1]]$x.range[1], 0.22)
 })

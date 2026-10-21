@@ -177,3 +177,15 @@ test_that("the run log records the source revision in a parseable form", {
     orchestration_text <- paste(readLines(here::here("scripts", "workflow", "analysis_orchestration.R"), warn = FALSE), collapse = "\n")
     expect_true(grepl("Source revision: %s", orchestration_text, fixed = TRUE))
 })
+
+test_that("the source revision is read from a checkout whose path contains spaces", {
+    repository <- file.path(withr::local_tempdir(), "path with spaces")
+    dir.create(repository)
+    run_git <- function(...) system2("git", c("-C", shQuote(repository), ...), stdout = FALSE, stderr = FALSE)
+    skip_if(run_git("init") != 0L, "git is not available")
+    run_git("-c", "user.name=test", "-c", "user.email=test@example.org", "commit", "--allow-empty", "-m", "start")
+
+    revision <- get_source_revision(repository)
+    expect_match(revision$revision, "^[0-9a-f]{12}$")
+    expect_false(revision$dirty)
+})

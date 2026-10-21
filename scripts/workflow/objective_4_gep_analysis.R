@@ -30,7 +30,7 @@ run_objective_4 <- function(data, dataset_name, output_dirs, prefix, confounders
         logger::log_info(formatted("Executing run_no_gep_analysis for the full cohort", indent = 1))
         no_gep_results <- run_no_gep_analysis(data)
         no_gep_files <- write_no_gep_outputs(
-            no_gep_results, prepare_no_gep_data(data),
+            no_gep_results, no_gep_results$prepared,
             output_dir = file.path(dirname(output_dirs$obj4_mfs), "d_no_gep"), prefix = prefix
         )
         logger::log_info(formatted("No-GEP analysis completed", indent = 1))

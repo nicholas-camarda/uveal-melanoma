@@ -186,8 +186,6 @@ source(here("scripts", "workflow", "objective_2_safety_toxicity.R"))
 source(here("scripts", "workflow", "objective_3_repeat_radiation.R"))
 source(here("scripts", "workflow", "objective_4_gep_analysis.R"))
 
-# Source the GEP data diagnostics script
-
 # Set seed for reproducibility
 set.seed(123)
 

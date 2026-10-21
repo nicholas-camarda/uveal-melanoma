@@ -242,6 +242,10 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     # One primary patient has a biopsy about six years before treatment (date review).
     cohort$gep_test_timing[5] <- GEP_TEST_TIMING_LEVELS[[1]]
     cohort$gep_test_days[5] <- -2197
+    # One primary patient is metastatic at baseline: ineligible for MFS, still eligible for MSS.
+    cohort$mfs_analysis_eligible[6] <- FALSE
+    cohort$mets_free_at_baseline <- TRUE
+    cohort$mets_free_at_baseline[6] <- FALSE
 
     results <- run_gep_definitive_validation(cohort, n_boot = 20L)
     out_dir <- withr::local_tempdir()
@@ -275,7 +279,13 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_identical(sum(flagged), 2)
     review <- flow$n[grepl("date review", flow$step)]
     expect_identical(review, 1)
-    expect_identical(nrow(issues), as.integer(total - primary + sum(flagged) + review))
+    not_eligible <- flow$n[grepl("^Primary-set patients not eligible", flow$step)]
+    expect_identical(not_eligible, c(1, 0))
+    expect_identical(nrow(issues), as.integer(total - primary + sum(flagged) + review + sum(not_eligible)))
+    ineligible_row <- issues[startsWith(issues$step, "Primary-set patient not eligible"), ]
+    expect_identical(ineligible_row$record_key, "P006")
+    expect_match(ineligible_row$step, "MFS")
+    expect_match(ineligible_row$current_value, "mets_free_at_baseline = FALSE", fixed = TRUE)
     outside <- issues[issues$step == "GEP availability group", ]
     expect_setequal(unique(outside$reason), c(GEP_GROUP_TEST_FAILED, GEP_GROUP_CLASS_PRAME_MISSING, GEP_GROUP_NOT_TESTED))
     expect_true(all(outside$field == "biopsy1_gep_raw"))
@@ -296,7 +306,8 @@ test_that("validation outputs reconcile flow counts with Record_Issues and keep 
     expect_true(all(anonymous$key_source == "row position (no identifier column)"))
 
     # A cohort in which every patient is in the primary set yields an empty, well-formed sheet.
-    complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2") & cohort$gep_test_timing == GEP_TEST_TIMING_LEVELS[[2]], ]
+    complete <- cohort[cohort$gep_group %in% c("Class 1", "Class 2") & cohort$gep_test_timing == GEP_TEST_TIMING_LEVELS[[2]] &
+        cohort$mfs_analysis_eligible, ]
     expect_identical(nrow(build_gep_record_issues(complete)), 0L)
 
     checks <- readxl::read_excel(paths$diagnostics, sheet = "Checks")
@@ -375,4 +386,74 @@ test_that("the retired survcomp package (which dropped tied pairs) is neither us
     script_files <- list.files(here::here("scripts"), pattern = "\\.R$", recursive = TRUE, full.names = TRUE)
     script_text <- vapply(script_files, function(path) paste(readLines(path, warn = FALSE), collapse = "\n"), character(1))
     expect_identical(basename(script_files)[grepl("survcomp", script_text, fixed = TRUE)], character(0))
+})
+
+test_that("an eligible patient without a validation group stops the run instead of vanishing", {
+    cohort <- synthetic_validation_cohort()
+    cohort$prame_status[1] <- "Unknown"
+    expect_error(
+        prepare_gep_validation_endpoint(cohort, "MFS"),
+        "1 patient\\(s\\) eligible for the MFS endpoint have no validation group"
+    )
+})
+
+test_that("the late-biopsy sensitivity reports point estimates without running a bootstrap", {
+    cohort <- synthetic_validation_cohort(n_per_group = 15L)
+    cohort$gep_test_timing[2] <- GEP_TEST_TIMING_LATE
+    sensitivity <- run_gep_late_biopsy_sensitivity(
+        prepare_gep_validation_endpoint(cohort, "MFS"), prepare_gep_validation_endpoint(cohort, "MSS"), 60
+    )
+    expect_identical(unname(sensitivity$patients_excluded), c(1L, 1L))
+    expect_true(all(is.finite(sensitivity$table$primary[grepl("Harrell|AUC", sensitivity$table$quantity)])))
+    point <- calculate_gep_harrell_c(cohort$tt_mets_months_analysis, cohort$mfs_event_type, 1 - cohort$biopsy1_gep_mfs, 60, n_boot = 0L, seed = 1L)
+    expect_true(point$estimable)
+    expect_true(is.na(point$ci_lower))
+    expect_identical(point$valid_draws + point$failed_draws, 0L)
+})
+
+test_that("every bootstrap uses one interval rule with a valid-draw requirement", {
+    draws <- c(seq(0.1, 0.9, length.out = 95), rep(NA_real_, 5))
+    interval <- bootstrap_percentile_interval(draws, 100L)
+    expect_identical(c(interval$valid_draws, interval$failed_draws), c(95L, 5L))
+    expect_equal(interval$ci_lower, unname(stats::quantile(draws, 0.025, na.rm = TRUE)))
+
+    too_many_failures <- bootstrap_percentile_interval(c(draws[1:80], rep(NA_real_, 20)), 100L)
+    expect_true(is.na(too_many_failures$ci_lower))
+    expect_identical(too_many_failures$failed_draws, 20L)
+    expect_true(is.na(bootstrap_percentile_interval(numeric(0), 0L)$ci_upper))
+
+    for (file in c("gep_definitive_validation.R", "gep_no_gep_analysis.R")) {
+        module_text <- paste(readLines(here::here("scripts", "gep", "validation", file)), collapse = "\n")
+        expect_false(grepl("0.9 * n_boot", module_text, fixed = TRUE), info = file)
+    }
+})
+
+test_that("the cross-cohort figure refuses workbooks from an earlier run and missing workbooks", {
+    output_root <- withr::local_tempdir()
+    sources <- data.frame(
+        cohort_dir = c("a_cohort", "b_cohort"), prefix = c("a_", "b_"),
+        cohort_label = c("Cohort A", "Cohort B"), stringsAsFactors = FALSE
+    )
+    table <- build_gep_group_table(
+        prepare_gep_validation_endpoint(synthetic_validation_cohort(), "MFS"), "MFS", 60
+    )
+    for (i in seq_len(nrow(sources))) {
+        dir <- file.path(output_root, sources$cohort_dir[i], "04_GEP_Validation")
+        dir.create(dir, recursive = TRUE)
+        write_gep_workbook(list(Group_Table_MFS = table), file.path(dir, paste0(sources$prefix[i], "gep_validation_5yr.xlsx")))
+    }
+    rlang::local_bindings(OUTPUT_DIR = output_root, .env = .GlobalEnv)
+    figure_dir <- file.path(output_root, "figures")
+
+    path <- create_gep_observed_vs_imported_panel_report(Sys.time() - 3600, figure_dir, sources)
+    expect_true(file.exists(path))
+    expect_error(
+        create_gep_observed_vs_imported_panel_report(Sys.time() + 3600, figure_dir, sources),
+        "was not written in this run"
+    )
+    unlink(file.path(output_root, "b_cohort", "04_GEP_Validation"), recursive = TRUE)
+    expect_error(
+        create_gep_observed_vs_imported_panel_report(Sys.time() - 3600, figure_dir, sources),
+        "Validation workbook not found"
+    )
 })

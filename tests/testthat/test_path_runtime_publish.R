@@ -59,7 +59,7 @@ test_that("standalone tools use the canonical workspace runtime", {
         envir = export_env
     )
     expect_equal(
-        export_env$resolve_runtime_analysis_root("uveal_melanoma"),
+        export_env$resolve_runtime_analysis_root(),
         file.path(path.expand("~/Workspaces"), "uveal-melanoma", "runtime", "Analysis")
     )
 })
@@ -80,7 +80,9 @@ test_that("Objective 4 exporter ships the same files as the publish registry and
         "d_no_gep/full_cohort_no_gep_group_risk.png",
         "d_no_gep/full_cohort_no_gep_diagnostics.xlsx"
     )
-    for (file in files) {
+    # Excel owner-lock and hidden files are never part of the package.
+    lock_files <- c("~$full_cohort_gep_validation_5yr.xlsx", ".hidden.png")
+    for (file in c(files, lock_files)) {
         dir.create(dirname(file.path(root, file)), recursive = TRUE, showWarnings = FALSE)
         writeLines("x", file.path(root, file))
     }

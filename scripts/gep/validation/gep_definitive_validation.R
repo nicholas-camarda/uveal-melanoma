@@ -20,6 +20,40 @@ assign_gep_validation_group <- function(data) {
     data
 }
 
+#' Describe a record's field values as text for Record_Issues
+#'
+#' @param rows Data frame of records.
+#' @param columns Character vector of column names present in `rows`.
+#' @return Character vector with one string per row, `column = value; ...`, with
+#'   missing values written as `missing`.
+format_record_values <- function(rows, columns) {
+    vapply(seq_len(nrow(rows)), function(i) {
+        parts <- vapply(columns, function(column) {
+            value <- rows[[column]][i]
+            paste0(column, " = ", if (is.na(value)) "missing" else as.character(value))
+        }, character(1))
+        paste(parts, collapse = "; ")
+    }, character(1))
+}
+
+#' Percentile bootstrap interval with a valid-draw requirement
+#'
+#' One rule for every bootstrap in the GEP analyses: draws that are not finite count as
+#' failed, and the 95% percentile interval is reported only when at least
+#' `GEP_MIN_VALID_BOOTSTRAP_SHARE` of the draws are valid.
+#'
+#' @param draws Numeric vector of bootstrap statistics (`NA` for failed draws).
+#' @param n_boot Integer number of draws requested; `0` returns no interval.
+#' @return List: `ci_lower`, `ci_upper`, `valid_draws`, `failed_draws`.
+bootstrap_percentile_interval <- function(draws, n_boot) {
+    valid <- sum(is.finite(draws))
+    bounds <- c(NA_real_, NA_real_)
+    if (n_boot > 0L && valid >= GEP_MIN_VALID_BOOTSTRAP_SHARE * n_boot) {
+        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
+    }
+    list(ci_lower = bounds[[1]], ci_upper = bounds[[2]], valid_draws = valid, failed_draws = n_boot - valid)
+}
+
 #' Prepare the analysis set for one validation endpoint
 #'
 #' Keeps the patients flagged eligible for the endpoint, assigns the validation
@@ -52,8 +86,16 @@ prepare_gep_validation_endpoint <- function(data, endpoint = c("MFS", "MSS")) {
             time_months = as.numeric(.data[[spec$time]]),
             status = as.integer(.data[[spec$status]]),
             published_risk = 1 - as.numeric(.data[[spec$expected]])
-        ) %>%
-        dplyr::filter(!is.na(.data$validation_group), is.finite(.data$time_months), !is.na(.data$status))
+        )
+    # An eligible patient must be analysable; a silent drop would leave a patient the
+    # diagnostics workbook cannot account for.
+    unusable <- is.na(prepared$validation_group) | !is.finite(prepared$time_months) | is.na(prepared$status)
+    if (any(unusable)) {
+        stop(sprintf(
+            "%d patient(s) eligible for the %s endpoint have no validation group, follow-up time or status.",
+            sum(unusable), endpoint
+        ), call. = FALSE)
+    }
     if (identical(endpoint, "MSS")) {
         if (!"mss_event_type_unknown_cause_melanoma" %in% names(prepared)) {
             stop("MSS validation requires column: mss_event_type_unknown_cause_melanoma", call. = FALSE)
@@ -263,8 +305,8 @@ build_gep_group_table <- function(prepared, endpoint, horizon_months) {
 #' @param status Integer status, 1 = event.
 #' @param risk Numeric imported risk (higher = worse).
 #' @param horizon_months Numeric horizon in months.
-#' @param n_boot Integer bootstrap replicates.
-#' @param seed Integer seed, applied locally.
+#' @param n_boot Integer bootstrap replicates; `0` returns the point estimate only.
+#' @param seed Integer seed, applied locally (unused when `n_boot` is 0).
 #' @return List: `estimable`, `reason`, `c_index`, `ci_lower`, `ci_upper`,
 #'   `events`, `concordant_pairs`, `discordant_pairs`, `tied_risk_pairs`,
 #'   `tied_pair_share`, `distinct_risk_values`, `valid_draws`, `failed_draws`.
@@ -307,19 +349,17 @@ calculate_gep_harrell_c <- function(time_months, status, risk, horizon_months, n
     out$discordant_pairs <- counts[["discordant"]]
     out$tied_risk_pairs <- counts[["tied.x"]]
     out$tied_pair_share <- counts[["tied.x"]] / comparable
-    draws <- withr::with_seed(seed, {
-        vapply(seq_len(n_boot), function(i) {
-            resampled <- concordance_at(sample.int(length(risk), replace = TRUE))
-            if (is.null(resampled)) NA_real_ else as.numeric(resampled$concordance)
-        }, numeric(1))
-    })
-    out$valid_draws <- sum(is.finite(draws))
-    out$failed_draws <- n_boot - out$valid_draws
-    if (out$valid_draws >= 0.9 * n_boot) {
-        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
-        out$ci_lower <- bounds[[1]]
-        out$ci_upper <- bounds[[2]]
+    draws <- numeric(0)
+    if (n_boot > 0L) {
+        draws <- withr::with_seed(seed, {
+            vapply(seq_len(n_boot), function(i) {
+                resampled <- concordance_at(sample.int(length(risk), replace = TRUE))
+                if (is.null(resampled)) NA_real_ else as.numeric(resampled$concordance)
+            }, numeric(1))
+        })
     }
+    interval <- bootstrap_percentile_interval(draws, n_boot)
+    out[names(interval)] <- interval
     out
 }
 
@@ -333,8 +373,8 @@ calculate_gep_harrell_c <- function(time_months, status, risk, horizon_months, n
 #' @param status Integer status: 0 censored, 1 melanoma death, 2 other death.
 #' @param risk Numeric imported risk (higher = worse).
 #' @param horizon_months Numeric horizon in months.
-#' @param n_boot Integer bootstrap replicates.
-#' @param seed Integer seed, applied locally.
+#' @param n_boot Integer bootstrap replicates; `0` returns the point estimate only.
+#' @param seed Integer seed, applied locally (unused when `n_boot` is 0).
 #' @return List: `estimable`, `reason`, `auc`, `ci_lower`, `ci_upper`, `events`,
 #'   `valid_draws`, `failed_draws`.
 calculate_gep_competing_risk_auc <- function(time_months, status, risk, horizon_months, n_boot, seed) {
@@ -381,16 +421,14 @@ calculate_gep_competing_risk_auc <- function(time_months, status, risk, horizon_
         out$reason <- "timeROC returned a missing AUC at the horizon"
         return(out)
     }
-    draws <- withr::with_seed(seed, {
-        vapply(seq_len(n_boot), function(i) auc_draw(sample.int(length(risk), replace = TRUE)), numeric(1))
-    })
-    out$valid_draws <- sum(is.finite(draws))
-    out$failed_draws <- n_boot - out$valid_draws
-    if (out$valid_draws >= 0.9 * n_boot) {
-        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
-        out$ci_lower <- bounds[[1]]
-        out$ci_upper <- bounds[[2]]
+    draws <- numeric(0)
+    if (n_boot > 0L) {
+        draws <- withr::with_seed(seed, {
+            vapply(seq_len(n_boot), function(i) auc_draw(sample.int(length(risk), replace = TRUE)), numeric(1))
+        })
     }
+    interval <- bootstrap_percentile_interval(draws, n_boot)
+    out[names(interval)] <- interval
     out
 }
 
@@ -458,28 +496,26 @@ compare_unknown_cause_of_death_assumption <- function(endpoint_data, group_var, 
 #' @param mfs Prepared MFS endpoint data.
 #' @param mss Prepared MSS endpoint data.
 #' @param horizon_months Numeric horizon in months.
-#' @param n_boot Integer bootstrap replicates.
-#' @param seed Integer seed.
 #' @return List: `patients_excluded` (per endpoint) and `table` with `endpoint`,
 #'   `quantity`, `primary`, `excluding_late_biopsy`, `difference`, `unit`.
-run_gep_late_biopsy_sensitivity <- function(mfs, mss, horizon_months, n_boot, seed) {
+run_gep_late_biopsy_sensitivity <- function(mfs, mss, horizon_months) {
     one_endpoint <- function(prepared, endpoint) {
         keep <- prepared[!(as.character(prepared$gep_test_timing) %in% GEP_TEST_TIMING_LATE), , drop = FALSE]
         primary_table <- build_gep_group_table(prepared, endpoint, horizon_months)
         restricted_table <- build_gep_group_table(keep, endpoint, horizon_months)
         discrimination <- function(d) {
             if (identical(endpoint, "MFS")) {
-                r <- calculate_gep_harrell_c(d$time_months, d$status, d$published_risk, horizon_months, n_boot, seed)
+                r <- calculate_gep_harrell_c(d$time_months, d$status, d$published_risk, horizon_months, n_boot = 0L, seed = 0L)
                 list(value = r$c_index, label = "Harrell's C")
             } else {
-                r <- calculate_gep_competing_risk_auc(d$time_months, d$status, d$published_risk, horizon_months, n_boot, seed)
+                r <- calculate_gep_competing_risk_auc(d$time_months, d$status, d$published_risk, horizon_months, n_boot = 0L, seed = 0L)
                 list(value = r$auc, label = "Competing-risk AUC")
             }
         }
         primary_disc <- discrimination(prepared)
         restricted_disc <- discrimination(keep)
         risk_rows <- data.frame(
-            endpoint = endpoint, quantity = paste("Observed 5-year risk:", primary_table$group),
+            endpoint = endpoint, quantity = paste(sprintf("Observed %.0f-year risk:", horizon_months / 12), primary_table$group),
             primary = primary_table$observed_risk, excluding_late_biopsy = restricted_table$observed_risk,
             difference = 100 * (restricted_table$observed_risk - primary_table$observed_risk), unit = "percentage points",
             stringsAsFactors = FALSE
@@ -514,7 +550,7 @@ run_gep_definitive_validation <- function(data,
                                           seed = GEP_VALIDATION_BOOTSTRAP_SEED) {
     mfs <- prepare_gep_validation_endpoint(data, "MFS")
     mss <- prepare_gep_validation_endpoint(data, "MSS")
-    late_biopsy_sensitivity <- run_gep_late_biopsy_sensitivity(mfs, mss, horizon_months, n_boot, seed)
+    late_biopsy_sensitivity <- run_gep_late_biopsy_sensitivity(mfs, mss, horizon_months)
     list(
         horizon_months = horizon_months,
         late_biopsy_sensitivity = late_biopsy_sensitivity,

@@ -127,7 +127,6 @@ screen_no_gep_predictors <- function(analysis_sets) {
 #'   `field`, `current_value`), and `counts` (input, sparse-level, incomplete, model).
 build_no_gep_model_data <- function(analysis_set, predictors, label) {
     factor_predictors <- intersect(predictors, GEP_NO_GEP_FACTOR_PREDICTORS)
-    initial_n <- nrow(analysis_set)
     after_sparse <- analysis_set
     if (length(factor_predictors) > 0L) {
         # Removing patients with one sparse level can leave another level below the
@@ -152,13 +151,7 @@ build_no_gep_model_data <- function(analysis_set, predictors, label) {
 
     removed_rows <- function(ids, reason, columns) {
         rows <- analysis_set[analysis_set$id %in% ids, , drop = FALSE]
-        value <- vapply(seq_len(nrow(rows)), function(i) {
-            parts <- vapply(columns, function(column) {
-                v <- rows[[column]][i]
-                paste0(column, " = ", if (is.na(v)) "missing" else as.character(v))
-            }, character(1))
-            paste(parts, collapse = "; ")
-        }, character(1))
+        value <- format_record_values(rows, columns)
         data.frame(
             id = as.character(rows$id), analysis_set = rep(label, nrow(rows)), reason = rep(reason, nrow(rows)),
             field = rep(paste(columns, collapse = ", "), nrow(rows)), current_value = value, stringsAsFactors = FALSE
@@ -172,7 +165,7 @@ build_no_gep_model_data <- function(analysis_set, predictors, label) {
         data = model_data,
         removed = removed,
         counts = data.frame(
-            analysis_set = label, eligible = initial_n, removed_sparse_level = length(sparse_removed),
+            analysis_set = label, removed_sparse_level = length(sparse_removed),
             removed_missing_predictor = length(incomplete_removed), model_n = nrow(model_data),
             stringsAsFactors = FALSE
         )
@@ -212,7 +205,7 @@ compute_no_gep_oof_predictions <- function(model_data, endpoint, predictors, hor
 filter_no_gep_scope <- function(oof, scope = c("No GEP", "All patients")) {
     scope <- match.arg(scope)
     if (identical(scope, "No GEP")) {
-        oof[!(as.character(oof$gep_group) %in% c("Class 1", "Class 2")), , drop = FALSE]
+        oof[!(as.character(oof$gep_group) %in% GEP_DEFINITIVE_GROUP_LEVELS), , drop = FALSE]
     } else {
         oof
     }
@@ -270,13 +263,8 @@ summarize_no_gep_oof_metric <- function(oof, score_col, metric, n_boot, seed, wi
             suppressWarnings(as.numeric(no_gep_repeat_metric(resampled, resampled[[score_col]], metric)))
         }, numeric(1))
     })
-    out$valid_draws <- sum(is.finite(draws))
-    out$failed_draws <- n_boot - out$valid_draws
-    if (out$valid_draws >= 0.9 * n_boot) {
-        bounds <- stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE)
-        out$ci_lower <- bounds[[1]]
-        out$ci_upper <- bounds[[2]]
-    }
+    interval <- bootstrap_percentile_interval(draws, n_boot)
+    out[names(interval)] <- interval
     out
 }
 
@@ -321,9 +309,7 @@ summarize_no_gep_auc_difference <- function(oof, comparator_variable, n_boot, se
             suppressWarnings(as.numeric(difference(rows[sample.int(nrow(rows), replace = TRUE), , drop = FALSE])))
         }, numeric(1))
     })
-    valid <- sum(is.finite(draws))
-    bounds <- if (valid >= 0.9 * n_boot) stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
-    list(estimate = estimate, ci_lower = bounds[[1]], ci_upper = bounds[[2]], valid_draws = valid, failed_draws = n_boot - valid)
+    c(list(estimate = estimate), bootstrap_percentile_interval(draws, n_boot))
 }
 
 #' AUC differences of the ridge models against each comparator in the no-GEP scope
@@ -363,8 +349,6 @@ summarize_no_gep_auc_differences <- function(models, endpoint, n_boot, seed) {
 summarize_no_gep_model_performance <- function(models, endpoint, n_boot, seed) {
     rows <- list()
     for (scope in c("No GEP", "All patients")) {
-        reference <- filter_no_gep_scope(models[[1]], scope)
-        reference_rows <- reference[reference$repeat_id == min(reference$repeat_id), , drop = FALSE]
         scored <- list()
         for (model_name in names(models)) {
             scoped <- filter_no_gep_scope(models[[model_name]], scope)
@@ -480,14 +464,13 @@ summarize_surrogate_performance <- function(oof, n_boot, seed) {
             auc_of(rows[sample.int(nrow(rows), replace = TRUE), , drop = FALSE])
         }, numeric(1))
     })
-    valid <- sum(is.finite(draws))
-    bounds <- if (valid >= 0.9 * n_boot) stats::quantile(draws, c(0.025, 0.975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    interval <- bootstrap_percentile_interval(draws, n_boot)
     first <- by_repeat[[1]]
     data.frame(
         endpoint = "Class 2 vs Class 1", performance_scope = "Definitive Class 1/2 patients",
         model = "Class 2-like score (ridge)", patients = nrow(first), cases_by_horizon = sum(first$outcome == 1L),
-        auc = estimate, auc_ci_lower = bounds[[1]], auc_ci_upper = bounds[[2]],
-        bootstrap_valid_draws = valid, bootstrap_failed_draws = n_boot - valid,
+        auc = estimate, auc_ci_lower = interval$ci_lower, auc_ci_upper = interval$ci_upper,
+        bootstrap_valid_draws = interval$valid_draws, bootstrap_failed_draws = interval$failed_draws,
         brier = NA_real_, no_information_brier = NA_real_, brier_skill = NA_real_,
         stringsAsFactors = FALSE
     )
@@ -627,7 +610,7 @@ build_no_gep_baseline_table <- function(data) {
 #' @param horizon_months Numeric horizon in months (default 60).
 #' @param n_boot Integer bootstrap draws.
 #' @param seed Integer seed for all bootstraps.
-#' @return List: `group_outcomes`, `treatment_era_sensitivity`, `treatment_era_excluded_n`,
+#' @return List: `prepared` (the cohort after `prepare_no_gep_data()`), `group_outcomes`, `treatment_era_sensitivity`, `treatment_era_excluded_n`,
 #'   `cause_of_death_sensitivity`, `baseline`, `predictor_screening`, `predictors`,
 #'   `model_flow`, `removed_records`, `performance`, `auc_differences`, and
 #'   `design_columns`.
@@ -639,7 +622,7 @@ run_no_gep_analysis <- function(data,
     sets <- list(
         MFS = prepare_no_gep_endpoint(prepared, "MFS"),
         MSS = prepare_no_gep_endpoint(prepared, "MSS"),
-        Surrogate = prepared[prepared$gep_group %in% c("Class 1", "Class 2"), , drop = FALSE]
+        Surrogate = prepared[prepared$gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS, , drop = FALSE]
     )
     screening <- screen_no_gep_predictors(sets)
     predictors <- screening$predictor[screening$status == "retained"]
@@ -663,17 +646,22 @@ run_no_gep_analysis <- function(data,
         ids <- not_eligible[[endpoint]]
         model_sets[[endpoint]]$counts$candidates <- nrow(prepared)
         model_sets[[endpoint]]$counts$not_eligible_for_endpoint <- length(ids)
+        fields <- intersect(
+            if (identical(endpoint, "MFS")) c("mets_free_at_baseline", "tt_mets_months_analysis", "mfs_event_type") else c("tt_death_months", "mss_event_type"),
+            names(prepared)
+        )
         model_sets[[endpoint]]$removed <- dplyr::bind_rows(
             data.frame(
                 id = as.character(ids), analysis_set = rep(endpoint, length(ids)),
                 reason = rep("Not eligible for the endpoint (metastatic at baseline or no follow-up time)", length(ids)),
-                field = rep(if (identical(endpoint, "MFS")) "mets_free_at_baseline, tt_mets_months_analysis" else "tt_death_months", length(ids)),
-                current_value = rep("see cohort record", length(ids)), stringsAsFactors = FALSE
+                field = rep(paste(fields, collapse = ", "), length(ids)),
+                current_value = format_record_values(prepared[prepared$id %in% ids, , drop = FALSE], fields),
+                stringsAsFactors = FALSE
             ),
             model_sets[[endpoint]]$removed
         )
     }
-    model_sets$Surrogate$counts$candidates <- sum(prepared$gep_group %in% c("Class 1", "Class 2"))
+    model_sets$Surrogate$counts$candidates <- sum(prepared$gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS)
     model_sets$Surrogate$counts$not_eligible_for_endpoint <- 0L
     performance <- list()
     auc_differences <- list()
@@ -709,6 +697,7 @@ run_no_gep_analysis <- function(data,
 
     list(
         horizon_months = horizon_months,
+        prepared = prepared,
         group_outcomes = dplyr::bind_rows(
             build_no_gep_group_outcomes(sets$MFS, "MFS", horizon_months),
             build_no_gep_group_outcomes(sets$MSS, "MSS", horizon_months)

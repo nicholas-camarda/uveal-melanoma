@@ -9,7 +9,8 @@
 #'   the GEP availability groups sum to it.
 summarize_gep_validation_flow <- function(data, results) {
     group_counts <- table(factor(data$gep_group, levels = GEP_GROUP_LEVELS))
-    primary_n <- sum(group_counts[c("Class 1", "Class 2")])
+    primary <- data$gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS
+    primary_n <- sum(primary)
     flow <- data.frame(
         step = c(
             "All patients in cohort",
@@ -17,6 +18,8 @@ summarize_gep_validation_flow <- function(data, results) {
             "Definitive Class 1/2 with PRAME reported (primary validation set)",
             "Eligible for the MFS endpoint", "Analysed for MFS",
             "Eligible for the MSS endpoint", "Analysed for MSS",
+            "Primary-set patients not eligible for the MFS endpoint",
+            "Primary-set patients not eligible for the MSS endpoint",
             paste("Biopsy timing in the primary set:", GEP_TEST_TIMING_LEVELS),
             sprintf("Biopsy more than %d days before treatment in the primary set (date review)", GEP_TEST_REVIEW_BEFORE_DAYS)
         ),
@@ -24,16 +27,19 @@ summarize_gep_validation_flow <- function(data, results) {
             nrow(data), as.integer(group_counts), as.integer(primary_n),
             sum(data$mfs_analysis_eligible %in% TRUE), nrow(results$mfs$prepared),
             sum(data$mss_analysis_eligible %in% TRUE), nrow(results$mss$prepared),
-            as.integer(table(factor(data$gep_test_timing[data$gep_group %in% c("Class 1", "Class 2")], levels = GEP_TEST_TIMING_LEVELS))),
-            sum(data$gep_group %in% c("Class 1", "Class 2") & data$gep_test_days < -GEP_TEST_REVIEW_BEFORE_DAYS, na.rm = TRUE)
+            sum(primary & !(data$mfs_analysis_eligible %in% TRUE)), sum(primary & !(data$mss_analysis_eligible %in% TRUE)),
+            as.integer(table(factor(data$gep_test_timing[primary], levels = GEP_TEST_TIMING_LEVELS))),
+            sum(primary & data$gep_test_days < -GEP_TEST_REVIEW_BEFORE_DAYS, na.rm = TRUE)
         ),
         note = c(
             "", rep("", length(GEP_GROUP_LEVELS)),
             "Class 1 + Class 2; patients with a known class but PRAME not reported keep no imputed prediction and are excluded",
             "Definitive call, valid imported prediction, metastasis-free at baseline",
-            "Equals eligible unless a record lacks follow-up time or status",
+            "Equals eligible; an eligible patient without a validation group, follow-up time or status stops the run",
             "Definitive call, valid imported prediction, melanoma-death follow-up available",
-            "Equals eligible unless a record lacks follow-up time or status",
+            "Equals eligible; an eligible patient without a validation group, follow-up time or status stops the run",
+            "Listed in Record_Issues with the field values behind the exclusion",
+            "Listed in Record_Issues with the field values behind the exclusion",
             c("", "", "", "Flagged in Record_Issues; excluded in the late-biopsy sensitivity analysis", "Flagged in Record_Issues"),
             "Counted in the timing row above; flagged in Record_Issues and kept in the analysis"
         ),
@@ -45,7 +51,8 @@ summarize_gep_validation_flow <- function(data, results) {
 #' List patients outside the primary validation set
 #'
 #' One row per patient not in the Class 1/Class 2 primary set, with the step and
-#' reason, the raw laboratory label, and nothing else. When the cohort has an
+#' reason, the raw laboratory label, and nothing else; plus the primary-set patients who are
+#' not eligible for an endpoint (with the fields that decide it) or whose biopsy timing needs a look. When the cohort has an
 #' identifier column the key is that identifier; otherwise it is the row position and
 #' `key_source` says so. Contains identifiers: keep it in the diagnostics workbook,
 #' which is part of the results package.
@@ -58,7 +65,7 @@ build_gep_record_issues <- function(data) {
     id_col <- pick_sparse_level_id_col(data)
     record_key <- if (is.null(id_col)) as.character(seq_len(nrow(data))) else as.character(data[[id_col]])
     key_source <- if (is.null(id_col)) "row position (no identifier column)" else id_col
-    outside <- !(data$gep_group %in% c("Class 1", "Class 2"))
+    outside <- !(data$gep_group %in% GEP_DEFINITIVE_GROUP_LEVELS)
     n_outside <- sum(outside)
     group_rows <- data.frame(
         record_key = record_key[outside],
@@ -82,7 +89,25 @@ build_gep_record_issues <- function(data) {
         current_value = ifelse(is.na(data$gep_test_days[flagged]), "missing", sprintf("%.0f days from treatment", data$gep_test_days[flagged])),
         stringsAsFactors = FALSE
     )
-    rbind(group_rows, timing_rows)
+    # Primary-set patients who cannot enter an endpoint, with the fields that decide it.
+    not_eligible_rows <- function(endpoint, eligible_column, field_columns) {
+        idx <- !outside & !(data[[eligible_column]] %in% TRUE)
+        fields <- intersect(field_columns, names(data))
+        data.frame(
+            record_key = record_key[idx],
+            key_source = rep(key_source, sum(idx)),
+            step = rep(sprintf("Primary-set patient not eligible for the %s endpoint", endpoint), sum(idx)),
+            reason = rep("Metastatic at baseline, or follow-up time or event status missing", sum(idx)),
+            field = rep(paste(fields, collapse = ", "), sum(idx)),
+            current_value = format_record_values(data[idx, , drop = FALSE], fields),
+            stringsAsFactors = FALSE
+        )
+    }
+    endpoint_rows <- rbind(
+        not_eligible_rows("MFS", "mfs_analysis_eligible", c("mfs_analysis_eligible", "mets_free_at_baseline", "tt_mets_months_analysis", "mfs_event_type")),
+        not_eligible_rows("MSS", "mss_analysis_eligible", c("mss_analysis_eligible", "tt_death_months", "mss_event_type"))
+    )
+    rbind(group_rows, endpoint_rows, timing_rows)
 }
 
 #' Evaluate the quality checks that qualify the validation estimates
@@ -121,7 +146,7 @@ build_gep_validation_checks <- function(results) {
         if (identical(endpoint, "MFS")) {
             add(endpoint, "Tied pairs in Harrell's C", "All patients",
                 if (isTRUE(d$estimable)) sprintf("%.1f%% of comparable pairs tied on imported risk", 100 * d$tied_pair_share) else "not computed",
-                if (isTRUE(d$estimable)) "concern" else "not assessed",
+                if (!isTRUE(d$estimable)) "not assessed" else if (d$tied_pair_share > 0) "concern" else "no concern",
                 "The imported risk has four values; tied pairs count one half, so C is a ranking of four groups")
         }
         add(endpoint, "Discrimination estimable", "All patients",
@@ -270,7 +295,7 @@ plot_gep_validation_curves <- function(prepared, group_table, endpoint, horizon_
         last_time <- min(max(g$time_months), horizon_months)
         steps <- rbind(steps, data.frame(time = last_time, risk = steps$risk[nrow(steps)]))
         event_free <- group_table$event_free_through_horizon[match(group_name, group_table$group)]
-        steps$group <- sprintf("%s (n = %d; %d event-free at 5 y)", group_name, nrow(g), event_free)
+        steps$group <- sprintf("%s (n = %d; %d event-free at %.0f y)", group_name, nrow(g), event_free, horizon_months / 12)
         steps$group_name <- group_name
         steps
     })
@@ -431,12 +456,15 @@ write_gep_validation_outputs <- function(results, data, dataset_name, output_dir
 #' Cross-cohort observed-vs-imported MFS figure
 #'
 #' Reads the group tables from each cohort's primary validation workbook and draws
-#' one panel per cohort.
+#' one panel per cohort. A workbook written before `run_started` belongs to an earlier
+#' run, so the figure stops instead of mixing runs.
 #'
+#' @param run_started `POSIXct` time the current run began.
 #' @param output_dir Character directory to write the PNG to.
 #' @param cohort_sources Data frame with `cohort_dir`, `prefix`, `cohort_label`.
 #' @return Invisibly, the written file path.
-create_gep_observed_vs_imported_panel_report <- function(output_dir = file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures"),
+create_gep_observed_vs_imported_panel_report <- function(run_started,
+                                                         output_dir = file.path(MERGED_TABLES_DIR, "objective4_cross_cohort_figures"),
                                                          cohort_sources = data.frame(
                                                              cohort_dir = c("uveal_full", "uveal_restricted", "gksrs"),
                                                              prefix = c("full_cohort_", "restricted_cohort_", "gksrs_only_cohort_"),
@@ -448,6 +476,9 @@ create_gep_observed_vs_imported_panel_report <- function(output_dir = file.path(
                           paste0(cohort_sources$prefix[i], "gep_validation_5yr.xlsx"))
         if (!file.exists(path)) {
             stop(sprintf("Validation workbook not found: %s", path), call. = FALSE)
+        }
+        if (file.mtime(path) < run_started) {
+            stop(sprintf("Validation workbook was not written in this run: %s", path), call. = FALSE)
         }
         readxl::read_excel(path, sheet = "Group_Table_MFS")
     })

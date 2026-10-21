@@ -236,6 +236,10 @@ plot_no_gep_model_auc <- function(performance) {
         drop = FALSE
     ]
     plot_data$kind <- ifelse(grepl("alone", plot_data$model), "No-fit comparator", "Ridge model")
+    # The axis only zooms: setting scale limits would delete intervals reaching below the
+    # lower bound, so the bound follows the lowest interval instead.
+    lowest <- suppressWarnings(min(plot_data$auc_ci_lower, na.rm = TRUE))
+    axis_lower <- if (is.finite(lowest)) min(0.3, floor(lowest * 10) / 10) else 0.3
     plot_data$model <- factor(plot_data$model, levels = rev(unique(plot_data$model)))
     plot_data$endpoint <- factor(plot_data$endpoint, levels = c("MFS", "MSS", "Class 2 vs Class 1"),
                                  labels = c("Metastasis (no-GEP patients)", "Melanoma death (no-GEP patients)", "Class 2 vs Class 1 (definitive patients)"))
@@ -248,7 +252,8 @@ plot_no_gep_model_auc <- function(performance) {
         ggplot2::geom_point(size = 3.6, color = "grey10") +
         ggplot2::facet_wrap(~endpoint, ncol = 1, scales = "free_y") +
         ggplot2::scale_shape_manual(values = c("Ridge model" = 16, "No-fit comparator" = 5), name = NULL) +
-        ggplot2::scale_x_continuous(limits = c(0.3, 1), breaks = seq(0.3, 1, by = 0.1)) +
+        ggplot2::scale_x_continuous(breaks = seq(axis_lower, 1, by = 0.1)) +
+        ggplot2::coord_cartesian(xlim = c(axis_lower, 1)) +
         ggplot2::labs(
             x = "Out-of-fold AUC at 5 years (95% bootstrap interval)", y = NULL,
             title = "Baseline features vs chance and single measurements",

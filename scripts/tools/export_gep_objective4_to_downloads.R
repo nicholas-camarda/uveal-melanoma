@@ -5,9 +5,8 @@
 
 #' Resolve the runtime analysis root for this project
 #'
-#' @param project_slug Character scalar analysis slug.
 #' @return Character scalar absolute path to the runtime analysis root.
-resolve_runtime_analysis_root <- function(project_slug) {
+resolve_runtime_analysis_root <- function() {
     output_dir <- Sys.getenv("OUTPUT_DIR", unset = "")
     if (nzchar(trimws(output_dir))) {
         return(normalizePath(path.expand(output_dir), winslash = "/", mustWork = FALSE))
@@ -58,7 +57,9 @@ get_objective4_artifact_category <- function(source_path) {
 #' @param objective4_root Character scalar path to the cohort's `04_GEP_Validation` folder.
 #' @return Character vector of absolute file paths, sorted.
 list_objective4_shareable_files <- function(objective4_root) {
-    sort(list.files(objective4_root, pattern = "\\.(xlsx|png)$", recursive = TRUE, full.names = TRUE))
+    files <- list.files(objective4_root, pattern = "\\.(xlsx|png)$", recursive = TRUE, full.names = TRUE)
+    # Excel owner-lock files (~$name.xlsx) and hidden files are never results.
+    sort(files[!grepl("^(~\\$|\\.)", basename(files))])
 }
 
 #' Copy shareable Objective 4 artifacts into a destination folder
@@ -111,7 +112,7 @@ export_gep_objective4_to_downloads <- function(
     dry_run = identical(Sys.getenv("GEP_OBJECTIVE4_DRY_RUN", unset = "0"), "1")
 ) {
     project_slug <- "uveal-melanoma"
-    runtime_analysis_root <- resolve_runtime_analysis_root(project_slug)
+    runtime_analysis_root <- resolve_runtime_analysis_root()
 
     if (is.null(destination_dir) || !nzchar(trimws(destination_dir))) {
         timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S")

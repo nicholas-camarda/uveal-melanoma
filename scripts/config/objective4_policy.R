@@ -7,6 +7,7 @@
 # - GEP availability groups and the raw laboratory labels that define them
 
 GEP_BOOTSTRAP_ITERATIONS <- 1000
+GEP_MIN_VALID_BOOTSTRAP_SHARE <- 0.9 # Share of bootstrap draws that must be valid before an interval is reported
 
 # Definitive-GEP validation (Class 1/2 with PRAME reported): one horizon, one seed.
 # Seven- and ten-year results are not reported because follow-up leaves 0-1

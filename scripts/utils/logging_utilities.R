@@ -319,7 +319,7 @@ with_log_context <- function(cohort = NULL, objective = NULL, subobjective = NUL
 #'   and `dirty` (`TRUE` when tracked or untracked changes exist; `NA` outside Git).
 get_source_revision <- function(repository_root = here::here()) {
     run_git <- function(args) {
-        suppressWarnings(system2("git", c("-C", repository_root, args), stdout = TRUE, stderr = FALSE))
+        suppressWarnings(system2("git", c("-C", shQuote(repository_root), args), stdout = TRUE, stderr = FALSE))
     }
     revision <- run_git(c("rev-parse", "--short=12", "HEAD"))
     if (!is.null(attr(revision, "status")) || length(revision) != 1L) {
