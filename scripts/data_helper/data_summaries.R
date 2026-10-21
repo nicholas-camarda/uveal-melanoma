@@ -258,7 +258,12 @@ create_summary_tables <- function(data_list, output_dirs = NULL) {
         
         tbl <- tryCatch(
             {
-                tbl %>% add_p(test = test_list, test.args = list(all_categorical() ~ list(simulate.p.value = TRUE)))
+                # add_p() stays a direct call here: create_test_documentation()
+                # reads its recorded test.args to document the simulation.
+                with_local_seed(
+                    SIMULATED_FISHER_SEED,
+                    tbl %>% add_p(test = test_list, test.args = list(all_categorical() ~ list(simulate.p.value = TRUE)))
+                )
             },
             error = function(e) {
                 logger::log_info(sprintf("Some statistical tests failed (expected for variables with <2 levels): %s", e$message))

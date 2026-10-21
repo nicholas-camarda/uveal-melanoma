@@ -49,39 +49,10 @@ format_continuous_summary_string <- function(values, digits = 1) {
     )
 }
 
-#' Evaluate an expression with a local RNG seed and restore prior RNG state
-#'
-#' Runs seeded calculations without changing the caller's `.Random.seed`. This
-#' is used for Objective 2 simulated Fisher p-values so reported descriptive
-#' p-values are reproducible without perturbing unrelated analyses.
-#'
-#' @param seed Integer random seed.
-#' @param expr Expression to evaluate under the local seed.
-#' @return The value produced by `expr`.
-with_preserved_rng_seed <- function(seed, expr) {
-    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    previous_seed <- if (had_seed) {
-        get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    } else {
-        NULL
-    }
-
-    on.exit({
-        if (had_seed) {
-            assign(".Random.seed", previous_seed, envir = .GlobalEnv)
-        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-            rm(".Random.seed", envir = .GlobalEnv)
-        }
-    }, add = TRUE)
-
-    set.seed(seed)
-    force(expr)
-}
-
 #' Compute an Objective 2 simulated Fisher p-value with the configured seed
 #'
-#' Uses the central Objective 2 seed for sparse categorical descriptive tests.
-#' Degenerate tables return `NA` instead of stopping the analysis.
+#' Uses the central simulated-test seed for sparse categorical descriptive
+#' tests. Degenerate tables return `NA` instead of stopping the analysis.
 #'
 #' @param data Data frame containing grouping and outcome columns.
 #' @param group_var Character scalar grouping column name.
@@ -104,8 +75,8 @@ calculate_objective2_fisher_p_value <- function(data, group_var, outcome_var) {
         return(NA_real_)
     }
 
-    with_preserved_rng_seed(
-        OBJECTIVE2_SIMULATED_FISHER_SEED,
+    with_local_seed(
+        SIMULATED_FISHER_SEED,
         tryCatch(
             stats::fisher.test(contingency_table, simulate.p.value = TRUE)$p.value,
             error = function(e) NA_real_
@@ -140,7 +111,8 @@ safe_wilcox_p_value <- function(data, value_var, group_var = "treatment_group") 
 #'
 #' Keeps descriptive tables publishable when sparse or degenerate data prevent a
 #' p-value calculation. The returned table includes a blank p-value column when
-#' `gtsummary::add_p()` cannot compute one.
+#' `gtsummary::add_p()` cannot compute one. Monte Carlo tests run under the
+#' central simulated-test seed.
 #'
 #' @param summary_table A gtsummary object.
 #' @param context_label Character scalar used in warning messages.
@@ -151,9 +123,9 @@ safe_add_p_to_summary <- function(summary_table, context_label, test = NULL, tes
     tryCatch(
         {
             if (is.null(test.args)) {
-                summary_table %>% add_p(test = test)
+                summary_table %>% add_p_seeded(test = test)
             } else {
-                summary_table %>% add_p(test = test, test.args = test.args)
+                summary_table %>% add_p_seeded(test = test, test.args = test.args)
             }
         },
         error = function(e) {
@@ -862,26 +834,23 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     line_change_bucket_tbl <- NULL
     line_change_tbl <- NULL
     if (length(line_levels) > 0) {
-        line_change_tbl <- with_preserved_rng_seed(
-            OBJECTIVE2_SIMULATED_FISHER_SEED,
-            summary_data %>%
-                filter(!is.na(vision_line_change_label)) %>%
-                select(treatment_group, vision_line_change_label) %>%
-                tbl_summary(
-                    missing = "no",
-                    by = treatment_group,
-                    type = list(vision_line_change_label ~ "categorical"),
-                    statistic = list(all_categorical() ~ "{n} ({p}%)"),
-                    digits = list(all_categorical() ~ 1),
-                    label = list(vision_line_change_label ~ "Snellen Line Change Integer Distribution")
-                ) %>%
-                safe_add_p_to_summary(
-                    context_label = "Snellen integer line-change summary",
-                    test = list(
-                        all_categorical() ~ "fisher.test"
-                    ),
-                    test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
-                )
+        line_change_tbl <- summary_data %>%
+            filter(!is.na(vision_line_change_label)) %>%
+            select(treatment_group, vision_line_change_label) %>%
+            tbl_summary(
+                missing = "no",
+                by = treatment_group,
+                type = list(vision_line_change_label ~ "categorical"),
+                statistic = list(all_categorical() ~ "{n} ({p}%)"),
+                digits = list(all_categorical() ~ 1),
+                label = list(vision_line_change_label ~ "Snellen Line Change Integer Distribution")
+            ) %>%
+            safe_add_p_to_summary(
+                context_label = "Snellen integer line-change summary",
+                test = list(
+                    all_categorical() ~ "fisher.test"
+                ),
+                test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
             ) %>%
             add_overall() %>%
             format_count_percent_columns() %>%
@@ -897,26 +866,23 @@ analyze_visual_acuity_changes <- function(data, output_dirs, prefix, confounders
     }
 
     if (!all(is.na(summary_data$vision_line_change_bucket))) {
-        line_change_bucket_tbl <- with_preserved_rng_seed(
-            OBJECTIVE2_SIMULATED_FISHER_SEED,
-            summary_data %>%
-                filter(!is.na(vision_line_change_bucket)) %>%
-                select(treatment_group, vision_line_change_bucket) %>%
-                tbl_summary(
-                    missing = "no",
-                    by = treatment_group,
-                    type = list(vision_line_change_bucket ~ "categorical"),
-                    statistic = list(all_categorical() ~ "{n} ({p}%)"),
-                    digits = list(all_categorical() ~ 1),
-                    label = list(vision_line_change_bucket ~ "Snellen Line Change Distribution")
-                ) %>%
-                safe_add_p_to_summary(
-                    context_label = "Snellen bucket line-change summary",
-                    test = list(
-                        all_categorical() ~ "fisher.test"
-                    ),
-                    test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
-                )
+        line_change_bucket_tbl <- summary_data %>%
+            filter(!is.na(vision_line_change_bucket)) %>%
+            select(treatment_group, vision_line_change_bucket) %>%
+            tbl_summary(
+                missing = "no",
+                by = treatment_group,
+                type = list(vision_line_change_bucket ~ "categorical"),
+                statistic = list(all_categorical() ~ "{n} ({p}%)"),
+                digits = list(all_categorical() ~ 1),
+                label = list(vision_line_change_bucket ~ "Snellen Line Change Distribution")
+            ) %>%
+            safe_add_p_to_summary(
+                context_label = "Snellen bucket line-change summary",
+                test = list(
+                    all_categorical() ~ "fisher.test"
+                ),
+                test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
             ) %>%
             add_overall() %>%
             format_count_percent_columns() %>%
@@ -1791,30 +1757,27 @@ analyze_radiation_complications <- function(data, sequela_type, confounders = NU
     summary_labels[[display_outcome_var]] <- paste(sequela_label, "Recorded Burden")
 
     # Create summary table
-    tbl_summary_obj <- with_preserved_rng_seed(
-        OBJECTIVE2_SIMULATED_FISHER_SEED,
-        summary_table_data %>%
-            select(treatment_group, all_of(display_outcome_var)) %>%
-            tbl_summary(
-                by = treatment_group,
-                missing = "no",
-                label = summary_labels,
-                statistic = list(
-                    all_continuous() ~ "{median} ({min}, {max})",
-                    all_categorical() ~ "{n} ({p}%)"
-                ),
-                digits = list(all_continuous() ~ 1, all_categorical() ~ 0)
-            ) %>%
-            add_overall() %>%
-            safe_add_p_to_summary(
-                context_label = paste(sequela_label, "recorded burden summary"),
-                test = list(
-                    all_categorical() ~ "fisher.test",
-                    all_continuous() ~ "wilcox.test"
-                ),
-                test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
-            )
-    ) %>%
+    tbl_summary_obj <- summary_table_data %>%
+        select(treatment_group, all_of(display_outcome_var)) %>%
+        tbl_summary(
+            by = treatment_group,
+            missing = "no",
+            label = summary_labels,
+            statistic = list(
+                all_continuous() ~ "{median} ({min}, {max})",
+                all_categorical() ~ "{n} ({p}%)"
+            ),
+            digits = list(all_continuous() ~ 1, all_categorical() ~ 0)
+        ) %>%
+        add_overall() %>%
+        safe_add_p_to_summary(
+            context_label = paste(sequela_label, "recorded burden summary"),
+            test = list(
+                all_categorical() ~ "fisher.test",
+                all_continuous() ~ "wilcox.test"
+            ),
+            test.args = list(all_categorical() ~ list(simulate.p.value = TRUE))
+        ) %>%
         bold_labels() %>%
         modify_header(
             label = "**Characteristic**",
