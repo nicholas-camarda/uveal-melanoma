@@ -8,14 +8,15 @@
 #'
 #' @param raw_data_dir Directory holding the raw source spreadsheet.
 #' @param processed_data_dir Directory holding the analytic cohort RDS files.
-#' @param repo_root Repository root containing `scripts/ci/run_testthat.R`.
+#' @param repo_root Repository root containing `scripts/ci/run_testthat.R`;
+#'   defaults to the checkout found from the working directory.
 #' @return A list with `command`, `args` and `env` for `system2()`. `system2()`
 #'   composes a shell command line, so paths are shell-quoted (the Project
 #'   Vault path contains spaces).
 build_integration_suite_command <- function(
     raw_data_dir,
     processed_data_dir,
-    repo_root = getwd()
+    repo_root = here::here()
 ) {
     list(
         command = file.path(R.home("bin"), "Rscript"),
@@ -51,7 +52,7 @@ build_integration_suite_command <- function(
 run_integration_suite <- function(
     raw_data_dir = NULL,
     processed_data_dir = NULL,
-    repo_root = getwd()
+    repo_root = here::here()
 ) {
     if (is.null(raw_data_dir) || is.null(processed_data_dir)) {
         config_env <- new.env(parent = globalenv())
@@ -62,7 +63,6 @@ run_integration_suite <- function(
             )
         }
         # Same check the pipeline performs before reading the raw spreadsheet.
-        environment(config_env$assert_required_input_paths) <- config_env
         config_env$assert_required_input_paths()
         if (is.null(raw_data_dir)) {
             raw_data_dir <- config_env$RAW_DATA_DIR

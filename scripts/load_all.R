@@ -6,8 +6,9 @@
 # Sourcing any project file before this point would read it in the old locale.
 if (!isTRUE(l10n_info()[["UTF-8"]])) {
     for (utf8_locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
-        if (nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", utf8_locale)))) {
-            Sys.setlocale("LC_COLLATE", utf8_locale)
+        ctype_set <- nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", utf8_locale)))
+        collate_set <- nzchar(suppressWarnings(Sys.setlocale("LC_COLLATE", utf8_locale)))
+        if (ctype_set && collate_set) {
             break
         }
     }

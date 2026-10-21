@@ -42,7 +42,17 @@ test_that("main_execution discovers datasets created during objective 0 prefligh
         invisible(NULL)
     }, envir = .GlobalEnv)
 
+    run_output <- character()
+    previous_appender <- logger::log_appender()
+    withr::defer(logger::log_appender(previous_appender))
+    logger::log_appender(function(lines) run_output <<- c(run_output, lines))
     expect_no_error(main_execution())
+    # The run log records the locale that produced the outputs.
+    expect_true(any(grepl(
+        sprintf("Session locale: %s", Sys.getlocale()),
+        run_output,
+        fixed = TRUE
+    )))
     expect_setequal(
         analyzed_datasets,
         c("uveal_melanoma_full_cohort", "uveal_melanoma_restricted_cohort")
