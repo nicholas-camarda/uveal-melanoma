@@ -1,5 +1,7 @@
 # Uveal Melanoma Treatment Outcomes Analysis
 
+[![Portable CI](https://github.com/nicholas-camarda/uveal-melanoma/actions/workflows/portable-tests.yml/badge.svg?branch=master)](https://github.com/nicholas-camarda/uveal-melanoma/actions/workflows/portable-tests.yml)
+
 This repository contains the analysis pipeline for comparing clinical outcomes after Gamma Knife stereotactic radiosurgery (GKSRS) and plaque brachytherapy (PBT) in uveal melanoma. It produces cohort-specific tables, figures, workbooks, and validation outputs for efficacy, safety, repeat-radiation, and biomarker-validation workflows.
 
 ## Quick Start
