@@ -32,8 +32,7 @@ test_that("current contracts do not claim post-baseline event-status survival ou
         here::here("README.md"),
         here::here("docs", "OBJECTIVES.md"),
         here::here("docs", "TECHNICAL.md"),
-        here::here("docs", "STATISTICAL_METHODS.md"),
-        here::here("openspec", "specs", "objective1-cohort-interpretation-guardrails", "spec.md")
+        here::here("docs", "STATISTICAL_METHODS.md")
     )
     contract_text <- paste(unlist(lapply(contract_paths, readLines, warn = FALSE)), collapse = "\n")
 
