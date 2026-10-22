@@ -428,8 +428,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
     mets_rates <- analyze_binary_outcome_rates(
         data,
         outcome_var = "mets_progression",
-        time_var = "tt_mets_months",
-        event_var = "mets_event",
+        time_var = "tt_mets_months_analysis",
+        event_var = "mets_event_analysis",
         confounders = confounders,
         analysis_type = "post_treatment_only",
         dataset_name = dataset_name,
@@ -438,8 +438,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
     )
     mets_time_to_event <- analyze_time_to_event_outcomes(
         data,
-        time_var = "tt_mets_months",
-        event_var = "mets_event",
+        time_var = "tt_mets_months_analysis",
+        event_var = "mets_event_analysis",
         group_var = "treatment_group",
         confounders = confounders,
         ylab = "Metastasis-Free Survival Probability",
@@ -456,8 +456,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
         file_prefix = paste0(prefix, "metastasis_free_survival_probability_"),
         dataset_name = dataset_name,
         data = mets_time_to_event$cox_input_data,
-        time_var = "tt_mets_months",
-        event_var = "mets_event",
+        time_var = "tt_mets_months_analysis",
+        event_var = "mets_event_analysis",
         variables = unique(c("treatment_group", confounders)),
         reason = "Metastasis proportional hazards diagnostics were not run because no Cox model was fit."
     )
@@ -529,8 +529,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
     logger::log_info(formatted("Executing analyze_time_to_event_outcomes: Progression-free survival analysis (local recurrence, metastasis, or death)", indent = 1))
     pfs_analysis <- analyze_time_to_event_outcomes(
         data,
-        time_var = "tt_pfs_months",
-        event_var = "pfs_event",
+        time_var = "tt_pfs_months_analysis",
+        event_var = "pfs_event_analysis",
         group_var = "treatment_group",
         confounders = confounders,
         ylab = "Progression-Free Survival Probability",
@@ -552,8 +552,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
                 file_prefix = paste0(prefix, "progression_free_survival_probability_"),
                 dataset_name = dataset_name,
                 data = pfs_analysis$cox_input_data,
-                time_var = "tt_pfs_months",
-                event_var = "pfs_event",
+                time_var = "tt_pfs_months_analysis",
+                event_var = "pfs_event_analysis",
                 variables = unique(c("treatment_group", confounders)),
                 reason = "Progression-Free Survival Probability proportional hazards diagnostics were not run because no Cox model was fit."
             )
@@ -569,8 +569,8 @@ run_objective_1 <- function(data, dataset_name, output_dirs, prefix, confounders
     )
     pfs_5yr_capped <- fit_capped_cox_sensitivity(
         data = data,
-        time_var = "tt_pfs_months",
-        event_var = "pfs_event",
+        time_var = "tt_pfs_months_analysis",
+        event_var = "pfs_event_analysis",
         horizon_months = 60,
         group_var = "treatment_group",
         confounders = confounders,

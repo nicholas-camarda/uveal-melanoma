@@ -118,6 +118,8 @@ create_test_dataset <- function() {
     # PFS variables
     tt_pfs_months = pmin(tt_mets_months, tt_death_months),
     pfs_event = as.integer(mets_event == 1 | death_event == 1),
+    tt_pfs_months_analysis = tt_pfs_months,
+    pfs_event_analysis = pfs_event,
 
     # Tumor height variables
     initial_tumor_height = initial_tumor_height,
@@ -328,6 +330,8 @@ create_pipeline_test_dataset <- function(n = 96L, seed = 20260816L) {
     data$tt_death_years <- data$tt_death_months / 12
     data$tt_pfs_months <- pmin(data$tt_mets_months, data$tt_death_months)
     data$pfs_event <- as.integer(data$mets_event == 1L | data$death_event == 1L)
+    data$tt_pfs_months_analysis <- data$tt_pfs_months
+    data$pfs_event_analysis <- data$pfs_event
 
     data$prame_status <- factor(rep(c("Negative", "Positive"), length.out = n))
     data$gep_group <- factor(

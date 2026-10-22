@@ -616,7 +616,8 @@ validate_objective1_endpoint_invariants <- function(data, cohort_name) {
         "recurrence_event", "mets_event", "death_event", "pfs_event",
         "tt_recurrence_months", "tt_mets_months", "tt_death_months", "tt_pfs_months",
         "tt_recurrence_months_analysis", "tt_mets_months_analysis",
-        "tt_death_months_analysis", "tt_pfs_months_analysis"
+        "tt_death_months_analysis", "tt_pfs_months_analysis", "pfs_event_analysis",
+        "mets_progression_date", "treatment_date"
     )
     missing_fields <- setdiff(required_fields, names(data))
 
@@ -639,6 +640,13 @@ validate_objective1_endpoint_invariants <- function(data, cohort_name) {
         return(list(findings = findings, details = details))
     }
 
+    # Metastasis dated on or before the treatment date is baseline disease.
+    baseline_mets_flag <- ifelse(
+        normalize_yes_no_value(data$mets_progression) %in% TRUE &
+            !is.na(data$mets_progression_date) & !is.na(data$treatment_date),
+        data$mets_progression_date <= data$treatment_date,
+        FALSE
+    )
     expected <- tibble::tibble(
         row_index = seq_len(nrow(data)),
         id = data$id %||% NA_character_,
@@ -646,17 +654,25 @@ validate_objective1_endpoint_invariants <- function(data, cohort_name) {
         mets_event = ifelse(normalize_yes_no_value(data$mets_progression) %in% TRUE, 1L, 0L),
         death_event = ifelse(!is.na(data$dod), 1L, 0L),
         tt_pfs_months = pmin(data$tt_recurrence_months, data$tt_mets_months, data$tt_death_months, na.rm = FALSE),
-        tt_pfs_months_analysis = pmin(
-            data$tt_recurrence_months_analysis,
-            data$tt_mets_months,
-            data$tt_death_months_analysis,
-            na.rm = FALSE
+        baseline_mets = baseline_mets_flag,
+        tt_pfs_months_analysis = ifelse(
+            baseline_mets_flag,
+            NA_real_,
+            pmin(
+                data$tt_recurrence_months_analysis,
+                data$tt_mets_months,
+                data$tt_death_months_analysis,
+                na.rm = FALSE
+            )
         )
     ) %>%
-        dplyr::mutate(pfs_event = ifelse(.data$recurrence_event == 1L | .data$mets_event == 1L | .data$death_event == 1L, 1L, 0L))
+        dplyr::mutate(
+            pfs_event = ifelse(.data$recurrence_event == 1L | .data$mets_event == 1L | .data$death_event == 1L, 1L, 0L),
+            pfs_event_analysis = ifelse(.data$baseline_mets, NA_integer_, .data$pfs_event)
+        )
 
     mismatch_rows <- purrr::map_dfr(c(
-        "recurrence_event", "mets_event", "death_event", "pfs_event",
+        "recurrence_event", "mets_event", "death_event", "pfs_event", "pfs_event_analysis",
         "tt_pfs_months", "tt_pfs_months_analysis"
     ), function(field_name) {
         observed <- suppressWarnings(as.numeric(as.character(data[[field_name]])))

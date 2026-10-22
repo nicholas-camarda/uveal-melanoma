@@ -254,6 +254,13 @@ analyze_binary_outcome_rates <- function(
     prefix = NULL) {
     data <- normalize_treatment_group_data(data)
 
+    # Patients with metastasis at or before treatment have no incident endpoint; they are
+    # removed from every count on this sheet and the sheet says so.
+    endpoint_exclusion <- exclude_undefined_endpoint_rows(
+        data, time_var, event_var, pick_sparse_level_id_col(data)
+    )
+    data <- endpoint_exclusion$data
+
     # Subset data based on analysis type
     if (analysis_type == "post_treatment_only") {
         analysis_time_var <- time_var
@@ -293,6 +300,28 @@ analyze_binary_outcome_rates <- function(
         group_var = group_var
     )
 
+    estimand_notes <- cumulative_incidence$notes
+    excluded_n <- nrow(endpoint_exclusion$removed_records)
+    if (excluded_n > 0L) {
+        estimand_notes <- dplyr::bind_rows(
+            estimand_notes,
+            data.frame(
+                estimand = "baseline_metastasis_excluded",
+                role = "denominator_note",
+                endpoint = estimand_notes$endpoint[[1]],
+                interpretation = sprintf(
+                    paste0(
+                        "%d patient(s) with metastasis dated on or before treatment are excluded from every count and estimate on this sheet ",
+                        "because the incident endpoint is undefined for them. They remain in the cohort counts and are listed in the ",
+                        "Record_Issues sheet of the Cox diagnostics workbook."
+                    ),
+                    excluded_n
+                ),
+                stringsAsFactors = FALSE
+            )
+        )
+    }
+
     output_dir <- NULL
 
     # Write rates summary to Excel if output directory is provided
@@ -312,7 +341,7 @@ analyze_binary_outcome_rates <- function(
                     descriptive_event_counts = rates,
                     cumulative_incidence = cumulative_incidence$summary,
                     competing_risk_support = cumulative_incidence$support,
-                    estimand_notes = cumulative_incidence$notes
+                    estimand_notes = estimand_notes
                 ),
                 path = file.path(event_support_dir, paste0(prefix, outcome_var, "_event_support_summary.xlsx"))
             )

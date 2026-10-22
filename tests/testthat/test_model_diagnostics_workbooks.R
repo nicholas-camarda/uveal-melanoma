@@ -215,3 +215,64 @@ test_that("a workbook that cannot be written is an error even when an older file
     )
     expect_error(build_model_record_table(record_key = "P1", key_source = character()), "key_source")
 })
+
+test_that("a patient with baseline metastasis is removed from the model with a stated reason and stays in the counts", {
+    data <- synthetic_model_cohort(n = 200L)
+    data <- data[!is.na(data$age) & data$location != "Rare", ]
+    data$location <- droplevels(data$location)
+    data$mets_at_or_before_treatment <- FALSE
+    data$mets_at_or_before_treatment[3] <- TRUE
+    data$time[3] <- data$event[3] <- NA
+    baseline_id <- data$id[3]
+
+    removal <- exclude_undefined_endpoint_rows(data, "time", "event", "id")
+    expect_equal(nrow(removal$data), nrow(data) - 1L)
+    expect_equal(removal$removed_records$record_key, baseline_id)
+    expect_match(removal$removed_records$reason, "Metastasis dated on or before treatment")
+
+    # A missing endpoint without baseline metastasis as the reason is an error, not a silent drop.
+    unexplained <- data
+    unexplained$time[10] <- NA
+    expect_error(exclude_undefined_endpoint_rows(unexplained, "time", "event", "id"), "without baseline metastasis")
+    no_id <- data
+    no_id$id <- NULL
+    expect_error(exclude_undefined_endpoint_rows(no_id, "time", "event", "id"), "usable identifier")
+
+    output_dirs <- build_peer_review_objective1_output_dirs(withr::local_tempdir())
+    result <- suppressWarnings(analyze_time_to_event_outcomes(
+        data = data, time_var = "time", event_var = "event", group_var = "treatment_group",
+        confounders = "location", analysis_type = "all_patients", dataset_name = "unit_test",
+        ylab = "Unit Test Survival", legend_labels = c("PBT", "GKSRS"),
+        output_dirs = output_dirs, prefix = "unit_", route_key = "obj1_os"
+    ))
+    workbook <- list.files(output_dirs$obj1_os, "cox_diagnostics\\.xlsx$", recursive = TRUE, full.names = TRUE)
+    expect_length(workbook, 1L)
+    flow <- openxlsx::read.xlsx(workbook, "Denominators_Flow")
+    issues <- openxlsx::read.xlsx(workbook, "Record_Issues")
+    expect_equal(flow$n[flow$stage == "Initial analysis cohort"], nrow(data))
+    expect_true(baseline_id %in% issues$record_key)
+    expect_match(issues$reason[issues$record_key == baseline_id], "incident endpoint undefined|Metastasis dated")
+    expect_true(!is.null(result$cox_model))
+})
+
+test_that("the metastasis event-support sheet states how many baseline-metastasis patients it excludes", {
+    data <- synthetic_model_cohort(n = 120L)
+    data$tt_death_months <- data$time + 5
+    data$death_event <- 0L
+    data$mets_at_or_before_treatment <- FALSE
+    data$mets_at_or_before_treatment[4] <- TRUE
+    data$time[4] <- data$event[4] <- NA
+
+    output_dirs <- build_peer_review_objective1_output_dirs(withr::local_tempdir())
+    result <- suppressWarnings(analyze_binary_outcome_rates(
+        data, outcome_var = "mets_progression", time_var = "time", event_var = "event",
+        confounders = "location", analysis_type = "post_treatment_only", dataset_name = "unit_test",
+        output_dirs = output_dirs, prefix = "unit_"
+    ))
+    expect_equal(sum(result$rates$n), nrow(data) - 1L)
+
+    workbook <- list.files(output_dirs$obj1_mets, "event_support_summary\\.xlsx$", recursive = TRUE, full.names = TRUE)
+    expect_length(workbook, 1L)
+    notes <- openxlsx::read.xlsx(workbook, "estimand_notes")
+    expect_match(notes$interpretation[notes$estimand == "baseline_metastasis_excluded"], "1 patient\\(s\\) with metastasis dated on or before treatment")
+})
